@@ -1,4 +1,4 @@
-name: Build SANAD V2.4 APK
+name: Build SANAD V2.5 APK
 
 on:
   push:
@@ -11,9 +11,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
-      - name: Checkout
+      - name: Checkout SANAD
         uses: actions/checkout@v4
 
       - name: Set up Java 17
@@ -27,7 +27,16 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Rebuild reviewed V2.2 base
+      - name: Install Android native build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "ndk;27.0.12077973" "cmake;3.22.1"
+
+      - name: Rebuild reviewed V2.4 source
         shell: bash
         run: |
           set -euo pipefail
@@ -38,74 +47,111 @@ jobs:
           mkdir -p work
           tar -xJf /tmp/SANAD_V22_PROJECT.tar.xz -C work
 
-      - name: Apply V2.3 bugfix
-        shell: bash
-        run: |
-          set -euo pipefail
           cat patches/v23_patch_00 patches/v23_patch_01 patches/v23_patch_02 > /tmp/v23_patch.b64
           test "$(wc -c < /tmp/v23_patch.b64)" -eq 8520
           base64 -d /tmp/v23_patch.b64 | gzip -d > /tmp/SANAD_V23.patch
           echo "ac4a0e183436970e39d9b251352d5083581bdc75db7f0fedb560e4f3436f9618  /tmp/SANAD_V23.patch" | sha256sum -c -
           cd work/SANAD_FINAL_LOCAL_REVIEW_V22
           patch -p1 < /tmp/SANAD_V23.patch
+          cd ../..
 
-      - name: Apply V2.4 SMS sync and continuous voice update
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat             patches/v24_patch_00             patches/v24_patch_01             patches/v24_patch_02             patches/v24_patch_03             patches/v24_patch_04 > /tmp/v24_patch.b64
+          cat patches/v24_patch_00 patches/v24_patch_01 patches/v24_patch_02 patches/v24_patch_03 patches/v24_patch_04 > /tmp/v24_patch.b64
           test "$(wc -c < /tmp/v24_patch.b64)" -eq 20916
           base64 -d /tmp/v24_patch.b64 | gzip -d > /tmp/SANAD_V24.patch
           echo "55d5fb2e2621051a38c14a0fda78f6870e3e11e054a3487e3b295b52c0f0ee42  /tmp/SANAD_V24.patch" | sha256sum -c -
           cd work/SANAD_FINAL_LOCAL_REVIEW_V22
           patch -p1 < /tmp/SANAD_V24.patch
-          grep -q "versionCode 24" app/build.gradle
-          grep -q "versionName '2.4-sync-voice-test'" app/build.gradle
-          grep -q "syncSms" app/src/main/java/com/sanad/full/MainActivity.java
-          grep -q "bankDateFromText" app/src/main/assets/index.html
-          grep -q "sanadNativeVoiceChunk" app/src/main/assets/index.html
-          ! grep -q "android.permission.INTERNET" app/src/main/AndroidManifest.xml
-          grep -q "android.permission.READ_SMS" app/src/main/AndroidManifest.xml
-          grep -q "android.permission.RECORD_AUDIO" app/src/main/AndroidManifest.xml
-          cd ..
-          mv SANAD_FINAL_LOCAL_REVIEW_V22 SANAD_FINAL_LOCAL_REVIEW_V24
+          cd ../..
+          mv work/SANAD_FINAL_LOCAL_REVIEW_V22 work/SANAD_FINAL_LOCAL_REVIEW_V24
 
-      - name: Build debug APK
-        working-directory: work/SANAD_FINAL_LOCAL_REVIEW_V24
-        run: gradle --no-daemon --stacktrace assembleDebug
-
-      - name: Verify APK permissions and package
+      - name: Apply V2.5 source patch and exact app icon
         shell: bash
         run: |
           set -euo pipefail
-          APK=work/SANAD_FINAL_LOCAL_REVIEW_V24/app/build/outputs/apk/debug/app-debug.apk
+          cp -a work/SANAD_FINAL_LOCAL_REVIEW_V24 work/SANAD_FINAL_LOCAL_REVIEW_V25
+          base64 -d patches/v25_patch.b64 | gzip -d > /tmp/SANAD_V25.patch
+          echo "54e60a9f507c520b3d7549df0a94177d3b87a5387a9229b909d1264a88c7f6ca  /tmp/SANAD_V25.patch" | sha256sum -c -
+          sed 's#SANAD_FINAL_LOCAL_REVIEW_V24/#SANAD_FINAL_LOCAL_REVIEW_V25/#g' /tmp/SANAD_V25.patch > /tmp/SANAD_V25_APPLY.patch
+          cd work
+          patch -p0 < /tmp/SANAD_V25_APPLY.patch
+          cd ..
+          cp assets/v25_sanad_icon_full.png work/SANAD_FINAL_LOCAL_REVIEW_V25/app/src/main/res/drawable-nodpi/sanad_launcher_full.png
+          cp assets/v25_sanad_icon_foreground.png work/SANAD_FINAL_LOCAL_REVIEW_V25/app/src/main/res/drawable-nodpi/sanad_launcher_foreground.png
+
+      - name: Add pinned whisper.cpp source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v1.7.6 https://github.com/ggerganov/whisper.cpp.git             work/SANAD_FINAL_LOCAL_REVIEW_V25/app/src/main/cpp/whisper.cpp
+          rm -rf work/SANAD_FINAL_LOCAL_REVIEW_V25/app/src/main/cpp/whisper.cpp/.git
+          test -f work/SANAD_FINAL_LOCAL_REVIEW_V25/app/src/main/cpp/whisper.cpp/include/whisper.h
+
+      - name: Bundle multilingual Whisper model
+        shell: bash
+        run: |
+          set -euo pipefail
+          MODEL_DIR=work/SANAD_FINAL_LOCAL_REVIEW_V25/app/src/main/assets/models
+          mkdir -p "$MODEL_DIR"
+          curl -L --fail --retry 4 --retry-delay 5             -o "$MODEL_DIR/ggml-base-q5_1.bin"             "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin?download=true"
+          BYTES=$(stat -c%s "$MODEL_DIR/ggml-base-q5_1.bin")
+          echo "Whisper model bytes: $BYTES"
+          test "$BYTES" -gt 50000000
+
+      - name: Validate V2.5 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT=work/SANAD_FINAL_LOCAL_REVIEW_V25
+          grep -q "versionCode 25" "$PROJECT/app/build.gradle"
+          grep -q "versionName '2.5-whisper-bank-review'" "$PROJECT/app/build.gradle"
+          grep -q "WhisperVoiceEngine" "$PROJECT/app/src/main/java/com/sanad/full/MainActivity.java"
+          grep -q 'voice:"whisper.cpp-base-q5_1-offline' "$PROJECT/app/src/main/assets/index.html"
+          grep -q 'bank:"initial-full-sync+incremental-refresh+review-only' "$PROJECT/app/src/main/assets/index.html"
+          test -s "$PROJECT/app/src/main/assets/models/ggml-base-q5_1.bin"
+          test -f "$PROJECT/app/src/main/cpp/whisper.cpp/include/whisper.h"
+          ! grep -q "android.permission.INTERNET" "$PROJECT/app/src/main/AndroidManifest.xml"
+          grep -q "android.permission.READ_SMS" "$PROJECT/app/src/main/AndroidManifest.xml"
+          grep -q "android.permission.RECORD_AUDIO" "$PROJECT/app/src/main/AndroidManifest.xml"
+
+      - name: Build V2.5 debug APK
+        working-directory: work/SANAD_FINAL_LOCAL_REVIEW_V25
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Verify final APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=work/SANAD_FINAL_LOCAL_REVIEW_V25/app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
-          cp "$APK" SANAD-V2.4.apk
+          cp "$APK" SANAD-V2.5.apk
           AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)
-          "$AAPT" dump badging SANAD-V2.4.apk | tee apk-badging.txt
-          "$AAPT" dump permissions SANAD-V2.4.apk | tee apk-permissions.txt
+          "$AAPT" dump badging SANAD-V2.5.apk | tee apk-badging.txt
+          "$AAPT" dump permissions SANAD-V2.5.apk | tee apk-permissions.txt
           grep -q "package: name='com.sanad.full'" apk-badging.txt
           ! grep -q "android.permission.INTERNET" apk-permissions.txt
           grep -q "android.permission.READ_SMS" apk-permissions.txt
           grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
-          sha256sum SANAD-V2.4.apk | tee apk-sha256.txt
+          unzip -l SANAD-V2.5.apk | tee apk-files.txt
+          grep -q "assets/models/ggml-base-q5_1.bin" apk-files.txt
+          grep -q "lib/arm64-v8a/libsanad_whisper.so" apk-files.txt
+          sha256sum SANAD-V2.5.apk | tee apk-sha256.txt
 
-      - name: Package full project backup
+      - name: Package full V2.5 project backup
         shell: bash
         run: |
           set -euo pipefail
           cd work
-          zip -qr ../SANAD-V2.4-FULL-PROJECT.zip SANAD_FINAL_LOCAL_REVIEW_V24
+          zip -qr ../SANAD-V2.5-FULL-PROJECT.zip SANAD_FINAL_LOCAL_REVIEW_V25
           cd ..
-          test -s SANAD-V2.4-FULL-PROJECT.zip
-          sha256sum SANAD-V2.4-FULL-PROJECT.zip | tee project-sha256.txt
+          test -s SANAD-V2.5-FULL-PROJECT.zip
+          sha256sum SANAD-V2.5-FULL-PROJECT.zip | tee project-sha256.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V2.4-APK
+          name: SANAD-V2.5-APK
           path: |
-            SANAD-V2.4.apk
+            SANAD-V2.5.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
@@ -115,9 +161,9 @@ jobs:
       - name: Upload full project backup
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V2.4-FULL-PROJECT
+          name: SANAD-V2.5-FULL-PROJECT
           path: |
-            SANAD-V2.4-FULL-PROJECT.zip
+            SANAD-V2.5-FULL-PROJECT.zip
             project-sha256.txt
           if-no-files-found: error
           retention-days: 30
