@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -100,6 +100,28 @@ jobs:
           assert old in s
           p.write_text(s.replace(old,new,1))
           PY
+
+      - name: Publish reconstructed source base for V2.7
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$GITHUB_WORKSPACE/work/SANAD_FINAL_LOCAL_REVIEW_V26"
+          rm -rf /tmp/sanad-v27-source
+          cp -a "$SRC" /tmp/sanad-v27-source
+          rm -rf /tmp/sanad-v27-source/app/src/main/assets/models
+          rm -rf /tmp/sanad-v27-source/app/src/main/cpp/whisper.cpp
+          rm -f /tmp/sanad-v27-source/keystore.properties
+          rm -rf /tmp/sanad-v27-source/signing
+          printf '%s\n' 'keystore.properties' 'signing/' '*.jks' '*.keystore' >> /tmp/sanad-v27-source/.gitignore
+
+          git config user.name "SANAD Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan source-v27
+          git rm -rf . || true
+          cp -a /tmp/sanad-v27-source/. .
+          git add .
+          git commit -m "Publish SANAD V2.7 source base"
+          git push --force origin source-v27
 
       - name: Add pinned whisper.cpp source
         shell: bash
