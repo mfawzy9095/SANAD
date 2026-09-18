@@ -1,0 +1,108 @@
+name: Build SANAD V2.7 Device Fix
+
+on:
+  push:
+    branches: [source-v27]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout V2.7 source
+        uses: actions/checkout@v4
+        with:
+          ref: source-v27
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Install Android native tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "ndk;27.0.12077973" "cmake;3.22.1"
+
+      - name: Add pinned whisper.cpp
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf app/src/main/cpp/whisper.cpp
+          git clone --depth 1 --branch v1.7.6 https://github.com/ggerganov/whisper.cpp.git app/src/main/cpp/whisper.cpp
+          rm -rf app/src/main/cpp/whisper.cpp/.git
+          test -f app/src/main/cpp/whisper.cpp/include/whisper.h
+
+      - name: Bundle Whisper model
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets/models
+          curl -L --fail --retry 4 --retry-delay 5             -o app/src/main/assets/models/ggml-base-q5_1.bin             "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin?download=true"
+          test "$(stat -c%s app/src/main/assets/models/ggml-base-q5_1.bin)" -gt 50000000
+
+      - name: Validate V2.7 fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "versionCode 27" app/build.gradle
+          grep -q "versionName '2.7-device-fix'" app/build.gradle
+          grep -q "handleSystemBack" app/src/main/java/com/sanad/full/MainActivity.java
+          grep -q "OnBackInvokedDispatcher" app/src/main/java/com/sanad/full/MainActivity.java
+          grep -q "MediaRecorder.AudioSource.MIC" app/src/main/java/com/sanad/full/WhisperVoiceEngine.java
+          grep -q "STATEMENT_ONLY" app/src/main/java/com/sanad/full/BankMessageFilter.java
+          grep -q "sanadHandleAndroidBack" app/src/main/assets/v27_fixes.js
+          grep -q "bankAmountFromExplicitTransaction" app/src/main/assets/v27_fixes.js
+          ! grep -q "android.permission.INTERNET" app/src/main/AndroidManifest.xml
+          test ! -e app/src/main/res/drawable-nodpi/sanad_launcher_full.png
+          test ! -e app/src/main/res/drawable-nodpi/sanad_launcher_foreground.png
+          test -f app/src/main/assets/models/ggml-base-q5_1.bin
+
+      - name: Build V2.7 debug APK
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          cp "$APK" SANAD-V2.7-DEVICE-TEST.apk
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)
+          "$AAPT" dump badging SANAD-V2.7-DEVICE-TEST.apk | tee apk-badging.txt
+          "$AAPT" dump permissions SANAD-V2.7-DEVICE-TEST.apk | tee apk-permissions.txt
+          grep -q "package: name='com.sanad.full' versionCode='27' versionName='2.7-device-fix'" apk-badging.txt
+          ! grep -q "android.permission.INTERNET" apk-permissions.txt
+          grep -q "android.permission.READ_SMS" apk-permissions.txt
+          grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
+          unzip -l SANAD-V2.7-DEVICE-TEST.apk | tee apk-files.txt
+          grep -q "assets/models/ggml-base-q5_1.bin" apk-files.txt
+          grep -q "assets/v27_fixes.js" apk-files.txt
+          grep -q "lib/arm64-v8a/libsanad_whisper.so" apk-files.txt
+          sha256sum SANAD-V2.7-DEVICE-TEST.apk | tee apk-sha256.txt
+
+      - name: Upload device-test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-V2.7-DEVICE-TEST
+          path: |
+            SANAD-V2.7-DEVICE-TEST.apk
+            apk-badging.txt
+            apk-permissions.txt
+            apk-sha256.txt
+          retention-days: 7
+          if-no-files-found: error
