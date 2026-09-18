@@ -1,3 +1,6 @@
-<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
-    android:src="@drawable/sanad_launcher_foreground"
-    android:gravity="fill" />
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#E6C98A" android:pathData="M37,68 L37,53 L45,46 L45,68 Z M49,68 L49,43 L57,36 L57,68 Z M61,68 L61,33 L69,26 L69,68 Z"/>
+    <path android:fillColor="#55B77D" android:pathData="M30,70 C43,71 52,77 59,88 C46,89 36,84 29,75 Z M78,58 C75,73 67,84 55,93 C56,77 63,65 76,56 Z"/>
+</vector>
