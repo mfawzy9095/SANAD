@@ -71,6 +71,7 @@ public final class WhisperVoiceEngine {
         language = l.startsWith("en") ? "en" : "ar";
         if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             pendingStart = true;
+            listener.onState("permission_required", language);
             activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 401);
             return;
         }
@@ -83,10 +84,12 @@ public final class WhisperVoiceEngine {
         final int min = Math.max(AudioRecord.getMinBufferSize(SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), 4096);
         try {
-            recorder = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE,
-                    AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, min * 2);
-            if (recorder.getState() != AudioRecord.STATE_INITIALIZED) throw new IllegalStateException("audio init");
+            recorder = openRecorder(MediaRecorder.AudioSource.MIC, min);
+            if (recorder == null) recorder = openRecorder(MediaRecorder.AudioSource.VOICE_RECOGNITION, min);
+            if (recorder == null) throw new IllegalStateException("audio init");
             recorder.startRecording();
+            if (recorder.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING)
+                throw new IllegalStateException("audio did not start");
             recording.set(true);
             listener.onState("silent", language);
             worker.execute(() -> recordLoop(min));
@@ -176,6 +179,16 @@ public final class WhisperVoiceEngine {
         if (r != null) {
             try { r.stop(); } catch (Throwable ignored) {}
         }
+    }
+
+    private AudioRecord openRecorder(int source,int min){
+        try{
+            AudioRecord r=new AudioRecord(source,SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,min*2);
+            if(r.getState()==AudioRecord.STATE_INITIALIZED) return r;
+            try{r.release();}catch(Throwable ignored){}
+        }catch(Throwable ignored){}
+        return null;
     }
 
     private void safeRelease() {
