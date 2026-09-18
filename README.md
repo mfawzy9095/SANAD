@@ -1,19 +1,22 @@
-# SANAD — Full Master Android
+# SANAD 1.1 Test
 
-هذا الـRepository يبني **SANAD Full Master** المسترجع، وليس الـMVP القديم.
+Android test build using the recovered SANAD master.
 
-## المصدر المعتمد
-المشروع الكامل محفوظ كـ snapshot موثوق مقسّم تحت:
-`full-master-parts/part_00 ... part_08`
+## Included
+- Approved icon option 1 (leaf + finance bars)
+- Approved interface direction 2 (dark green + cream)
+- Native splash
+- Encrypted SQLite database (AES-GCM key stored in Android Keystore)
+- Automatic migration from older `sanad.v7` localStorage when present
+- Local adaptive learning from confirmed merchant/category/text patterns
+- Bank notification capture with OTP/security filtering and duplicate prevention
+- Optional manual import of existing bank SMS (runtime READ_SMS permission)
+- Android on-device voice recognition only; no cloud fallback
+- JSON backup/restore with Android file picker
+- No `INTERNET` permission
 
-GitHub Actions يعيد تجميعه، يتحقق من سلامة XZ، ثم يبني مشروع Android Studio الرسمي.
+## Voice note
+On-device Arabic recognition depends on the Android speech service/model installed on the phone. SANAD includes a **Prepare offline voice** action that asks Android to prepare the selected offline model where supported.
 
-## الخصائص
-Arabic/English + RTL/LTR، Light/Dark، Transactions/Search/Filters، Budgets وCategory Budgets، Accounts/Cards، Custom Categories، Keywords/Auto-learning، Multi-currency، Bank message parser، Financial Plan، Safe-to-Spend، Savings Goals، Recurring Bills، Debts/Installments، JSON Backup/Restore، Native Offline Voice bridge، وBank Notification Access.
-
-## الخصوصية
-التطبيق لا يطلب `android.permission.INTERNET`.
-
-## APK
-افتح Actions > **Build SANAD Full Master APK**. الـArtifact الناتج اسمه:
-`SANAD-FULL-MASTER-APK`
+## Test status
+Core JS suite: **42/42 PASS** before Android build. GitHub Actions compiles and verifies the APK.

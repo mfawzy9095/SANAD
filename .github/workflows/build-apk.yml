@@ -1,4 +1,4 @@
-name: Build SANAD Full Master APK
+name: Build SANAD 1.1 Test APK
 
 on:
   workflow_dispatch:
@@ -19,15 +19,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Reassemble full SANAD project snapshot
+      - name: Reassemble recovered SANAD master
         run: |
-          cat full-master-parts/part_* > SANAD_ANDROID_FULL_BUILD.tar.xz
-          xz -t SANAD_ANDROID_FULL_BUILD.tar.xz
-          rm -rf full-master
-          mkdir full-master
-          tar -xJf SANAD_ANDROID_FULL_BUILD.tar.xz -C full-master
-          test -f full-master/SANAD_ANDROID_FULL_MASTER/app/src/main/AndroidManifest.xml
-          test -f full-master/SANAD_ANDROID_FULL_MASTER/app/src/main/assets/parts.txt
+          cat full-master-parts/part_* > base.tar.xz
+          xz -t base.tar.xz
+          rm -rf work
+          mkdir work
+          tar -xJf base.tar.xz -C work
+          test -f work/SANAD_ANDROID_FULL_MASTER/MASTER_SOURCE.html
+
+      - name: Apply SANAD 1.1 approved upgrade
+        run: |
+          cat patches/v11_patch_* > /tmp/v11.patch.b64
+          base64 -d /tmp/v11.patch.b64 | gzip -d > /tmp/v11.patch
+          cd work/SANAD_ANDROID_FULL_MASTER
+          patch -p1 --batch < /tmp/v11.patch
+          grep -q "1.1.0-test" app/build.gradle
+          grep -q "SQLite مشفرة" MASTER_SOURCE.html
+          test -f app/src/main/java/com/sanad/full/SanadDatabase.java
+          test -f app/src/main/java/com/sanad/full/CryptoStore.java
+          test -f app/src/main/java/com/sanad/full/SplashActivity.java
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -35,7 +46,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Prepare Android SDK 35
+      - name: Prepare Android SDK
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
@@ -45,23 +56,33 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Verify privacy contract
-        working-directory: full-master/SANAD_ANDROID_FULL_MASTER
+      - name: Privacy checks
+        working-directory: work/SANAD_ANDROID_FULL_MASTER
         run: |
           ! grep -R "android.permission.INTERNET" -n app/src/main/AndroidManifest.xml
-          grep -q "com.sanad.full" app/build.gradle
+          grep -q "android.permission.READ_SMS" app/src/main/AndroidManifest.xml
 
-      - name: Build installable APK
-        working-directory: full-master/SANAD_ANDROID_FULL_MASTER
+      - name: Build APK
+        working-directory: work/SANAD_ANDROID_FULL_MASTER
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Verify APK
-        working-directory: full-master/SANAD_ANDROID_FULL_MASTER
-        run: test -s app/build/outputs/apk/debug/app-debug.apk
+        working-directory: work/SANAD_ANDROID_FULL_MASTER
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='com.sanad.full'"
+          ! "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" | grep -q "android.permission.INTERNET"
 
-      - name: Upload SANAD APK
+      - name: Upload test APK
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-FULL-MASTER-APK
-          path: full-master/SANAD_ANDROID_FULL_MASTER/app/build/outputs/apk/debug/app-debug.apk
+          name: SANAD-1.1-TEST-APK
+          path: work/SANAD_ANDROID_FULL_MASTER/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Upload full project
+        uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-1.1-FULL-PROJECT
+          path: work/SANAD_ANDROID_FULL_MASTER
