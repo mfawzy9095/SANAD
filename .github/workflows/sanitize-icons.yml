@@ -1,0 +1,60 @@
+name: Sanitize SANAD PNG Resources
+
+on:
+  push:
+    branches: [source-v27]
+    paths:
+      - '.github/workflows/sanitize-icons.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sanitize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: source-v27
+          fetch-depth: 0
+
+      - name: Re-encode launcher PNGs safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pillow
+          python3 - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          files=[
+            Path('app/src/main/res/drawable-nodpi/sanad_launcher_full.png'),
+            Path('app/src/main/res/drawable-nodpi/sanad_launcher_foreground.png'),
+          ]
+          for p in files:
+              with Image.open(p) as im:
+                  im.load()
+                  print(p, im.format, im.mode, im.size)
+                  if im.mode not in ('RGB','RGBA'):
+                      im=im.convert('RGBA')
+                  tmp=p.with_suffix('.clean.png')
+                  im.save(tmp, format='PNG', optimize=False, compress_level=6)
+              tmp.replace(p)
+          PY
+          file app/src/main/res/drawable-nodpi/*.png
+          python3 - <<'PY'
+          from PIL import Image
+          for p in ['app/src/main/res/drawable-nodpi/sanad_launcher_full.png','app/src/main/res/drawable-nodpi/sanad_launcher_foreground.png']:
+              im=Image.open(p); im.verify(); print('verified',p)
+          PY
+
+      - name: Commit sanitized resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SANAD Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/src/main/res/drawable-nodpi/sanad_launcher_full.png app/src/main/res/drawable-nodpi/sanad_launcher_foreground.png
+          git diff --cached --quiet && exit 0
+          git commit -m "Re-encode launcher PNGs for reliable AAPT2 compilation"
+          git push origin source-v27
