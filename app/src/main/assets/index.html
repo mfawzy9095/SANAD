@@ -1219,7 +1219,7 @@ function bankParse(raw, ctx){
   if (/(you'?ve received|received|been credited|credited|تم إيداع|ايداع وارد|استلمت)/i.test(o) && !/used for|transaction of.*at/i.test(o)) r.type = "income";
   else r.type = "expense";
 
-  var parsedBankDate=bankDateFromText(o); if(parsedBankDate){ r.date=parsedBankDate; r.meta.dateSource="message"; }
+  var parsedBankDate=bankDateFromText(o,ctx&&ctx.referenceMs); if(parsedBankDate){ r.date=parsedBankDate; r.meta.dateSource="message"; }
 
   var tail = o.match(/ending(?: in)?\s*[:#]?\s*(\d{3,4})/i) || o.match(/بطاقت(?:كم|ك)?\s*[*x#]*\s*(\d{3,4})/i);
   if (tail) r.note = "Card ••••" + tail[1];
@@ -1334,9 +1334,9 @@ window.sanadNativeBankBulk=function(payload,fullSync){
       }
       if(!raw || (sourceKey&&existingKeys[sourceKey]) || legacyDup || seenBatch[sourceKey||key]){ ignored++; continue; }
       seenBatch[sourceKey||key]=1;
-      r=bankParse(raw,{kw:S.keywordRules,cats:S.categories});
+      r=bankParse(raw,{kw:S.keywordRules,cats:S.categories,referenceMs:msgTs});
       if(!r || r.meta.skipped){ ignored++; continue; }
-      if(msgTs>0){ dt=new Date(msgTs); if(!isNaN(dt.getTime())){ r.date=dt.toISOString(); r.meta.dateSource="sms_received"; } }
+      if(msgTs>0 && !r.date){ dt=new Date(msgTs); if(!isNaN(dt.getTime())){ r.date=dt.toISOString(); r.meta.dateSource="sms_received"; } }
       var strictAmt=!!(r.meta&&r.meta.amountSource==="transaction_explicit"), suspicious=bankAmountNeedsReview(r.amount,r.currency||base());
       items.push({key:uid(),include:false,declined:!!r.meta.declined,learned:!!r.meta.learned,
         type:r.type,amount:r.amount,currency:r.currency||base(),merchant:r.merchant,categoryId:r.category,
