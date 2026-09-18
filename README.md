@@ -1,13 +1,16 @@
-# SANAD — سند
+# SANAD — Full Master Android
 
-نسخة Android محلية تعمل بدون صلاحية INTERNET.
+هذا الـRepository يحتوي الآن على **Full Master Android snapshot** المبني من مشروع SANAD الكامل المسترجع، وليس الـMVP القديم.
 
-## بناء APK تلقائيًا
-1. افتح تبويب **Actions** في GitHub.
-2. اختر **Build SANAD APK**.
-3. اضغط **Run workflow**.
-4. بعد اكتمال البناء افتح الـRun وحمّل Artifact باسم **SANAD-debug-apk**.
-5. فك الملف وستجد `app-debug.apk` جاهزًا للتثبيت.
+## المصدر المعتمد
+- `SANAD_ANDROID_FULL_BUILD.tar.xz` — مشروع Android Studio الكامل القابل للبناء.
+- `.github/workflows/build-apk.yml` — يبني الـAPK من نفس الـsnapshot على GitHub Actions.
+- لا توجد صلاحية `INTERNET` داخل التطبيق.
 
-## الخصوصية
-التطبيق لا يطلب صلاحية INTERNET. البيانات والحسابات محفوظة محليًا على الهاتف.
+## الخصائص الموجودة في الـMaster
+Arabic/English + RTL/LTR، Light/Dark، Transactions/Search/Filters، Budgets وCategory Budgets، Accounts/Cards، Custom Categories، Keywords/Auto-learning، Multi-currency، Bulk bank message parsing، Financial Plan، Safe-to-Spend، Savings Goals، Recurring Bills، Debts/Installments، JSON Backup/Restore، Native Offline Voice bridge، وBank Notification Access للمراجعة.
+
+## APK
+افتح Actions > **Build SANAD Full Master APK**. عند نجاح البناء يظهر Artifact باسم `SANAD-FULL-MASTER-APK`.
+
+> النسخ القديمة الموجودة في الـrepo تُعتبر أرشيفًا تقنيًا فقط. البناء الحالي يعتمد على Full Master snapshot.

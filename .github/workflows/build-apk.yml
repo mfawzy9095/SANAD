@@ -1,4 +1,4 @@
-name: Build SANAD APK
+name: Build SANAD Full Master APK
 
 on:
   workflow_dispatch:
@@ -14,10 +14,17 @@ jobs:
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-
     steps:
-      - name: Checkout project
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Extract full SANAD project snapshot
+        run: |
+          rm -rf full-master
+          mkdir full-master
+          tar -xJf SANAD_ANDROID_FULL_BUILD.tar.xz -C full-master
+          test -f full-master/SANAD_ANDROID_FULL_MASTER/app/src/main/AndroidManifest.xml
+          test -f full-master/SANAD_ANDROID_FULL_MASTER/app/src/main/assets/parts.txt
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -27,7 +34,6 @@ jobs:
 
       - name: Prepare Android SDK 35
         run: |
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
@@ -36,15 +42,23 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build debug APK
+      - name: Verify privacy contract
+        working-directory: full-master/SANAD_ANDROID_FULL_MASTER
+        run: |
+          ! grep -R "android.permission.INTERNET" -n app/src/main/AndroidManifest.xml
+          grep -q "com.sanad.full" app/build.gradle
+
+      - name: Build installable APK
+        working-directory: full-master/SANAD_ANDROID_FULL_MASTER
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Verify APK
-        run: test -f app/build/outputs/apk/debug/app-debug.apk
+        working-directory: full-master/SANAD_ANDROID_FULL_MASTER
+        run: test -s app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Upload APK artifact
+      - name: Upload SANAD APK
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: SANAD-FULL-MASTER-APK
+          path: full-master/SANAD_ANDROID_FULL_MASTER/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
