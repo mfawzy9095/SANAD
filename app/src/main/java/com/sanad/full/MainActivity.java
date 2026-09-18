@@ -9,6 +9,7 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.provider.Settings;
 import android.text.InputType;
 import android.view.View;
@@ -19,6 +20,8 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
 import android.widget.Toast;
+
+import android.window.OnBackInvokedDispatcher;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -61,6 +64,12 @@ public class MainActivity extends Activity {
             @Override public void onError(String message){ js("window.sanadNativeVoiceError("+JSONObject.quote(message==null?"خطأ في الصوت":message)+")"); }
         });
         SanadReminderScheduler.ensureScheduled(this);
+        if(Build.VERSION.SDK_INT>=33){
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                    this::handleSystemBack
+            );
+        }
     }
 
     @Override protected void onResume(){
@@ -102,6 +111,7 @@ public class MainActivity extends Activity {
             @Override public void onPageFinished(WebView view,String url){
                 super.onPageFinished(view,url);
                 CairoWebFontLoader.load(MainActivity.this,web);
+                injectV27Fixes();
                 drainPending();
             }
         });
@@ -135,6 +145,10 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public void startVoice(String locale){ runOnUiThread(()->{ if(whisperVoice!=null) whisperVoice.start(locale); }); }
         @JavascriptInterface public void stopVoice(){ runOnUiThread(()->{ if(whisperVoice!=null) whisperVoice.stop(); }); }
+        @JavascriptInterface public void openAppSettings(){ runOnUiThread(()->{
+            Intent i=new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()));
+            startActivity(i);
+        }); }
         @JavascriptInterface public void importBankSms(int days){
             pendingSmsDays=days<=0?0:Math.max(1,Math.min(days,3650));
             runOnUiThread(()->beginSmsSync(false));
@@ -289,7 +303,11 @@ public class MainActivity extends Activity {
         boolean granted=grants.length>0&&grants[0]==PackageManager.PERMISSION_GRANTED;
         if(req==REQ_AUDIO){
             if(granted){if(whisperVoice!=null) whisperVoice.onPermissionGranted();}
-            else{toast("صلاحية الميكروفون مطلوبة للصوت");js("window.sanadNativeVoiceError("+JSONObject.quote("صلاحية الميكروفون مطلوبة")+")");}
+            else{
+                toast("صلاحية الميكروفون مطلوبة للصوت");
+                js("window.sanadNativeVoiceError("+JSONObject.quote("صلاحية الميكروفون مطلوبة")+")");
+                if(!shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) showMicPermissionHelp();
+            }
         }else if(req==REQ_SMS){
             if(granted) startSmsSyncThread(pendingSmsForceFull);
             else{toast("يمكنك لصق رسالة البنك يدويًا بدون صلاحية SMS");maybePromptNotificationAccess();}
@@ -336,6 +354,39 @@ public class MainActivity extends Activity {
             try{ String plain=BackupCrypto.decrypt(pendingImportEncrypted,input.getText().toString()); pendingImportEncrypted=null; d.dismiss(); js("window.sanadNativeRestore("+JSONObject.quote(plain)+")"); }
             catch(Exception e){input.setError("كلمة المرور غير صحيحة أو الملف تالف");input.selectAll();}
         })); d.show();
+    }
+
+    @Override public void onBackPressed(){ handleSystemBack(); }
+
+    private void handleSystemBack(){
+        if(lockDialog!=null && lockDialog.isShowing()){ finish(); return; }
+        if(web==null){ finish(); return; }
+        final String code="(function(){try{if(typeof window.sanadHandleAndroidBack==='function')return window.sanadHandleAndroidBack()===true;if(typeof UI!=='undefined'&&UI.stack&&UI.stack.length>1&&typeof back==='function'){back();return true;}}catch(e){}return false;})()";
+        web.evaluateJavascript(code,value->{
+            if(!"true".equals(value)) runOnUiThread(this::finish);
+        });
+    }
+
+    private void injectV27Fixes(){
+        try(InputStream is=getAssets().open("v27_fixes.js");ByteArrayOutputStream out=new ByteArrayOutputStream()){
+            byte[] buf=new byte[8192]; int n;
+            while((n=is.read(buf))!=-1) out.write(buf,0,n);
+            String code=new String(out.toByteArray(),StandardCharsets.UTF_8);
+            web.evaluateJavascript(code,null);
+        }catch(Exception e){
+            android.util.Log.e("SANAD","Failed to inject V2.7 fixes",e);
+        }
+    }
+
+    private void showMicPermissionHelp(){
+        new AlertDialog.Builder(this)
+                .setTitle("تفعيل الميكروفون")
+                .setMessage("صلاحية الميكروفون مقفولة لسند. افتح إعدادات التطبيق وفعّل Microphone ثم ارجع لسند.")
+                .setNegativeButton("إلغاء",null)
+                .setPositiveButton("فتح الإعدادات",(d,w)->{
+                    Intent i=new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()));
+                    startActivity(i);
+                }).show();
     }
 
     private void toast(String s){runOnUiThread(()->Toast.makeText(this,s,Toast.LENGTH_SHORT).show());}
