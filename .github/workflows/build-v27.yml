@@ -72,6 +72,16 @@ jobs:
           test ! -e app/src/main/res/drawable-nodpi/sanad_launcher_foreground.png
           test -f app/src/main/assets/models/ggml-base-q5_1.bin
 
+      - name: Run V2.7 regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node qa/v27_parser_test.js
+          rm -rf /tmp/v27javac
+          mkdir -p /tmp/v27javac
+          javac -d /tmp/v27javac app/src/main/java/com/sanad/full/BankMessageFilter.java qa/V27BankFilterTest.java
+          java -cp /tmp/v27javac com.sanad.full.V27BankFilterTest
+
       - name: Build V2.7 debug APK
         run: gradle --no-daemon --stacktrace assembleDebug
 
