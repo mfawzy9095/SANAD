@@ -1,22 +1,26 @@
-# SANAD 1.1 Test
+# SANAD / سند — V2.2 Release Candidate
 
-Android test build using the recovered SANAD master.
+This repository builds the reviewed SANAD V2.2 Android project.
 
-## Included
-- Approved icon option 1 (leaf + finance bars)
-- Approved interface direction 2 (dark green + cream)
-- Native splash
-- Encrypted SQLite database (AES-GCM key stored in Android Keystore)
-- Automatic migration from older `sanad.v7` localStorage when present
-- Local adaptive learning from confirmed merchant/category/text patterns
-- Bank notification capture with OTP/security filtering and duplicate prevention
-- Optional manual import of existing bank SMS (runtime READ_SMS permission)
-- Android on-device voice recognition only; no cloud fallback
-- JSON backup/restore with Android file picker
-- No `INTERNET` permission
+## V2.2 scope
+- Original SANAD interface retained
+- Cairo font loading for Android WebView
+- Local encrypted SQLite state with Android Keystore
+- One-time legacy `sanad.v7` migration
+- Local adaptive merchant/category/phrase learning
+- Android on-device speech recognition only (no cloud fallback)
+- Bank notification capture + historical SMS import
+- OTP/PIN/CVV/password filtering and duplicate protection
+- Backup / Restore through Android document picker
+- Safe-to-Spend, savings goals, recurring bills, debts/installments
+- No `android.permission.INTERNET`
 
-## Voice note
-On-device Arabic recognition depends on the Android speech service/model installed on the phone. SANAD includes a **Prepare offline voice** action that asks Android to prepare the selected offline model where supported.
+The exact reviewed source package is stored in `release-v22-parts/` and reconstructed by GitHub Actions. Its tar.xz SHA-256 is:
 
-## Test status
-Core JS suite: **42/42 PASS** before Android build. GitHub Actions compiles and verifies the APK.
+`2cb06c5b043850aba85f788515d7a71257767a626c4e201f344446cd349f8477`
+
+GitHub Actions produces:
+- `SANAD-V2.2-APK`
+- `SANAD-V2.2-FULL-PROJECT`
+
+The APK is a debug-signed test build intended for direct device testing before any store release.
