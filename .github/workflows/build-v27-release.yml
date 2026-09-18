@@ -1,0 +1,166 @@
+name: Build SANAD V2.7 Unsigned Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-v27-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: source-v27
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Install Android native tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
+
+      - name: Add pinned whisper.cpp
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v1.7.6 https://github.com/ggerganov/whisper.cpp.git app/src/main/cpp/whisper.cpp
+          rm -rf app/src/main/cpp/whisper.cpp/.git
+          test -f app/src/main/cpp/whisper.cpp/include/whisper.h
+
+      - name: Bundle multilingual Whisper model
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets/models
+          curl -L --fail --retry 4 --retry-delay 5 -o app/src/main/assets/models/ggml-base-q5_1.bin "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin?download=true"
+          test "$(stat -c%s app/src/main/assets/models/ggml-base-q5_1.bin)" -gt 50000000
+
+      - name: Parser and filter regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/sanadtest
+          cp app/src/main/java/com/sanad/full/BankMessageFilter.java /tmp/sanadtest/BankMessageFilter.java
+          cat > /tmp/sanadtest/TestBankFilter.java <<'EOF'
+          package com.sanad.full;
+          public class TestBankFilter {
+            static void ok(boolean x,String m){if(!x)throw new RuntimeException(m);}
+            public static void main(String[] a){
+              ok(BankMessageFilter.isFinancial("AED 125.50 was debited from your card for a purchase"),"english debit");
+              ok(BankMessageFilter.isFinancial("تم خصم مبلغ 42.50 درهم من بطاقتكم لدى كارفور"),"arabic debit");
+              ok(BankMessageFilter.isFinancial("Your du Pay Card has been used for AED 9.00 at TEST SHOP"),"du pay");
+              ok(!BankMessageFilter.isFinancial("Your OTP is 123456 for AED 500 purchase"),"otp reject");
+              ok(!BankMessageFilter.isFinancial("Your minimum amount due is AED 500 on 25 Sep"),"statement reject");
+              ok(!BankMessageFilter.isFinancial("Your available balance is AED 302.97"),"balance reject");
+              System.out.println("BankMessageFilter tests passed");
+            }
+          }
+          EOF
+          mkdir -p /tmp/classes
+          javac -d /tmp/classes /tmp/sanadtest/BankMessageFilter.java /tmp/sanadtest/TestBankFilter.java
+          java -cp /tmp/classes com.sanad.full.TestBankFilter
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('app/src/main/assets/index.html').read_text()
+          blocks=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',s,re.S|re.I)
+          js=max(blocks,key=len)
+          Path('/tmp/sanad.js').write_text(js)
+
+          def extract(name):
+              start=js.index('function '+name+'(')
+              brace=js.index('{',start)
+              depth=0
+              for i in range(brace,len(js)):
+                  if js[i]=='{': depth+=1
+                  elif js[i]=='}':
+                      depth-=1
+                      if depth==0:return js[start:i+1]
+              raise RuntimeError(name)
+          pre=r'''
+          const DAY=86400000;
+          function N(x){return String(x||"").toLowerCase().replace(/[٠-٩]/g,d=>"٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/ة/g,"ه").replace(/\s+/g," ").trim();}
+          const Cur={valid:c=>["AED","SAR","USD","EUR","GBP","EGP","MAD"].includes(String(c||"").toUpperCase())};
+          function detCur(x){x=N(x);if(x.includes("درهم"))return "AED";if(x.includes("ريال"))return "SAR";if(x.includes("دولار"))return "USD";if(x.includes("يورو"))return "EUR";if(x.includes("جنيه"))return "EGP";return null;}
+          '''
+          tests=r'''
+          function ok(x,m){if(!x)throw new Error(m)}
+          let ref=new Date("2026-09-18T18:00:00+04:00").getTime();
+          ok(bankDateFromText("عملية بتاريخ 18-Sep-26",ref).startsWith("2026-09-18"),"18-Sep-26");
+          ok(bankDateFromText("عملية بتاريخ 18/09/2026 14:35",ref).startsWith("2026-09-18"),"18/09/2026");
+          ok(bankDateFromText("عملية بتاريخ 18/09 14:35",ref).startsWith("2026-09-18"),"date no year");
+          let x=bankAmountFromExplicitTransaction("AED 125.50 was debited from your card");ok(x&&x.amount===125.5&&x.currency==="AED","AED before debit");
+          x=bankAmountFromExplicitTransaction("تم خصم مبلغ 42.50 درهم من بطاقتكم");ok(x&&x.amount===42.5&&x.currency==="AED","Arabic debit");
+          x=bankAmountFromExplicitTransaction("Your card has been used for AED 9.00 at SHOP");ok(x&&x.amount===9&&x.currency==="AED","du pay");
+          console.log("JS bank parser tests passed");
+          '''
+          out=pre+'\n'+extract('bankDateFromText')+'\n'+extract('bankAmountFromExplicitTransaction')+'\n'+tests
+          Path('/tmp/bank-tests.js').write_text(out)
+          PY
+          node --check /tmp/sanad.js
+          node /tmp/bank-tests.js
+
+      - name: Source safety checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "versionCode 27" app/build.gradle
+          grep -q "versionName '2.7-device-fix'" app/build.gradle
+          grep -q "window.sanadAndroidBack" app/src/main/assets/index.html
+          grep -q "date_sent" app/src/main/java/com/sanad/full/MainActivity.java
+          grep -q "MediaRecorder.AudioSource.MIC" app/src/main/java/com/sanad/full/WhisperVoiceEngine.java
+          ! grep -q "android.permission.INTERNET" app/src/main/AndroidManifest.xml
+          ! find . -iname '*.jks' -o -iname '*.keystore' | grep -q .
+          test ! -f keystore.properties
+
+      - name: Build unsigned release APK
+        run: gradle --no-daemon --stacktrace assembleRelease
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s "$APK"
+          cp "$APK" SANAD-V2.7-unsigned.apk
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging SANAD-V2.7-unsigned.apk | tee apk-badging.txt
+          "$AAPT" dump permissions SANAD-V2.7-unsigned.apk | tee apk-permissions.txt
+          grep -q "package: name='com.sanad.full' versionCode='27' versionName='2.7-device-fix'" apk-badging.txt
+          ! grep -q "android.permission.INTERNET" apk-permissions.txt
+          grep -q "android.permission.READ_SMS" apk-permissions.txt
+          grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
+          unzip -l SANAD-V2.7-unsigned.apk | tee apk-files.txt
+          grep -q "assets/models/ggml-base-q5_1.bin" apk-files.txt
+          grep -q "lib/arm64-v8a/libsanad_whisper.so" apk-files.txt
+          sha256sum SANAD-V2.7-unsigned.apk | tee apk-sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-V2.7-UNSIGNED
+          path: |
+            SANAD-V2.7-unsigned.apk
+            apk-badging.txt
+            apk-permissions.txt
+            apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 7
