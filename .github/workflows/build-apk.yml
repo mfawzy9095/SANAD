@@ -14,12 +14,15 @@ jobs:
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract full SANAD project snapshot
+      - name: Reassemble full SANAD project snapshot
         run: |
+          cat full-master-parts/part_* > SANAD_ANDROID_FULL_BUILD.tar.xz
+          xz -t SANAD_ANDROID_FULL_BUILD.tar.xz
           rm -rf full-master
           mkdir full-master
           tar -xJf SANAD_ANDROID_FULL_BUILD.tar.xz -C full-master
