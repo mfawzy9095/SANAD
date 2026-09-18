@@ -75,7 +75,8 @@ jobs:
           cd work
           patch -p0 < /tmp/SANAD_V25_APPLY.patch
           cd ..
-          mkdir -p work/SANAD_FINAL_LOCAL_REVIEW_V25/app/src/main/res/drawable-nodpi\n          cp assets/v25_sanad_icon_full.png work/SANAD_FINAL_LOCAL_REVIEW_V25/app/src/main/res/drawable-nodpi/sanad_launcher_full.png
+          mkdir -p work/SANAD_FINAL_LOCAL_REVIEW_V25/app/src/main/res/drawable-nodpi
+          cp assets/v25_sanad_icon_full.png work/SANAD_FINAL_LOCAL_REVIEW_V25/app/src/main/res/drawable-nodpi/sanad_launcher_full.png
           cp assets/v25_sanad_icon_foreground.png work/SANAD_FINAL_LOCAL_REVIEW_V25/app/src/main/res/drawable-nodpi/sanad_launcher_foreground.png
 
       - name: Add pinned whisper.cpp source
