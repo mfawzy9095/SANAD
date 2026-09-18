@@ -30,7 +30,8 @@ jobs:
 
       - name: Apply SANAD 1.1 approved upgrade
         run: |
-          cat patches/v11_patch_* > /tmp/v11.patch.b64
+          cat             patches/v11_patch_00             patches/v11_patch_01             patches/v11_patch_02_0             patches/v11_patch_02_1             patches/v11_patch_02_2             patches/v11_patch_02_3             patches/v11_patch_02_4             patches/v11_patch_02_5             patches/v11_patch_03 > /tmp/v11.patch.b64
+          test "$(wc -c < /tmp/v11.patch.b64)" -eq 55044
           base64 -d /tmp/v11.patch.b64 | gzip -d > /tmp/v11.patch
           cd work/SANAD_ANDROID_FULL_MASTER
           patch -p1 --batch < /tmp/v11.patch
