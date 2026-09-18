@@ -19,34 +19,50 @@ jobs:
           ref: source-v27
           fetch-depth: 0
 
-      - name: Re-encode launcher PNGs safely
+      - name: Repair and re-encode launcher PNGs safely
         shell: bash
         run: |
           set -euo pipefail
+          file app/src/main/res/drawable-nodpi/*.png || true
+          for f in app/src/main/res/drawable-nodpi/*.png; do echo "HEADER $f"; xxd -l 48 "$f"; done
           python3 -m pip install --quiet pillow
           python3 - <<'PY'
           from PIL import Image
           from pathlib import Path
+          import base64, re, io
           files=[
             Path('app/src/main/res/drawable-nodpi/sanad_launcher_full.png'),
             Path('app/src/main/res/drawable-nodpi/sanad_launcher_foreground.png'),
           ]
           for p in files:
+              raw=p.read_bytes()
+              if not raw.startswith(b'\x89PNG\r\n\x1a\n'):
+                  try:
+                      text=raw.decode('ascii').strip()
+                      if text.startswith('data:image'):
+                          text=text.split(',',1)[1]
+                      text=re.sub(r'\s+','',text)
+                      decoded=base64.b64decode(text,validate=False)
+                      if not decoded.startswith(b'\x89PNG\r\n\x1a\n'):
+                          raise ValueError('decoded data is not PNG')
+                      p.write_bytes(decoded)
+                      print('decoded base64 wrapper:',p,len(raw),'->',len(decoded))
+                  except Exception as e:
+                      raise SystemExit(f'{p}: not a valid PNG and base64 repair failed: {e}')
               with Image.open(p) as im:
                   im.load()
-                  print(p, im.format, im.mode, im.size)
-                  if im.mode not in ('RGB','RGBA'):
-                      im=im.convert('RGBA')
-                  tmp=p.with_suffix('.clean.png')
-                  im.save(tmp, format='PNG', optimize=False, compress_level=6)
+                  print('opened',p,im.format,im.mode,im.size)
+                  clean=im.convert('RGBA') if im.mode not in ('RGB','RGBA') else im.copy()
+              tmp=p.with_suffix('.clean.png')
+              clean.save(tmp,format='PNG',optimize=False,compress_level=6)
               tmp.replace(p)
+              with Image.open(p) as check:
+                  check.verify()
+              assert p.read_bytes().startswith(b'\x89PNG\r\n\x1a\n')
+              print('verified clean PNG:',p,p.stat().st_size)
           PY
           file app/src/main/res/drawable-nodpi/*.png
-          python3 - <<'PY'
-          from PIL import Image
-          for p in ['app/src/main/res/drawable-nodpi/sanad_launcher_full.png','app/src/main/res/drawable-nodpi/sanad_launcher_foreground.png']:
-              im=Image.open(p); im.verify(); print('verified',p)
-          PY
+          for f in app/src/main/res/drawable-nodpi/*.png; do xxd -l 16 "$f"; done
 
       - name: Commit sanitized resources
         shell: bash
