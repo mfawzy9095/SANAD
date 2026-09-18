@@ -1,4 +1,4 @@
-name: Build SANAD V2.2 APK
+name: Build SANAD V2.3 Bugfix APK
 
 on:
   push:
@@ -27,63 +27,73 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Rebuild exact SANAD V2.2 source
+      - name: Rebuild reviewed V2.2 base
         shell: bash
         run: |
           set -euo pipefail
           cat             release-v22-parts/part_00             release-v22-parts/part_01             release-v22-parts/part_01_full             release-v22-parts/part_02             release-v22-parts/part_03             release-v22-parts/part_04             release-v22-parts/part_05             release-v22-parts/part_06             release-v22-parts/part_07             release-v22-parts/part_08             release-v22-parts/part_09_full             release-v22-parts/part_10             release-v22-parts/part_11 > /tmp/sanad_v22.b64
-          ACTUAL=$(wc -c < /tmp/sanad_v22.b64)
-          echo "Reassembled base64 bytes: $ACTUAL"
-          test "$ACTUAL" -eq 95564
+          test "$(wc -c < /tmp/sanad_v22.b64)" -eq 95564
           base64 -d /tmp/sanad_v22.b64 > /tmp/SANAD_V22_PROJECT.tar.xz
           echo "2cb06c5b043850aba85f788515d7a71257767a626c4e201f344446cd349f8477  /tmp/SANAD_V22_PROJECT.tar.xz" | sha256sum -c -
           mkdir -p work
           tar -xJf /tmp/SANAD_V22_PROJECT.tar.xz -C work
-          PROJECT=work/SANAD_FINAL_LOCAL_REVIEW_V22
-          test -f "$PROJECT/app/src/main/assets/index.html"
-          test -f "$PROJECT/app/src/main/java/com/sanad/full/MainActivity.java"
-          grep -q "versionCode 22" "$PROJECT/app/build.gradle"
-          grep -q "versionName '2.2-local-release-candidate'" "$PROJECT/app/build.gradle"
-          ! grep -q "android.permission.INTERNET" "$PROJECT/app/src/main/AndroidManifest.xml"
-          grep -q "android.permission.READ_SMS" "$PROJECT/app/src/main/AndroidManifest.xml"
-          grep -q "android.permission.RECORD_AUDIO" "$PROJECT/app/src/main/AndroidManifest.xml"
+
+      - name: Apply SANAD V2.3 bank and offline voice bugfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat patches/v23_patch_00 patches/v23_patch_01 patches/v23_patch_02 > /tmp/v23_patch.b64
+          test "$(wc -c < /tmp/v23_patch.b64)" -eq 8520
+          base64 -d /tmp/v23_patch.b64 | gzip -d > /tmp/SANAD_V23.patch
+          echo "ac4a0e183436970e39d9b251352d5083581bdc75db7f0fedb560e4f3436f9618  /tmp/SANAD_V23.patch" | sha256sum -c -
+          cd work/SANAD_FINAL_LOCAL_REVIEW_V22
+          patch -p1 < /tmp/SANAD_V23.patch
+          grep -q "versionCode 23" app/build.gradle
+          grep -q "versionName '2.3-bugfix-test'" app/build.gradle
+          grep -q "bankAmountFromExplicitTransaction" app/src/main/assets/index.html
+          grep -q "ar-AE" app/src/main/java/com/sanad/full/MainActivity.java
+          ! grep -q "android.permission.INTERNET" app/src/main/AndroidManifest.xml
+          grep -q "android.permission.READ_SMS" app/src/main/AndroidManifest.xml
+          grep -q "android.permission.RECORD_AUDIO" app/src/main/AndroidManifest.xml
+          cd ..
+          mv SANAD_FINAL_LOCAL_REVIEW_V22 SANAD_FINAL_LOCAL_REVIEW_V23
 
       - name: Build debug APK
-        working-directory: work/SANAD_FINAL_LOCAL_REVIEW_V22
+        working-directory: work/SANAD_FINAL_LOCAL_REVIEW_V23
         run: gradle --no-daemon --stacktrace assembleDebug
 
       - name: Verify APK permissions and package
         shell: bash
         run: |
           set -euo pipefail
-          APK=work/SANAD_FINAL_LOCAL_REVIEW_V22/app/build/outputs/apk/debug/app-debug.apk
+          APK=work/SANAD_FINAL_LOCAL_REVIEW_V23/app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
-          cp "$APK" SANAD-V2.2.apk
+          cp "$APK" SANAD-V2.3.apk
           AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)
-          "$AAPT" dump badging SANAD-V2.2.apk | tee apk-badging.txt
-          "$AAPT" dump permissions SANAD-V2.2.apk | tee apk-permissions.txt
+          "$AAPT" dump badging SANAD-V2.3.apk | tee apk-badging.txt
+          "$AAPT" dump permissions SANAD-V2.3.apk | tee apk-permissions.txt
           grep -q "package: name='com.sanad.full'" apk-badging.txt
           ! grep -q "android.permission.INTERNET" apk-permissions.txt
           grep -q "android.permission.READ_SMS" apk-permissions.txt
           grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
-          sha256sum SANAD-V2.2.apk | tee apk-sha256.txt
+          sha256sum SANAD-V2.3.apk | tee apk-sha256.txt
 
       - name: Package full project backup
         shell: bash
         run: |
           set -euo pipefail
           cd work
-          zip -qr ../SANAD-V2.2-FULL-PROJECT.zip SANAD_FINAL_LOCAL_REVIEW_V22
+          zip -qr ../SANAD-V2.3-FULL-PROJECT.zip SANAD_FINAL_LOCAL_REVIEW_V23
           cd ..
-          test -s SANAD-V2.2-FULL-PROJECT.zip
-          sha256sum SANAD-V2.2-FULL-PROJECT.zip | tee project-sha256.txt
+          test -s SANAD-V2.3-FULL-PROJECT.zip
+          sha256sum SANAD-V2.3-FULL-PROJECT.zip | tee project-sha256.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V2.2-APK
+          name: SANAD-V2.3-APK
           path: |
-            SANAD-V2.2.apk
+            SANAD-V2.3.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
@@ -93,9 +103,9 @@ jobs:
       - name: Upload full project backup
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V2.2-FULL-PROJECT
+          name: SANAD-V2.3-FULL-PROJECT
           path: |
-            SANAD-V2.2-FULL-PROJECT.zip
+            SANAD-V2.3-FULL-PROJECT.zip
             project-sha256.txt
           if-no-files-found: error
           retention-days: 30

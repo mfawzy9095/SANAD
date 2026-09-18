@@ -1,26 +1,19 @@
-# SANAD / سند — V2.2 Release Candidate
+# SANAD / سند — V2.3 Bugfix Test
 
-This repository builds the reviewed SANAD V2.2 Android project.
+V2.3 is a targeted test build based on the reviewed V2.2 source.
 
-## V2.2 scope
-- Original SANAD interface retained
-- Cairo font loading for Android WebView
-- Local encrypted SQLite state with Android Keystore
-- One-time legacy `sanad.v7` migration
-- Local adaptive merchant/category/phrase learning
-- Android on-device speech recognition only (no cloud fallback)
-- Bank notification capture + historical SMS import
-- OTP/PIN/CVV/password filtering and duplicate protection
-- Backup / Restore through Android document picker
-- Safe-to-Spend, savings goals, recurring bills, debts/installments
-- No `android.permission.INTERNET`
+## Fixes in V2.3
+- Hardened bank/SMS amount extraction so balances, credit limits and reference numbers are not used as transaction amounts.
+- Large or ambiguous imported amounts are sent to review instead of being silently auto-saved.
+- Historical SMS import is conservative: only explicit high-confidence transaction amounts are preselected.
+- Notification parsing no longer treats the generic phrase "credit limit" as a transaction signal.
+- Offline voice retries Android recognizer service disconnection locally and tries Arabic locale candidates: ar-EG, ar-SA, ar-AE, ar.
+- No cloud voice fallback was added.
+- No INTERNET permission.
 
-The exact reviewed source package is stored in `release-v22-parts/` and reconstructed by GitHub Actions. Its tar.xz SHA-256 is:
-
-`2cb06c5b043850aba85f788515d7a71257767a626c4e201f344446cd349f8477`
+V2.3 patch SHA-256:
+`ac4a0e183436970e39d9b251352d5083581bdc75db7f0fedb560e4f3436f9618`
 
 GitHub Actions produces:
-- `SANAD-V2.2-APK`
-- `SANAD-V2.2-FULL-PROJECT`
-
-The APK is a debug-signed test build intended for direct device testing before any store release.
+- `SANAD-V2.3-APK`
+- `SANAD-V2.3-FULL-PROJECT`
