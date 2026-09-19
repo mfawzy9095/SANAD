@@ -50,6 +50,7 @@ public class MainActivity extends Activity {
     private AlertDialog lockDialog;
     private long backgroundAt=0L;
     private long lastUnlockAt=0L;
+    private long lastBackAt=0L;
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
@@ -112,6 +113,7 @@ public class MainActivity extends Activity {
                 super.onPageFinished(view,url);
                 CairoWebFontLoader.load(MainActivity.this,web);
                 injectV27Fixes();
+                injectAssetJs("v28_runtime.js");
                 drainPending();
             }
         });
@@ -142,6 +144,21 @@ public class MainActivity extends Activity {
                 AppLockStore.clear(MainActivity.this);
                 return true;
             }catch(Exception e){ toast("تعذر حذف البيانات المحلية"); return false; }
+        }
+        @JavascriptInterface public void prepareVoice(){ runOnUiThread(()->{ if(whisperVoice!=null) whisperVoice.prepare(); }); }
+        @JavascriptInterface public String voiceStatus(){ return whisperVoice==null?"unavailable":whisperVoice.status(); }
+        @JavascriptInterface public String runtimeDiagnostics(){
+            try{
+                JSONObject o=new JSONObject();
+                o.put("version","2.8-device-runtime-fix");
+                o.put("audioPermission",checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED);
+                o.put("smsPermission",checkSelfPermission(Manifest.permission.READ_SMS)==PackageManager.PERMISSION_GRANTED);
+                o.put("voiceStatus",whisperVoice==null?"unavailable":whisperVoice.status());
+                o.put("sdk",Build.VERSION.SDK_INT);
+                o.put("manufacturer",Build.MANUFACTURER);
+                o.put("model",Build.MODEL);
+                return o.toString();
+            }catch(Exception e){return "{}";}
         }
         @JavascriptInterface public void startVoice(String locale){ runOnUiThread(()->{ if(whisperVoice!=null) whisperVoice.start(locale); }); }
         @JavascriptInterface public void stopVoice(){ runOnUiThread(()->{ if(whisperVoice!=null) whisperVoice.stop(); }); }
@@ -245,6 +262,20 @@ public class MainActivity extends Activity {
         },"sanad-sms-sync").start();
     }
 
+    private static long normalizeSmsEpoch(long value){
+        if(value<=0L) return 0L;
+        if(value<100_000_000_000L) value*=1000L;
+        long min=946_684_800_000L;
+        long max=System.currentTimeMillis()+2L*24L*60L*60L*1000L;
+        return (value>=min&&value<=max)?value:0L;
+    }
+
+    private static long bestSmsEventTime(long received,long sent){
+        long r=normalizeSmsEpoch(received), s=normalizeSmsEpoch(sent);
+        if(s>0L && (r<=0L || Math.abs(r-s)<=45L*24L*60L*60L*1000L)) return s;
+        return r>0L?r:System.currentTimeMillis();
+    }
+
     private void syncSms(boolean forceFull){
         JSONArray arr=new JSONArray();
         android.content.SharedPreferences prefs=getSharedPreferences("sanad_prefs",MODE_PRIVATE);
@@ -256,16 +287,26 @@ public class MainActivity extends Activity {
         if(full) after=pendingSmsDays<=0?0L:Math.max(0L,now-(long)pendingSmsDays*86_400_000L);
         else after=Math.max(0L,lastDate-5L*60L*1000L);
         HashSet<String> batch=new HashSet<>(); int accepted=0; long maxDate=lastDate; long maxId=prefs.getLong("sms_sync_last_id",0L);
-        String sel=after>0?"date>=?":null; String[] args=after>0?new String[]{String.valueOf(after)}:null;
         boolean queryOk=false;
-        try(Cursor c=getContentResolver().query(Uri.parse("content://sms/inbox"),new String[]{"_id","address","body","date"},sel,args,"date DESC")){
-            if(c!=null){
-                while(c.moveToNext()){
-                    long smsId=c.getLong(0); String sender=c.getString(1); String body=c.getString(2); long smsDate=c.getLong(3);
-                    if(smsDate>maxDate){maxDate=smsDate;maxId=smsId;}
-                    if(!BankMessageFilter.isFinancial(body)) continue;
-                    String h=BankMessageFilter.messageFingerprint(body,smsDate,smsId,sender); if(!batch.add(h)) continue;
-                    JSONObject o=new JSONObject(); o.put("sender",sender);o.put("text",body);o.put("date",smsDate);o.put("hash",h);arr.put(o);accepted++;
+        String[] projection=new String[]{"_id","address","body","date","date_sent"};
+        try(Cursor cur=getContentResolver().query(Uri.parse("content://sms/inbox"),projection,null,null,"date DESC")){
+            if(cur!=null){
+                while(cur.moveToNext()){
+                    long smsId=cur.getLong(0); String sender=cur.getString(1); String body=cur.getString(2);
+                    long received=normalizeSmsEpoch(cur.getLong(3)), sent=normalizeSmsEpoch(cur.getLong(4));
+                    if(after>0L && received>0L && received<after) break;
+                    long eventAt=bestSmsEventTime(received,sent);
+                    if(received>maxDate){maxDate=received;maxId=smsId;}
+                    BankSmsParser.Result parsed=BankSmsParser.parse(body,eventAt);
+                    if(parsed==null) continue;
+                    String h=BankMessageFilter.messageFingerprint(body,eventAt,smsId,sender); if(!batch.add(h)) continue;
+                    JSONObject o=new JSONObject();
+                    o.put("sender",sender==null?"":sender); o.put("text",body);
+                    o.put("date",eventAt); o.put("receivedAt",received); o.put("sentAt",sent); o.put("hash",h);
+                    o.put("parsedAmount",parsed.amount); o.put("parsedCurrency",parsed.currency);
+                    o.put("parsedType",parsed.type); o.put("parsedDate",parsed.transactionAt);
+                    o.put("parsedConfidence",parsed.confidence); o.put("parsedAmountSource",parsed.amountSource);
+                    arr.put(o); accepted++;
                     if(accepted>=5000) break;
                 }
                 queryOk=true;
@@ -304,9 +345,9 @@ public class MainActivity extends Activity {
         if(req==REQ_AUDIO){
             if(granted){if(whisperVoice!=null) whisperVoice.onPermissionGranted();}
             else{
-                toast("صلاحية الميكروفون مطلوبة للصوت");
-                js("window.sanadNativeVoiceError("+JSONObject.quote("صلاحية الميكروفون مطلوبة")+")");
-                if(!shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) showMicPermissionHelp();
+                boolean blocked=Build.VERSION.SDK_INT>=23 && !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO);
+                if(whisperVoice!=null) whisperVoice.onPermissionDenied(blocked);
+                if(blocked) showMicPermissionHelp();
             }
         }else if(req==REQ_SMS){
             if(granted) startSmsSyncThread(pendingSmsForceFull);
@@ -356,16 +397,24 @@ public class MainActivity extends Activity {
         })); d.show();
     }
 
-    @Override public void onBackPressed(){ handleSystemBack(); }
-
     private void handleSystemBack(){
-        if(lockDialog!=null && lockDialog.isShowing()){ finish(); return; }
-        if(web==null){ finish(); return; }
-        final String code="(function(){try{if(typeof window.sanadHandleAndroidBack==='function')return window.sanadHandleAndroidBack()===true;if(typeof UI!=='undefined'&&UI.stack&&UI.stack.length>1&&typeof back==='function'){back();return true;}}catch(e){}return false;})()";
+        if(lockDialog!=null && lockDialog.isShowing()) return;
+        if(web==null){ moveTaskToBack(true); return; }
+        final String code="(function(){try{if(typeof window.sanadHandleBack==='function')return window.sanadHandleBack()===true;if(typeof window.sanadHandleAndroidBack==='function')return window.sanadHandleAndroidBack()===true;if(typeof UI!=='undefined'&&UI.stack&&UI.stack.length>1&&typeof back==='function'){back();return true;}}catch(e){}return false;})()";
         web.evaluateJavascript(code,value->{
-            if(!"true".equals(value)) runOnUiThread(this::finish);
+            if("true".equals(value)) return;
+            long now=System.currentTimeMillis();
+            if(now-lastBackAt<1800L){ moveTaskToBack(true); lastBackAt=0L; }
+            else{ lastBackAt=now; toast("اضغط رجوع مرة أخرى للخروج"); }
         });
     }
+
+    @Override public boolean onKeyDown(int keyCode,android.view.KeyEvent event){
+        if(keyCode==android.view.KeyEvent.KEYCODE_BACK && event.getAction()==android.view.KeyEvent.ACTION_DOWN){ handleSystemBack(); return true; }
+        return super.onKeyDown(keyCode,event);
+    }
+
+    @Override public void onBackPressed(){ handleSystemBack(); }
 
     private void injectV27Fixes(){
         try(InputStream is=getAssets().open("v27_fixes.js");ByteArrayOutputStream out=new ByteArrayOutputStream()){
@@ -376,6 +425,14 @@ public class MainActivity extends Activity {
         }catch(Exception e){
             android.util.Log.e("SANAD","Failed to inject V2.7 fixes",e);
         }
+    }
+
+    private void injectAssetJs(String assetName){
+        try(InputStream is=getAssets().open(assetName);ByteArrayOutputStream out=new ByteArrayOutputStream()){
+            byte[] buf=new byte[8192]; int n;
+            while((n=is.read(buf))!=-1) out.write(buf,0,n);
+            web.evaluateJavascript(new String(out.toByteArray(),StandardCharsets.UTF_8),null);
+        }catch(Exception e){ android.util.Log.e("SANAD","Failed to inject "+assetName,e); }
     }
 
     private void showMicPermissionHelp(){
