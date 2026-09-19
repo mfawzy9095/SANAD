@@ -1,0 +1,129 @@
+name: Build SANAD V2.8 Runtime Fix
+
+on:
+  push:
+    branches: [source-v28]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout V2.8
+        uses: actions/checkout@v4
+        with:
+          ref: source-v28
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Install Android native tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "ndk;27.0.12077973" "cmake;3.22.1" "build-tools;35.0.0"
+
+      - name: Add pinned whisper.cpp
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf app/src/main/cpp/whisper.cpp
+          git clone --depth 1 --branch v1.7.6 https://github.com/ggerganov/whisper.cpp.git app/src/main/cpp/whisper.cpp
+          rm -rf app/src/main/cpp/whisper.cpp/.git
+          test -f app/src/main/cpp/whisper.cpp/include/whisper.h
+
+      - name: Bundle Whisper model
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets/models
+          curl -L --fail --retry 4 --retry-delay 5             -o app/src/main/assets/models/ggml-base-q5_1.bin             "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin?download=true"
+          test "$(stat -c%s app/src/main/assets/models/ggml-base-q5_1.bin)" -gt 50000000
+
+      - name: Run V2.8 parser tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/sanad-test
+          javac -d /tmp/sanad-test app/src/main/java/com/sanad/full/BankSmsParser.java qa/TestBankSmsParser.java
+          TZ=Asia/Dubai java -cp /tmp/sanad-test TestBankSmsParser
+
+      - name: Validate V2.8 source invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "versionCode 28" app/build.gradle
+          grep -q "versionName '2.8-device-runtime-fix'" app/build.gradle
+          grep -q "date_sent" app/src/main/java/com/sanad/full/MainActivity.java
+          grep -q "BankSmsParser.parse" app/src/main/java/com/sanad/full/MainActivity.java
+          grep -q "runtimeDiagnostics" app/src/main/java/com/sanad/full/MainActivity.java
+          grep -q "prepareVoice" app/src/main/java/com/sanad/full/MainActivity.java
+          grep -q "onPermissionDenied" app/src/main/java/com/sanad/full/WhisperVoiceEngine.java
+          grep -q "MediaRecorder.AudioSource.MIC" app/src/main/java/com/sanad/full/WhisperVoiceEngine.java
+          grep -q "enableOnBackInvokedCallback" app/src/main/AndroidManifest.xml
+          grep -q "sanadHandleAndroidBack" app/src/main/assets/v27_fixes.js
+          grep -q "__SANAD_RUNTIME_VERSION__" app/src/main/assets/v28_runtime.js
+          ! grep -q "android.permission.INTERNET" app/src/main/AndroidManifest.xml
+          node --check app/src/main/assets/v27_fixes.js
+          node --check app/src/main/assets/v28_runtime.js
+
+      - name: Build unsigned V2.8 release
+        run: gradle --no-daemon --stacktrace assembleRelease
+
+      - name: Verify unsigned APK structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s "$APK"
+          cp "$APK" SANAD-V2.8-UNSIGNED.apk
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging SANAD-V2.8-UNSIGNED.apk | tee apk-badging.txt
+          "$AAPT" dump permissions SANAD-V2.8-UNSIGNED.apk | tee apk-permissions.txt
+          grep -q "package: name='com.sanad.full' versionCode='28' versionName='2.8-device-runtime-fix'" apk-badging.txt
+          ! grep -q "android.permission.INTERNET" apk-permissions.txt
+          grep -q "android.permission.READ_SMS" apk-permissions.txt
+          grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
+          unzip -l SANAD-V2.8-UNSIGNED.apk | tee apk-files.txt
+          grep -q "assets/models/ggml-base-q5_1.bin" apk-files.txt
+          grep -q "assets/v28_runtime.js" apk-files.txt
+          grep -q "lib/arm64-v8a/libsanad_whisper.so" apk-files.txt
+          sha256sum SANAD-V2.8-UNSIGNED.apk | tee apk-sha256.txt
+
+      - name: Export signing tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p signing-tools/lib
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" signing-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" signing-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" signing-tools/lib/
+          tar -czf android-signing-tools.tgz signing-tools
+
+      - name: Upload unsigned APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-V2.8-UNSIGNED
+          path: |
+            SANAD-V2.8-UNSIGNED.apk
+            apk-badging.txt
+            apk-permissions.txt
+            apk-sha256.txt
+            android-signing-tools.tgz
+          retention-days: 7
+          if-no-files-found: error
