@@ -106,15 +106,5 @@ window.sanadHandleAndroidBack=function(){
   return false;
 };
 
-if(typeof window.sanadNativeVoiceState==="function"&&!window.__sanadV27VoiceWrapped){
-  var oldVoiceState=window.sanadNativeVoiceState;
-  window.sanadNativeVoiceState=function(state,detail){
-    oldVoiceState(state,detail);
-    if(state==="permission_required"){
-      var l=document.getElementById("vlabel");
-      if(l)l.textContent=LANG==="ar"?"اسمح لسند باستخدام الميكروفون":"Allow SANAD to use the microphone";
-    }
-  };
-  window.__sanadV27VoiceWrapped=true;
-}
+// V3.2 owns all voice state callbacks.\n
 })();
