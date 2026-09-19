@@ -35,12 +35,13 @@ public final class WhisperVoiceEngine {
     private volatile long whisperCtx = 0L;
     private volatile boolean modelLoading = false;
     private volatile boolean pendingStart = false;
+    private volatile boolean pendingPrepare = false;
     private volatile String language = "ar";
 
     public WhisperVoiceEngine(Activity activity, Listener listener) {
         this.activity = activity;
         this.listener = listener;
-        warmup();
+        // V2.9: do not load Whisper at app startup. Voice is prepared only when the user opens voice mode.
     }
 
     public boolean isRecording() { return recording.get(); }
@@ -54,10 +55,12 @@ public final class WhisperVoiceEngine {
 
     public void prepare() {
         if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            pendingPrepare = true;
             listener.onState("permission_required", language);
             activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 401);
             return;
         }
+        pendingPrepare = false;
         if (whisperCtx == 0L) { listener.onState("loading_model", language); warmup(); }
         else listener.onState("ready", language);
     }
@@ -89,6 +92,7 @@ public final class WhisperVoiceEngine {
         String l = locale == null ? "ar" : locale.toLowerCase(Locale.ROOT);
         language = l.startsWith("en") ? "en" : "ar";
         if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            pendingPrepare = false;
             pendingStart = true;
             listener.onState("permission_required", language);
             activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 401);
@@ -125,11 +129,17 @@ public final class WhisperVoiceEngine {
         if (pendingStart) {
             pendingStart = false;
             start(language);
+            return;
+        }
+        if (pendingPrepare) {
+            pendingPrepare = false;
+            prepare();
         }
     }
 
     public void onPermissionDenied(boolean permanentlyDenied) {
         pendingStart = false;
+        pendingPrepare = false;
         listener.onState(permanentlyDenied ? "permission_blocked" : "permission_denied", language);
         listener.onError(permanentlyDenied ? "إذن الميكروفون مقفول. افتح إعدادات التطبيق وفعّل Microphone." : "صلاحية الميكروفون مطلوبة للصوت");
     }
