@@ -38,6 +38,7 @@ public final class OfflineVoiceEngine {
     private boolean userStopped=false;
     private boolean pendingStart=false;
     private boolean pendingPrepare=false;
+    private boolean lastOnDeviceAvailable=false;
     private String locale="ar-EG";
 
     public OfflineVoiceEngine(Activity activity, Listener listener){
@@ -71,14 +72,14 @@ public final class OfflineVoiceEngine {
         return "engine="+(usingDevice?"android_on_device":"whisper")+
                 ";active="+active+
                 ";locale="+locale+
-                ";onDeviceAvailable="+onDeviceAvailable()+
+                ";onDeviceAvailable="+lastOnDeviceAvailable+
                 ";whisper{"+whisper.diagnostics()+"}";
     }
 
     public String status(){
         if(activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) return "permission_required";
         if(active) return usingDevice?"listening_device":"recording_whisper";
-        if(onDeviceAvailable()) return "device_ready";
+        if(lastOnDeviceAvailable) return "device_ready";
         return whisper.status();
     }
 
@@ -90,7 +91,8 @@ public final class OfflineVoiceEngine {
             return;
         }
         pendingPrepare=false;
-        listener.onState(onDeviceAvailable()?"device_ready":"ready",locale);
+        lastOnDeviceAvailable=onDeviceAvailable();
+        listener.onState(lastOnDeviceAvailable?"device_ready":"ready",locale);
     }
 
     public void start(String requestedLocale){
@@ -105,7 +107,8 @@ public final class OfflineVoiceEngine {
         }
         pendingStart=false;
         userStopped=false;
-        if(onDeviceAvailable()){
+        lastOnDeviceAvailable=onDeviceAvailable();
+        if(lastOnDeviceAvailable){
             try{
                 if(Build.VERSION.SDK_INT>=33) {
                     checkAndStartOnDevice();
