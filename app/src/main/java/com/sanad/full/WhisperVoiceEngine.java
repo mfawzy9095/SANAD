@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/** V3.3 hardened offline Whisper recorder. */
 public final class WhisperVoiceEngine {
     public interface Listener {
         void onState(String state,String detail);
@@ -191,15 +192,16 @@ public final class WhisperVoiceEngine {
                 }
                 double rms=Math.sqrt(sum/Math.max(1,n));
                 lastSamples+=n; lastRms=rms; if(peak>lastPeak)lastPeak=peak;
-                boolean speech=rms>=220.0;
-                float level=(float)Math.min(12.0,Math.max(0.0,20.0*Math.log10((rms+1.0)/160.0)+5.0));
+                boolean speech=(rms>=85.0 || peak>=420);
+                boolean signal=(rms>=30.0 || peak>=120);
+                float level=(float)Math.min(12.0,Math.max(0.0,20.0*Math.log10((rms+1.0)/120.0)+5.0));
                 listener.onLevel(level);
                 long now=SystemClock.elapsedRealtime();
                 if(speech){
                     heardSpeech=true;silenceSince=0L;
                 }else if(heardSpeech&&silenceSince==0L) silenceSince=now;
                 if(speech!=lastSpeech){lastSpeech=speech;listener.onState(speech?"speech":"silent",language);}
-                if(heardSpeech && now-lastPartial>=PARTIAL_INTERVAL_MS && pcm.size()>=SAMPLE_RATE*2){
+                if(signal && now-lastPartial>=PARTIAL_INTERVAL_MS && pcm.size()>=SAMPLE_RATE*2){
                     lastPartial=now;schedulePartial(pcm.toByteArray());
                 }
                 if(heardSpeech&&silenceSince>0L&&now-silenceSince>=AUTO_STOP_SILENCE_MS){
@@ -226,7 +228,9 @@ public final class WhisperVoiceEngine {
             listener.onState("stopped",language);
             return;
         }
-        if(!heardSpeech||bytes.length<SAMPLE_RATE){
+        // Do not gate Whisper on an arbitrary VAD threshold. If the microphone returned
+        // real non-zero samples for at least ~0.5 s, let the model hear them.
+        if(bytes.length<SAMPLE_RATE || lastPeak<20){
             listener.onDone("");listener.onState("stopped",language);return;
         }
         listener.onState("processing",language);
@@ -263,6 +267,14 @@ public final class WhisperVoiceEngine {
             short s=(short)((hi<<8)|lo);
             audio[j]=s/32768.0f;
         }
+        // Normalize quiet phone captures before Whisper. Cap gain so background noise
+        // is not amplified without bound.
+        float max=0f;
+        for(float v:audio){ float a=Math.abs(v); if(a>max)max=a; }
+        if(max>0.001f && max<0.35f){
+            float gain=Math.min(6.0f,0.75f/max);
+            for(int i=0;i<audio.length;i++) audio[i]=Math.max(-1f,Math.min(1f,audio[i]*gain));
+        }
         int threads=Math.max(2,Math.min(6,Runtime.getRuntime().availableProcessors()-2));
         String text=WhisperLib.transcribe(whisperCtx,threads,audio,language);
         if(text==null)return "";
@@ -270,6 +282,7 @@ public final class WhisperVoiceEngine {
     }
 
     public void stop(){
+        pendingPrepare=false;
         if(!recording.getAndSet(false)){pendingStart=false;return;}
         AudioRecord r=recorder;
         if(r!=null)try{r.stop();}catch(Throwable ignored){}
