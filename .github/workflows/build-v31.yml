@@ -1,0 +1,115 @@
+name: Build SANAD V3.1 Mic Race Fix
+
+on:
+  push:
+    branches: [source-v31]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: source-v31
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Install Android native tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "ndk;27.0.12077973" "cmake;3.22.1" "build-tools;35.0.0"
+
+      - name: Add whisper.cpp and model
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf app/src/main/cpp/whisper.cpp
+          git clone --depth 1 --branch v1.7.6 https://github.com/ggerganov/whisper.cpp.git app/src/main/cpp/whisper.cpp
+          rm -rf app/src/main/cpp/whisper.cpp/.git
+          mkdir -p app/src/main/assets/models
+          curl -L --fail --retry 4 --retry-delay 5             -o app/src/main/assets/models/ggml-base-q5_1.bin             "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin?download=true"
+          test "$(stat -c%s app/src/main/assets/models/ggml-base-q5_1.bin)" -gt 50000000
+
+      - name: Exact microphone race regression
+        run: node qa/test-v31-ready-race.js
+
+      - name: Previous voice regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node qa/test-v29-mic-state.js
+          node qa/test-v30-live-voice.js
+          node --check app/src/main/assets/v31_voice.js
+
+      - name: Validate V3.1 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "versionCode 31" app/build.gradle
+          grep -q "versionName '3.1-mic-race-fix'" app/build.gradle
+          grep -q "android.speech.RecognitionService" app/src/main/AndroidManifest.xml
+          ! grep -q "this.whisper.warmup()" app/src/main/java/com/sanad/full/OfflineVoiceEngine.java
+          grep -q 'injectAssetJs("v31_voice.js")' app/src/main/java/com/sanad/full/MainActivity.java
+          ! grep -q 'injectAssetJs("v29_micfix.js")' app/src/main/java/com/sanad/full/MainActivity.java
+          ! grep -q 'injectAssetJs("v30_voice.js")' app/src/main/java/com/sanad/full/MainActivity.java
+          grep -q "createOnDeviceSpeechRecognizer" app/src/main/java/com/sanad/full/OfflineVoiceEngine.java
+          grep -q "EXTRA_PREFER_OFFLINE" app/src/main/java/com/sanad/full/OfflineVoiceEngine.java
+          ! grep -q "android.permission.INTERNET" app/src/main/AndroidManifest.xml
+
+      - name: Build unsigned release
+        run: gradle --no-daemon --stacktrace assembleRelease
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release-unsigned.apk
+          cp "$APK" SANAD-V3.1-UNSIGNED.apk
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging SANAD-V3.1-UNSIGNED.apk | tee apk-badging.txt
+          "$AAPT" dump permissions SANAD-V3.1-UNSIGNED.apk | tee apk-permissions.txt
+          grep -q "package: name='com.sanad.full' versionCode='31' versionName='3.1-mic-race-fix'" apk-badging.txt
+          grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
+          ! grep -q "android.permission.INTERNET" apk-permissions.txt
+          unzip -l SANAD-V3.1-UNSIGNED.apk | tee apk-files.txt
+          grep -q "assets/v31_voice.js" apk-files.txt
+          grep -q "assets/models/ggml-base-q5_1.bin" apk-files.txt
+          grep -q "lib/arm64-v8a/libsanad_whisper.so" apk-files.txt
+          sha256sum SANAD-V3.1-UNSIGNED.apk > apk-sha256.txt
+
+      - name: Export signing tools
+        shell: bash
+        run: |
+          mkdir -p signing-tools/lib
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" signing-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" signing-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" signing-tools/lib/
+          tar -czf android-signing-tools.tgz signing-tools
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-V3.1-UNSIGNED
+          path: |
+            SANAD-V3.1-UNSIGNED.apk
+            apk-badging.txt
+            apk-permissions.txt
+            apk-sha256.txt
+            android-signing-tools.tgz
+          retention-days: 7
+          if-no-files-found: error
