@@ -39,7 +39,7 @@ public class MainActivity extends Activity {
     private static MainActivity current;
     private WebView web;
     private SanadDatabase db;
-    private WhisperVoiceEngine whisperVoice;
+    private OfflineVoiceEngine whisperVoice;
     private boolean smsImportRunning=false;
     private static final int REQ_AUDIO=401, REQ_SMS=402, REQ_EXPORT=403, REQ_IMPORT=404;
     private String pendingExport;
@@ -57,10 +57,10 @@ public class MainActivity extends Activity {
         current=this;
         db=new SanadDatabase(this);
         setupWeb();
-        whisperVoice=new WhisperVoiceEngine(this,new WhisperVoiceEngine.Listener(){
+        whisperVoice=new OfflineVoiceEngine(this,new OfflineVoiceEngine.Listener(){
             @Override public void onState(String state,String detail){ js("window.sanadNativeVoiceState("+JSONObject.quote(state)+","+JSONObject.quote(detail==null?"":detail)+")"); }
             @Override public void onLevel(float level){ js("window.sanadNativeVoiceLevel("+level+")"); }
-            @Override public void onResult(String text){ JSONArray a=new JSONArray(); a.put(text==null?"":text); js("window.sanadNativeVoiceChunk("+JSONObject.quote(a.toString())+")"); }
+            @Override public void onPartial(String text){ js("window.sanadNativeVoicePartial("+JSONObject.quote(text==null?"":text)+")"); }
             @Override public void onDone(String text){ js("window.sanadNativeVoiceDone("+JSONObject.quote(text==null?"":text)+")"); }
             @Override public void onError(String message){ js("window.sanadNativeVoiceError("+JSONObject.quote(message==null?"خطأ في الصوت":message)+")"); }
         });
@@ -115,6 +115,7 @@ public class MainActivity extends Activity {
                 injectV27Fixes();
                 injectAssetJs("v28_runtime.js");
                 injectAssetJs("v29_micfix.js");
+                injectAssetJs("v30_voice.js");
                 drainPending();
             }
         });
@@ -151,7 +152,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public String runtimeDiagnostics(){
             try{
                 JSONObject o=new JSONObject();
-                o.put("version","2.9-mic-fix");
+                o.put("version","3.0-offline-live-voice");
                 o.put("audioPermission",checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED);
                 o.put("smsPermission",checkSelfPermission(Manifest.permission.READ_SMS)==PackageManager.PERMISSION_GRANTED);
                 o.put("voiceStatus",whisperVoice==null?"unavailable":whisperVoice.status());
