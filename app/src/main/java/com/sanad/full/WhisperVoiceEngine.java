@@ -6,8 +6,6 @@ import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
-import android.os.Build;
-import android.hardware.SensorPrivacyManager;
 import android.os.SystemClock;
 
 import com.sanad.full.whisper.WhisperLib;
@@ -48,20 +46,9 @@ public final class WhisperVoiceEngine {
 
     public boolean isRecording() { return recording.get(); }
 
-    private boolean isMicPrivacyBlocked() {
-        if (Build.VERSION.SDK_INT < 31) return false;
-        try {
-            SensorPrivacyManager spm = activity.getSystemService(SensorPrivacyManager.class);
-            return spm != null && spm.isSensorPrivacyEnabled(SensorPrivacyManager.Sensors.MICROPHONE);
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
     public String status() {
         if (recording.get()) return "recording";
         if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return "permission_required";
-        if (isMicPrivacyBlocked()) return "privacy_blocked";
         if (modelLoading) return "loading_model";
         return whisperCtx != 0L ? "ready" : "model_not_ready";
     }
@@ -74,7 +61,6 @@ public final class WhisperVoiceEngine {
             return;
         }
         pendingPrepare = false;
-        if (isMicPrivacyBlocked()) { listener.onState("privacy_blocked", language); listener.onError("الميكروفون مقفول من إعداد الخصوصية في الهاتف"); return; }
         if (whisperCtx == 0L) { listener.onState("loading_model", language); warmup(); }
         else listener.onState("ready", language);
     }
@@ -110,12 +96,6 @@ public final class WhisperVoiceEngine {
             pendingStart = true;
             listener.onState("permission_required", language);
             activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 401);
-            return;
-        }
-        if (isMicPrivacyBlocked()) {
-            pendingStart = false;
-            listener.onState("privacy_blocked", language);
-            listener.onError("الميكروفون مقفول من إعداد الخصوصية في الهاتف");
             return;
         }
         if (whisperCtx == 0L) {
