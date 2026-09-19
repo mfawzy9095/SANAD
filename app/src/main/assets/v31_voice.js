@@ -240,17 +240,19 @@ window.sanadVoiceDiagnostics=function(){
 };
 
 // Selecting Voice should act like opening voice in a chat app: open and start immediately.
-var diagObserver=new MutationObserver(function(){
-  var mic=byId("micb");
-  if(!mic||byId("v32diag"))return;
-  var b=document.createElement("button");
-  b.id="v32diag"; b.type="button"; b.className="chip sm";
-  b.style.marginTop="8px";
-  b.textContent=(LANG==="ar"?"تشخيص الميكروفون":"Microphone diagnostics");
-  b.onclick=function(ev){ev.preventDefault();ev.stopPropagation();window.sanadVoiceDiagnostics();};
-  if(mic.parentNode)mic.parentNode.appendChild(b);
-});
-try{diagObserver.observe(document.documentElement,{subtree:true,childList:true});}catch(e){}
+if(typeof MutationObserver!=="undefined"&&document&&typeof document.createElement==="function"){
+  var diagObserver=new MutationObserver(function(){
+    var mic=byId("micb");
+    if(!mic||byId("v32diag"))return;
+    var b=document.createElement("button");
+    b.id="v32diag"; b.type="button"; b.className="chip sm";
+    b.style.marginTop="8px";
+    b.textContent=(LANG==="ar"?"تشخيص الميكروفون":"Microphone diagnostics");
+    b.onclick=function(ev){ev.preventDefault();ev.stopPropagation();window.sanadVoiceDiagnostics();};
+    if(mic.parentNode)mic.parentNode.appendChild(b);
+  });
+  try{diagObserver.observe(document.documentElement,{subtree:true,childList:true});}catch(e){}
+}
 
 document.addEventListener("click",function(e){
   var x=e.target&&e.target.closest?e.target.closest("[data-act]"):null;
