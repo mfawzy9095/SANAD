@@ -45,6 +45,23 @@ public final class WhisperVoiceEngine {
 
     public boolean isRecording() { return recording.get(); }
 
+    public String status() {
+        if (recording.get()) return "recording";
+        if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return "permission_required";
+        if (modelLoading) return "loading_model";
+        return whisperCtx != 0L ? "ready" : "model_not_ready";
+    }
+
+    public void prepare() {
+        if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            listener.onState("permission_required", language);
+            activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 401);
+            return;
+        }
+        if (whisperCtx == 0L) { listener.onState("loading_model", language); warmup(); }
+        else listener.onState("ready", language);
+    }
+
     public void warmup() {
         if (whisperCtx != 0L || modelLoading) return;
         modelLoading = true;
@@ -56,6 +73,8 @@ public final class WhisperVoiceEngine {
                 if (pendingStart) {
                     pendingStart = false;
                     activity.runOnUiThread(() -> start(language));
+                } else {
+                    listener.onState("ready", language);
                 }
             } catch (Throwable t) {
                 listener.onError("تعذر تشغيل محرك Whisper داخل سند");
@@ -81,8 +100,10 @@ public final class WhisperVoiceEngine {
             warmup();
             return;
         }
-        final int min = Math.max(AudioRecord.getMinBufferSize(SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), 4096);
+        int rawMin = AudioRecord.getMinBufferSize(SAMPLE_RATE,
+                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+        final int min = Math.max(rawMin > 0 ? rawMin : 4096, 4096);
+        listener.onState("starting", language);
         try {
             recorder = openRecorder(MediaRecorder.AudioSource.MIC, min);
             if (recorder == null) recorder = openRecorder(MediaRecorder.AudioSource.VOICE_RECOGNITION, min);
@@ -96,7 +117,7 @@ public final class WhisperVoiceEngine {
         } catch (Throwable t) {
             safeRelease();
             recording.set(false);
-            listener.onError("تعذر فتح الميكروفون");
+            listener.onError("تعذر فتح الميكروفون. تأكد من إذن الميكروفون وأن تطبيقًا آخر لا يستخدمه.");
         }
     }
 
@@ -105,6 +126,12 @@ public final class WhisperVoiceEngine {
             pendingStart = false;
             start(language);
         }
+    }
+
+    public void onPermissionDenied(boolean permanentlyDenied) {
+        pendingStart = false;
+        listener.onState(permanentlyDenied ? "permission_blocked" : "permission_denied", language);
+        listener.onError(permanentlyDenied ? "إذن الميكروفون مقفول. افتح إعدادات التطبيق وفعّل Microphone." : "صلاحية الميكروفون مطلوبة للصوت");
     }
 
     private void recordLoop(int bufferSize) {
