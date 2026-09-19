@@ -105,8 +105,8 @@ window.sanadNativeVoiceError=function(msg){
 document.addEventListener("click",function(e){
   var t=e.target&&e.target.closest?e.target.closest("#micb"):null;
   if(!t)return;
-  if(voiceStarting){
-    e.preventDefault();e.stopImmediatePropagation();
-  }
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  window.startVoice();
 },true);
 })();
