@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-window.__SANAD_VOICE_ENGINE__="3.1-mic-race-fix";
+window.__SANAD_VOICE_ENGINE__="3.2-voice-hardening";
 
 var phase="idle";
 var lastPartial="";
@@ -116,12 +116,32 @@ window.sanadNativeVoiceState=function(state,detail){
     return;
   }
 
+  if(state==="checking_device"){
+    phase="starting";
+    voiceNativeActive=false;
+    setMicBusy(true);
+    say("جاري التحقق من العربية Offline…","Checking offline language support…");
+    return;
+  }
+
   if(state==="starting_device"||state==="starting"||state==="fallback_whisper"){
     phase="starting";
     voiceNativeActive=false;
     setMicBusy(true);
     say(state==="fallback_whisper"?"جاري تشغيل Whisper Offline…":"جاري فتح الميكروفون…",
         state==="fallback_whisper"?"Starting offline Whisper…":"Opening microphone…");
+    return;
+  }
+
+  if(state==="audio_recovered"){
+    say("تم إعادة فتح الميكروفون — اتكلم","Microphone recovered — speak now");
+    return;
+  }
+
+  if(state==="audio_error"){
+    phase="idle";
+    markIdle();
+    say("فشل قراءة الميكروفون — افتح التشخيص","Microphone read failed — open diagnostics");
     return;
   }
 
@@ -207,7 +227,31 @@ window.sanadNativeVoiceError=function(msg){
   if(msg&&typeof toast==="function")toast(String(msg),"err");
 };
 
+window.sanadVoiceDiagnostics=function(){
+  var A=bridge(),raw="{}";
+  try{ if(A&&typeof A.runtimeDiagnostics==="function") raw=String(A.runtimeDiagnostics()||"{}"); }catch(e){}
+  var d={}; try{d=JSON.parse(raw);}catch(e){}
+  var text=(LANG==="ar"?"تشخيص الصوت: ":"Voice diagnostics: ")+
+    "permission="+String(d.audioPermission)+
+    " | status="+String(d.voiceStatus||"?")+
+    " | "+String(d.voiceDetails||"");
+  if(typeof toast==="function")toast(text,(d.audioPermission===false)?"err":null);
+  return text;
+};
+
 // Selecting Voice should act like opening voice in a chat app: open and start immediately.
+var diagObserver=new MutationObserver(function(){
+  var mic=byId("micb");
+  if(!mic||byId("v32diag"))return;
+  var b=document.createElement("button");
+  b.id="v32diag"; b.type="button"; b.className="chip sm";
+  b.style.marginTop="8px";
+  b.textContent=(LANG==="ar"?"تشخيص الميكروفون":"Microphone diagnostics");
+  b.onclick=function(ev){ev.preventDefault();ev.stopPropagation();window.sanadVoiceDiagnostics();};
+  if(mic.parentNode)mic.parentNode.appendChild(b);
+});
+try{diagObserver.observe(document.documentElement,{subtree:true,childList:true});}catch(e){}
+
 document.addEventListener("click",function(e){
   var x=e.target&&e.target.closest?e.target.closest("[data-act]"):null;
   if(!x)return;
