@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.Locale;
 
 /**
- * V3.0 offline-first voice engine.
+ * V3.1 offline-first voice engine.
  * Prefers Android's true on-device recognizer for live partial text.
  * Falls back to bundled whisper.cpp, which also works with no network.
  */
@@ -61,8 +61,6 @@ public final class OfflineVoiceEngine {
                 if(!usingDevice){ active=false; listener.onError(message); }
             }
         });
-        // Warm the bundled fallback silently. It never marks the UI as recording.
-        this.whisper.warmup();
     }
 
     public boolean isRecording(){ return active || whisper.isRecording(); }
