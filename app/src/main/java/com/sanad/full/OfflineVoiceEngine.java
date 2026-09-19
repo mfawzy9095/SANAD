@@ -67,6 +67,14 @@ public final class OfflineVoiceEngine {
 
     public boolean isRecording(){ return active || whisper.isRecording(); }
 
+    public String diagnostics(){
+        return "engine="+(usingDevice?"android_on_device":"whisper")+
+                ";active="+active+
+                ";locale="+locale+
+                ";onDeviceAvailable="+onDeviceAvailable()+
+                ";whisper{"+whisper.diagnostics()+"}";
+    }
+
     public String status(){
         if(activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) return "permission_required";
         if(active) return usingDevice?"listening_device":"recording_whisper";
