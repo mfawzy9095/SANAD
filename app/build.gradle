@@ -8,8 +8,8 @@ android {
         applicationId 'com.sanad.full'
         minSdk 26
         targetSdk 35
-        versionCode 27
-        versionName '2.7-device-fix'
+        versionCode 28
+        versionName '2.8-device-runtime-fix'
         ndk { abiFilters 'arm64-v8a' }
         externalNativeBuild {
             cmake { cppFlags '-O3' }
