@@ -8,13 +8,15 @@ import android.os.Build;
 import android.os.Bundle;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
+import android.speech.RecognitionSupport;
+import android.speech.RecognitionSupportCallback;
 import android.speech.SpeechRecognizer;
 
 import java.util.ArrayList;
 import java.util.Locale;
 
 /**
- * V3.1 offline-first voice engine.
+ * V3.2 offline-first voice engine.
  * Prefers Android's true on-device recognizer for live partial text.
  * Falls back to bundled whisper.cpp, which also works with no network.
  */
@@ -97,7 +99,11 @@ public final class OfflineVoiceEngine {
         userStopped=false;
         if(onDeviceAvailable()){
             try{
-                startOnDevice();
+                if(Build.VERSION.SDK_INT>=33) {
+                    checkAndStartOnDevice();
+                } else {
+                    startOnDevice();
+                }
                 return;
             }catch(Throwable ignored){
                 destroyDeviceRecognizer();
@@ -110,13 +116,74 @@ public final class OfflineVoiceEngine {
         return Build.VERSION.SDK_INT>=31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(activity);
     }
 
+    private Intent buildRecognizerIntent(){
+        Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,locale);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,locale);
+        i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);
+        i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,3);
+        i.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,true);
+        i.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE,activity.getPackageName());
+        return i;
+    }
+
+    private void checkAndStartOnDevice(){
+        if(Build.VERSION.SDK_INT<33){ startOnDevice(); return; }
+        destroyDeviceRecognizer();
+        usingDevice=true;
+        active=true;
+        userStopped=false;
+        deviceRecognizer=SpeechRecognizer.createOnDeviceSpeechRecognizer(activity);
+        final SpeechRecognizer recognizer=deviceRecognizer;
+        listener.onState("checking_device",locale);
+        Intent intent=buildRecognizerIntent();
+        recognizer.checkRecognitionSupport(intent,activity.getMainExecutor(),new RecognitionSupportCallback(){
+            @Override public void onSupportResult(RecognitionSupport support){
+                if(userStopped || recognizer!=deviceRecognizer){
+                    destroyDeviceRecognizer(); active=false; usingDevice=false; return;
+                }
+                if(isLocaleInstalled(support.getInstalledOnDeviceLanguages(),locale)){
+                    attachListenerAndStart(recognizer,intent);
+                }else{
+                    destroyDeviceRecognizer(); active=false; usingDevice=false;
+                    startWhisperFallback("language_not_installed");
+                }
+            }
+            @Override public void onError(int error){
+                if(userStopped || recognizer!=deviceRecognizer){
+                    destroyDeviceRecognizer(); active=false; usingDevice=false; return;
+                }
+                destroyDeviceRecognizer(); active=false; usingDevice=false;
+                startWhisperFallback("support_check_"+error);
+            }
+        });
+    }
+
+    private boolean isLocaleInstalled(java.util.List<String> installed,String wanted){
+        if(installed==null||installed.isEmpty()) return false;
+        String w=wanted==null?"":wanted.toLowerCase(Locale.ROOT).replace('_','-');
+        String base=w.contains("-")?w.substring(0,w.indexOf('-')):w;
+        for(String s:installed){
+            if(s==null) continue;
+            String x=s.toLowerCase(Locale.ROOT).replace('_','-');
+            if(x.equals(w)||x.equals(base)||x.startsWith(base+"-")) return true;
+        }
+        return false;
+    }
+
     private void startOnDevice(){
         if(Build.VERSION.SDK_INT<31) throw new IllegalStateException("API");
         destroyDeviceRecognizer();
         usingDevice=true;
         active=true;
+        userStopped=false;
         deviceRecognizer=SpeechRecognizer.createOnDeviceSpeechRecognizer(activity);
-        deviceRecognizer.setRecognitionListener(new RecognitionListener(){
+        attachListenerAndStart(deviceRecognizer,buildRecognizerIntent());
+    }
+
+    private void attachListenerAndStart(final SpeechRecognizer recognizer,final Intent i){
+        recognizer.setRecognitionListener(new RecognitionListener(){
             @Override public void onReadyForSpeech(Bundle params){ listener.onState("listening_device",locale); }
             @Override public void onBeginningOfSpeech(){ listener.onState("speech",locale); }
             @Override public void onRmsChanged(float rmsdB){ listener.onLevel(Math.max(0f,Math.min(12f,(rmsdB+2f)/1.5f))); }
@@ -139,7 +206,8 @@ public final class OfflineVoiceEngine {
                 destroyDeviceRecognizer();
                 active=false;
                 usingDevice=false;
-                listener.onDone(text);
+                if(text.isEmpty()) listener.onError("التعرف المحلي لم يرجع نص. جرّب Whisper Offline.");
+                else listener.onDone(text);
             }
             @Override public void onPartialResults(Bundle partialResults){
                 String text=bestResult(partialResults);
@@ -147,16 +215,8 @@ public final class OfflineVoiceEngine {
             }
             @Override public void onEvent(int eventType,Bundle params){}
         });
-        Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,locale);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,locale);
-        i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);
-        i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,3);
-        i.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,true);
-        i.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE,activity.getPackageName());
         listener.onState("starting_device",locale);
-        deviceRecognizer.startListening(i);
+        recognizer.startListening(i);
     }
 
     private String bestResult(Bundle b){
