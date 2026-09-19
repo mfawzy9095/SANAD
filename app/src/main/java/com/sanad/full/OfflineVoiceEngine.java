@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.RecognitionSupport;
@@ -13,12 +15,18 @@ import android.speech.RecognitionSupportCallback;
 import android.speech.SpeechRecognizer;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
- * V3.2 offline-first voice engine.
- * Prefers Android's true on-device recognizer for live partial text.
- * Falls back to bundled whisper.cpp, which also works with no network.
+ * V3.3 offline-first voice engine.
+ *
+ * Path A: Android on-device SpeechRecognizer only when the requested language
+ * is confirmed as installed locally.
+ * Path B: bundled whisper.cpp fallback with no INTERNET permission.
+ *
+ * Every recognizer callback is session-scoped so stale callbacks cannot reopen
+ * or replace a newer recording session.
  */
 public final class OfflineVoiceEngine {
     public interface Listener {
@@ -32,6 +40,8 @@ public final class OfflineVoiceEngine {
     private final Activity activity;
     private final Listener listener;
     private final WhisperVoiceEngine whisper;
+    private final Handler main=new Handler(Looper.getMainLooper());
+
     private SpeechRecognizer deviceRecognizer;
     private boolean active=false;
     private boolean usingDevice=false;
@@ -40,28 +50,37 @@ public final class OfflineVoiceEngine {
     private boolean pendingPrepare=false;
     private boolean lastOnDeviceAvailable=false;
     private String locale="ar-EG";
+    private String lastDevicePartial="";
 
-    public OfflineVoiceEngine(Activity activity, Listener listener){
+    private int sessionSerial=0;
+    private int currentSession=0;
+    private int whisperSession=0;
+
+    public OfflineVoiceEngine(Activity activity,Listener listener){
         this.activity=activity;
         this.listener=listener;
         this.whisper=new WhisperVoiceEngine(activity,new WhisperVoiceEngine.Listener(){
             @Override public void onState(String state,String detail){
-                if(usingDevice) return;
+                if(usingDevice || whisperSession!=currentSession) return;
                 listener.onState(state,detail);
             }
             @Override public void onLevel(float level){
-                if(!usingDevice) listener.onLevel(level);
+                if(!usingDevice && whisperSession==currentSession) listener.onLevel(level);
             }
             @Override public void onResult(String text){
-                if(!usingDevice && text!=null && !text.trim().isEmpty()) listener.onPartial(text.trim());
+                if(!usingDevice && whisperSession==currentSession && text!=null && !text.trim().isEmpty())
+                    listener.onPartial(text.trim());
             }
             @Override public void onDone(String text){
-                if(usingDevice) return;
+                if(usingDevice || whisperSession!=currentSession) return;
                 active=false;
                 listener.onDone(text==null?"":text.trim());
             }
             @Override public void onError(String message){
-                if(!usingDevice){ active=false; listener.onError(message); }
+                if(!usingDevice && whisperSession==currentSession){
+                    active=false;
+                    listener.onError(message);
+                }
             }
         });
     }
@@ -72,12 +91,14 @@ public final class OfflineVoiceEngine {
         return "engine="+(usingDevice?"android_on_device":"whisper")+
                 ";active="+active+
                 ";locale="+locale+
+                ";session="+currentSession+
                 ";onDeviceAvailable="+lastOnDeviceAvailable+
                 ";whisper{"+whisper.diagnostics()+"}";
     }
 
     public String status(){
-        if(activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) return "permission_required";
+        if(activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)
+            return "permission_required";
         if(active) return usingDevice?"listening_device":"recording_whisper";
         if(lastOnDeviceAvailable) return "device_ready";
         return whisper.status();
@@ -98,6 +119,11 @@ public final class OfflineVoiceEngine {
     public void start(String requestedLocale){
         if(active || whisper.isRecording()) return;
         locale=normalizeLocale(requestedLocale);
+        currentSession=++sessionSerial;
+        userStopped=false;
+        lastDevicePartial="";
+        whisperSession=0;
+
         if(activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
             pendingStart=true;
             pendingPrepare=false;
@@ -106,32 +132,33 @@ public final class OfflineVoiceEngine {
             return;
         }
         pendingStart=false;
-        userStopped=false;
+        startInternal(currentSession);
+    }
+
+    private void startInternal(final int session){
+        if(session!=currentSession || userStopped) return;
         lastOnDeviceAvailable=onDeviceAvailable();
         if(lastOnDeviceAvailable){
             try{
-                if(Build.VERSION.SDK_INT>=33) {
-                    checkAndStartOnDevice();
-                } else {
-                    startOnDevice();
-                }
+                if(Build.VERSION.SDK_INT>=33) checkAndStartOnDevice(session);
+                else startOnDevice(session,locale);
                 return;
             }catch(Throwable ignored){
-                destroyDeviceRecognizer();
+                destroyDeviceRecognizer(true);
             }
         }
-        startWhisperFallback("on_device_unavailable");
+        startWhisperFallback(session,"on_device_unavailable",0L);
     }
 
     private boolean onDeviceAvailable(){
         return Build.VERSION.SDK_INT>=31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(activity);
     }
 
-    private Intent buildRecognizerIntent(){
+    private Intent buildRecognizerIntent(String requestedLocale){
         Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,locale);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,locale);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,requestedLocale);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,requestedLocale);
         i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);
         i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,3);
         i.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,true);
@@ -139,95 +166,129 @@ public final class OfflineVoiceEngine {
         return i;
     }
 
-    private void checkAndStartOnDevice(){
-        if(Build.VERSION.SDK_INT<33){ startOnDevice(); return; }
-        destroyDeviceRecognizer();
+    private void checkAndStartOnDevice(final int session){
+        if(Build.VERSION.SDK_INT<33){ startOnDevice(session,locale); return; }
+        destroyDeviceRecognizer(true);
         usingDevice=true;
         active=true;
         userStopped=false;
+
         deviceRecognizer=SpeechRecognizer.createOnDeviceSpeechRecognizer(activity);
         final SpeechRecognizer recognizer=deviceRecognizer;
+        final Intent supportIntent=buildRecognizerIntent(locale);
         listener.onState("checking_device",locale);
-        Intent intent=buildRecognizerIntent();
-        recognizer.checkRecognitionSupport(intent,activity.getMainExecutor(),new RecognitionSupportCallback(){
+
+        recognizer.checkRecognitionSupport(supportIntent,activity.getMainExecutor(),new RecognitionSupportCallback(){
             @Override public void onSupportResult(RecognitionSupport support){
-                if(userStopped || recognizer!=deviceRecognizer){
-                    destroyDeviceRecognizer(); active=false; usingDevice=false; return;
-                }
-                if(isLocaleInstalled(support.getInstalledOnDeviceLanguages(),locale)){
-                    attachListenerAndStart(recognizer,intent);
+                if(!isCurrentDeviceSession(session,recognizer)) return;
+                String installed=chooseInstalledLocale(support.getInstalledOnDeviceLanguages(),locale);
+                if(installed!=null){
+                    attachListenerAndStart(session,recognizer,buildRecognizerIntent(installed),installed);
                 }else{
-                    destroyDeviceRecognizer(); active=false; usingDevice=false;
-                    startWhisperFallback("language_not_installed");
+                    destroyDeviceRecognizer(false);
+                    active=false; usingDevice=false;
+                    startWhisperFallback(session,"language_not_installed",180L);
                 }
             }
             @Override public void onError(int error){
-                if(userStopped || recognizer!=deviceRecognizer){
-                    destroyDeviceRecognizer(); active=false; usingDevice=false; return;
-                }
-                destroyDeviceRecognizer(); active=false; usingDevice=false;
-                startWhisperFallback("support_check_"+error);
+                if(!isCurrentDeviceSession(session,recognizer)) return;
+                destroyDeviceRecognizer(false);
+                active=false; usingDevice=false;
+                startWhisperFallback(session,"support_check_"+error,180L);
             }
         });
     }
 
-    private boolean isLocaleInstalled(java.util.List<String> installed,String wanted){
-        if(installed==null||installed.isEmpty()) return false;
-        String w=wanted==null?"":wanted.toLowerCase(Locale.ROOT).replace('_','-');
+    private String chooseInstalledLocale(List<String> installed,String wanted){
+        if(installed==null||installed.isEmpty()) return null;
+        String w=normalizeTag(wanted);
+        for(String s:installed){
+            if(s!=null && normalizeTag(s).equals(w)) return s;
+        }
         String base=w.contains("-")?w.substring(0,w.indexOf('-')):w;
         for(String s:installed){
             if(s==null) continue;
-            String x=s.toLowerCase(Locale.ROOT).replace('_','-');
-            if(x.equals(w)||x.equals(base)||x.startsWith(base+"-")) return true;
+            String x=normalizeTag(s);
+            if(x.equals(base)||x.startsWith(base+"-")) return s;
         }
-        return false;
+        return null;
     }
 
-    private void startOnDevice(){
+    private String normalizeTag(String s){
+        return (s==null?"":s.trim().toLowerCase(Locale.ROOT).replace('_','-'));
+    }
+
+    private void startOnDevice(final int session,String deviceLocale){
         if(Build.VERSION.SDK_INT<31) throw new IllegalStateException("API");
-        destroyDeviceRecognizer();
+        destroyDeviceRecognizer(true);
         usingDevice=true;
         active=true;
         userStopped=false;
         deviceRecognizer=SpeechRecognizer.createOnDeviceSpeechRecognizer(activity);
-        attachListenerAndStart(deviceRecognizer,buildRecognizerIntent());
+        attachListenerAndStart(session,deviceRecognizer,buildRecognizerIntent(deviceLocale),deviceLocale);
     }
 
-    private void attachListenerAndStart(final SpeechRecognizer recognizer,final Intent i){
+    private void attachListenerAndStart(final int session,final SpeechRecognizer recognizer,
+                                        final Intent intent,final String deviceLocale){
         recognizer.setRecognitionListener(new RecognitionListener(){
-            @Override public void onReadyForSpeech(Bundle params){ listener.onState("listening_device",locale); }
-            @Override public void onBeginningOfSpeech(){ listener.onState("speech",locale); }
-            @Override public void onRmsChanged(float rmsdB){ listener.onLevel(Math.max(0f,Math.min(12f,(rmsdB+2f)/1.5f))); }
+            @Override public void onReadyForSpeech(Bundle params){
+                if(isCurrentDeviceSession(session,recognizer)) listener.onState("listening_device",deviceLocale);
+            }
+            @Override public void onBeginningOfSpeech(){
+                if(isCurrentDeviceSession(session,recognizer)) listener.onState("speech",deviceLocale);
+            }
+            @Override public void onRmsChanged(float rmsdB){
+                if(isCurrentDeviceSession(session,recognizer))
+                    listener.onLevel(Math.max(0f,Math.min(12f,(rmsdB+2f)/1.5f)));
+            }
             @Override public void onBufferReceived(byte[] buffer){}
-            @Override public void onEndOfSpeech(){ listener.onState("processing_device",locale); }
+            @Override public void onEndOfSpeech(){
+                if(isCurrentDeviceSession(session,recognizer)) listener.onState("processing_device",deviceLocale);
+            }
             @Override public void onError(int error){
+                if(!isCurrentDeviceSession(session,recognizer)) return;
                 boolean stopped=userStopped;
-                destroyDeviceRecognizer();
+                String partial=lastDevicePartial;
+                destroyDeviceRecognizer(false);
                 active=false;
                 usingDevice=false;
                 if(stopped){
-                    listener.onDone("");
+                    listener.onDone(partial==null?"":partial);
                     return;
                 }
-                // Language pack/service errors fall back to bundled Whisper automatically.
-                startWhisperFallback("device_error_"+error);
+                // Release the recognition service before opening AudioRecord for Whisper.
+                startWhisperFallback(session,"device_error_"+error,220L);
             }
             @Override public void onResults(Bundle results){
+                if(!isCurrentDeviceSession(session,recognizer)) return;
                 String text=bestResult(results);
-                destroyDeviceRecognizer();
+                if(text.isEmpty()) text=lastDevicePartial;
+                destroyDeviceRecognizer(false);
                 active=false;
                 usingDevice=false;
-                if(text.isEmpty()) listener.onError("التعرف المحلي لم يرجع نص. جرّب Whisper Offline.");
-                else listener.onDone(text);
+                if(text==null||text.trim().isEmpty())
+                    listener.onError("التعرف المحلي لم يرجع نص واضح");
+                else
+                    listener.onDone(text.trim());
             }
             @Override public void onPartialResults(Bundle partialResults){
+                if(!isCurrentDeviceSession(session,recognizer)) return;
                 String text=bestResult(partialResults);
-                if(!text.isEmpty()) listener.onPartial(text);
+                if(!text.isEmpty()){
+                    lastDevicePartial=text;
+                    listener.onPartial(text);
+                }
             }
             @Override public void onEvent(int eventType,Bundle params){}
         });
-        listener.onState("starting_device",locale);
-        recognizer.startListening(i);
+
+        if(!isCurrentDeviceSession(session,recognizer)) return;
+        listener.onState("starting_device",deviceLocale);
+        recognizer.startListening(intent);
+    }
+
+    private boolean isCurrentDeviceSession(int session,SpeechRecognizer recognizer){
+        return session==currentSession && !userStopped && recognizer!=null && recognizer==deviceRecognizer;
     }
 
     private String bestResult(Bundle b){
@@ -238,33 +299,60 @@ public final class OfflineVoiceEngine {
         return "";
     }
 
-    private void startWhisperFallback(String reason){
-        destroyDeviceRecognizer();
+    private void startWhisperFallback(final int session,final String reason,long delayMs){
+        destroyDeviceRecognizer(false);
         usingDevice=false;
         active=true;
         listener.onState("fallback_whisper",reason);
-        whisper.start(locale);
+
+        Runnable start=()->{
+            if(session!=currentSession || userStopped){
+                if(session==currentSession) active=false;
+                return;
+            }
+            whisperSession=session;
+            whisper.start(locale);
+        };
+        if(delayMs>0L) main.postDelayed(start,delayMs); else start.run();
     }
 
     public void stop(){
         pendingStart=false;
         pendingPrepare=false;
         userStopped=true;
+
         if(usingDevice && deviceRecognizer!=null){
-            try{ deviceRecognizer.stopListening(); return; }
-            catch(Throwable ignored){}
-        }
-        if(whisper.isRecording()){
-            whisper.stop();
+            final int session=currentSession;
+            final SpeechRecognizer recognizer=deviceRecognizer;
+            try{ recognizer.stopListening(); }
+            catch(Throwable ignored){
+                destroyDeviceRecognizer(true);
+                active=false; usingDevice=false;
+                listener.onDone(lastDevicePartial==null?"":lastDevicePartial);
+                return;
+            }
+            // Some OEM recognizers never return onResults after stopListening().
+            main.postDelayed(()->{
+                if(session==currentSession && recognizer==deviceRecognizer && active){
+                    String partial=lastDevicePartial;
+                    destroyDeviceRecognizer(true);
+                    active=false; usingDevice=false;
+                    listener.onDone(partial==null?"":partial);
+                }
+            },1200L);
             return;
         }
-        active=false;
+
+        // Always call stop(): it also cancels a pending Whisper start while its model is loading.
+        whisper.stop();
+        if(!whisper.isRecording()) active=false;
     }
 
     public void onPermissionGranted(){
         if(pendingStart){
             pendingStart=false;
-            start(locale);
+            userStopped=false;
+            startInternal(currentSession);
         }else if(pendingPrepare){
             pendingPrepare=false;
             prepare();
@@ -274,22 +362,31 @@ public final class OfflineVoiceEngine {
     public void onPermissionDenied(boolean permanentlyDenied){
         pendingStart=false;
         pendingPrepare=false;
+        userStopped=true;
         active=false;
+        whisper.stop();
         whisper.onPermissionDenied(permanentlyDenied);
     }
 
     public void release(){
-        active=false;
+        pendingStart=false;
+        pendingPrepare=false;
         userStopped=true;
-        destroyDeviceRecognizer();
+        currentSession=++sessionSerial;
+        active=false;
+        usingDevice=false;
+        destroyDeviceRecognizer(true);
+        whisper.stop();
         whisper.release();
     }
 
-    private void destroyDeviceRecognizer(){
+    private void destroyDeviceRecognizer(boolean cancel){
         SpeechRecognizer s=deviceRecognizer;
         deviceRecognizer=null;
         if(s!=null){
-            try{s.cancel();}catch(Throwable ignored){}
+            if(cancel){
+                try{s.cancel();}catch(Throwable ignored){}
+            }
             try{s.destroy();}catch(Throwable ignored){}
         }
     }
