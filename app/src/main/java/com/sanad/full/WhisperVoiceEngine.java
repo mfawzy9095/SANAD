@@ -43,6 +43,11 @@ public final class WhisperVoiceEngine {
     private volatile boolean pendingStart=false;
     private volatile boolean pendingPrepare=false;
     private volatile String language="ar";
+    private volatile int lastAudioSource=0;
+    private volatile int lastReadError=0;
+    private volatile long lastSamples=0L;
+    private volatile double lastRms=0.0;
+    private volatile int lastPeak=0;
 
     public WhisperVoiceEngine(Activity activity,Listener listener){
         this.activity=activity;
@@ -50,6 +55,15 @@ public final class WhisperVoiceEngine {
     }
 
     public boolean isRecording(){return recording.get();}
+
+    public String diagnostics(){
+        return "source="+lastAudioSource+
+                ";readError="+lastReadError+
+                ";samples="+lastSamples+
+                ";rms="+String.format(Locale.US,"%.1f",lastRms)+
+                ";peak="+lastPeak+
+                ";model="+(whisperCtx!=0L?"ready":(modelLoading?"loading":"not_loaded"));
+    }
 
     public String status(){
         if(recording.get())return "recording";
@@ -106,6 +120,7 @@ public final class WhisperVoiceEngine {
         }
         int rawMin=AudioRecord.getMinBufferSize(SAMPLE_RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
         final int min=Math.max(rawMin>0?rawMin:4096,4096);
+        lastReadError=0; lastSamples=0L; lastRms=0.0; lastPeak=0; lastAudioSource=0;
         listener.onState("starting",language);
         try{
             recorder=openRecorder(MediaRecorder.AudioSource.VOICE_RECOGNITION,min);
@@ -137,19 +152,45 @@ public final class WhisperVoiceEngine {
         ByteArrayOutputStream pcm=new ByteArrayOutputStream(SAMPLE_RATE*2*20);
         short[] buf=new short[Math.max(1024,bufferSize/2)];
         long started=SystemClock.elapsedRealtime(),lastPartial=0L,silenceSince=0L;
-        boolean heardSpeech=false,lastSpeech=false;
+        boolean heardSpeech=false,lastSpeech=false,recovered=false,fatalAudioError=false;
         try{
             while(recording.get()){
-                int n=recorder.read(buf,0,buf.length);
-                if(n<0)break;
+                AudioRecord current=recorder;
+                if(current==null){ lastReadError=AudioRecord.ERROR_INVALID_OPERATION; fatalAudioError=true; break; }
+                int n=current.read(buf,0,buf.length,AudioRecord.READ_BLOCKING);
+                if(n<0){
+                    lastReadError=n;
+                    if(n==AudioRecord.ERROR_DEAD_OBJECT && !recovered){
+                        int fallbackSource=(lastAudioSource==MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                                ?MediaRecorder.AudioSource.MIC:MediaRecorder.AudioSource.VOICE_RECOGNITION;
+                        safeRelease();
+                        recorder=openRecorder(fallbackSource,bufferSize);
+                        if(recorder!=null){
+                            try{
+                                recorder.startRecording();
+                                if(recorder.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING){
+                                    recovered=true;
+                                    lastReadError=0;
+                                    listener.onState("audio_recovered",String.valueOf(fallbackSource));
+                                    continue;
+                                }
+                            }catch(Throwable ignored){}
+                        }
+                    }
+                    fatalAudioError=true;
+                    break;
+                }
                 if(n==0)continue;
                 double sum=0;
+                int peak=0;
                 for(int i=0;i<n;i++){
                     short s=buf[i];
+                    int abs=Math.abs((int)s); if(abs>peak)peak=abs;
                     sum+=(double)s*(double)s;
                     pcm.write(s&0xff);pcm.write((s>>8)&0xff);
                 }
                 double rms=Math.sqrt(sum/Math.max(1,n));
+                lastSamples+=n; lastRms=rms; if(peak>lastPeak)lastPeak=peak;
                 boolean speech=rms>=220.0;
                 float level=(float)Math.min(12.0,Math.max(0.0,20.0*Math.log10((rms+1.0)/160.0)+5.0));
                 listener.onLevel(level);
@@ -166,9 +207,25 @@ public final class WhisperVoiceEngine {
                 }
                 if(now-started>=MAX_SECONDS*1000L){recording.set(false);break;}
             }
-        }catch(Throwable ignored){}finally{safeRelease();}
+        }catch(Throwable t){
+            fatalAudioError=true;
+            if(lastReadError==0)lastReadError=AudioRecord.ERROR;
+        }finally{safeRelease();}
+
+        if(fatalAudioError){
+            recording.set(false);
+            listener.onState("audio_error",String.valueOf(lastReadError));
+            listener.onError("فشل قراءة الميكروفون (AudioRecord "+lastReadError+")");
+            listener.onState("stopped",language);
+            return;
+        }
 
         final byte[] bytes=pcm.toByteArray();
+        if(lastSamples==0L){
+            listener.onError("الميكروفون اتفتح لكن لم يرجع أي عينات صوت");
+            listener.onState("stopped",language);
+            return;
+        }
         if(!heardSpeech||bytes.length<SAMPLE_RATE){
             listener.onDone("");listener.onState("stopped",language);return;
         }
@@ -221,7 +278,7 @@ public final class WhisperVoiceEngine {
     private AudioRecord openRecorder(int source,int min){
         try{
             AudioRecord r=new AudioRecord(source,SAMPLE_RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,min*2);
-            if(r.getState()==AudioRecord.STATE_INITIALIZED)return r;
+            if(r.getState()==AudioRecord.STATE_INITIALIZED){ lastAudioSource=source; return r; }
             try{r.release();}catch(Throwable ignored){}
         }catch(Throwable ignored){}
         return null;
