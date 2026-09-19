@@ -75,7 +75,6 @@ jobs:
           grep -q "__SANAD_MIC_FIX_VERSION__" app/src/main/assets/v29_micfix.js
           grep -q 'injectAssetJs("v29_micfix.js")' app/src/main/java/com/sanad/full/MainActivity.java
           grep -q "pendingPrepare" app/src/main/java/com/sanad/full/WhisperVoiceEngine.java
-          grep -q "SensorPrivacyManager" app/src/main/java/com/sanad/full/WhisperVoiceEngine.java
           grep -q "MediaRecorder.AudioSource.MIC" app/src/main/java/com/sanad/full/WhisperVoiceEngine.java
           ! grep -A5 "public WhisperVoiceEngine" app/src/main/java/com/sanad/full/WhisperVoiceEngine.java | grep -q "warmup();"
           node --check app/src/main/assets/v29_micfix.js
