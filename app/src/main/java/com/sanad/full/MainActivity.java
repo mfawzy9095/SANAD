@@ -114,6 +114,7 @@ public class MainActivity extends Activity {
                 CairoWebFontLoader.load(MainActivity.this,web);
                 injectV27Fixes();
                 injectAssetJs("v28_runtime.js");
+                injectAssetJs("v29_micfix.js");
                 drainPending();
             }
         });
@@ -150,7 +151,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public String runtimeDiagnostics(){
             try{
                 JSONObject o=new JSONObject();
-                o.put("version","2.8-device-runtime-fix");
+                o.put("version","2.9-mic-fix");
                 o.put("audioPermission",checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED);
                 o.put("smsPermission",checkSelfPermission(Manifest.permission.READ_SMS)==PackageManager.PERMISSION_GRANTED);
                 o.put("voiceStatus",whisperVoice==null?"unavailable":whisperVoice.status());
