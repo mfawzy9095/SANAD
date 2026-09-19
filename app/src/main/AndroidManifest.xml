@@ -7,7 +7,7 @@
         <package android:name="com.google.android.gms"/>
         <provider android:authorities="com.google.android.gms.fonts"/>
     </queries>
-    <application android:theme="@style/AppTheme" android:label="SANAD" android:allowBackup="false" android:supportsRtl="true" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round">
+    <application android:enableOnBackInvokedCallback="true" android:theme="@style/AppTheme" android:label="SANAD" android:allowBackup="false" android:supportsRtl="true" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round">
         <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
