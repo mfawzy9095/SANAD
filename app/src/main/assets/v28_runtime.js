@@ -70,12 +70,7 @@ window.sanadV28Diagnostics=function(){
   return d;
 };
 
-document.addEventListener("click",function(e){
-  var el=e.target&&e.target.closest?e.target.closest("[data-act]"):null;
-  if(!el)return;
-  var act=el.getAttribute("data-act"),mode=el.getAttribute("data-m");
-  if((act==="mode"||act==="addmode")&&mode==="voice")setTimeout(prepareVoice,120);
-},true);
+/* V3.0 owns the voice start flow; no separate prepare click. */
 
 var oldState=window.sanadNativeVoiceState;
 if(typeof oldState==="function"&&!window.__sanadV28VoiceState){
