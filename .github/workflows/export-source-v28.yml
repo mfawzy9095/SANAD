@@ -1,0 +1,31 @@
+name: Export SANAD V2.8 Exact Source
+
+on:
+  push:
+    branches: [source-v28]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: source-v28
+      - name: Package exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .git
+          zip -qr SANAD-V2.8-EXACT-SOURCE.zip .             -x 'SANAD-V2.8-EXACT-SOURCE.zip'                'app/build/*' '.gradle/*'                'app/src/main/assets/models/*'                'app/src/main/cpp/whisper.cpp/*'
+          sha256sum SANAD-V2.8-EXACT-SOURCE.zip > source-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-V2.8-EXACT-SOURCE
+          path: |
+            SANAD-V2.8-EXACT-SOURCE.zip
+            source-sha256.txt
+          retention-days: 7
