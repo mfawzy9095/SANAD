@@ -1,9 +1,12 @@
-# SANAD V2.4 local test
+# SANAD V3.6 — Review Entry Point
 
-- First bank SMS sync scans all financial SMS once; later refreshes pull only new/overlap messages.
-- Manual Refresh button + 60s auto refresh while Bank tab is open.
-- Bank message date/time parsed from message text first, SMS received time second.
-- Local calendar grouping avoids UTC day shifts.
-- More merchant/category keywords and raw SMS/date preview in bank review.
-- Continuous on-device voice session until Finish, with RMS voice activity UI and recognizer restart/backoff.
-- Android 13+ probes installed on-device languages before declaring Arabic unsupported.
+Current release: **3.6-critical-stabilization** (`versionCode 36`).
+
+Start with:
+1. `HANDOFF_V36.md`
+2. `qa/test-v36-critical.js`
+3. `.github/workflows/build-v36.yml`
+
+V3.6 focuses only on critical stabilization: optimized native Whisper builds, AudioRecord stop ownership, encrypted-state fail-closed recovery, three encrypted state snapshots, removal of Web Speech/fake voice fallbacks, a voice finalization watchdog, and unified release identity.
+
+Historical V2.x/V3.x patch files and workflows remain in the repository for traceability and are not the active V3.6 runtime.

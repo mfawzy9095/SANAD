@@ -1,225 +1,31 @@
 {
-  "version": "2.2-local-release-candidate",
-  "uploaded_to_github": false,
-  "static_checks": {
-    "ok": true,
-    "checks": {
-      "manifest_valid_xml": true,
-      "no_internet_permission": true,
-      "record_audio_permission": true,
-      "read_sms_permission": true,
-      "notification_listener_service": true,
-      "encrypted_sqlite_state": true,
-      "aes_256_gcm_keystore": true,
-      "legacy_localstorage_migration": true,
-      "merchant_learning": true,
-      "pattern_learning": true,
-      "offline_voice": true,
-      "voice_five_candidates": true,
-      "sms_original_date": true,
-      "sms_exact_row_identity": true,
-      "notification_exact_identity": true,
-      "security_filter_word_boundaries": true,
-      "package_allowlist": true,
-      "bank_key_preserved_on_edit": true,
-      "pending_bank_review_persisted": true,
-      "backup_export_restore": true,
-      "backup_size_limit": true,
-      "notification_later_reprompts": true,
-      "notification_access_exact_component_parse": true,
-      "cairo_css_family": true,
-      "cairo_google_provider": true,
-      "cairo_four_arg_fontrequest": true,
-      "cairo_current_signers": true,
-      "safe_to_spend": true,
-      "planning_goals_recurring_debts": true,
-      "calendar_month_goal_reserve": true,
-      "build_marker_v22": true
-    }
+  "version": "3.6-critical-stabilization",
+  "versionCode": 36,
+  "scope": "SANAD V3.6 Critical Stabilization",
+  "generatedAt": "2026-09-21",
+  "localEnvironment": {
+    "androidSdkAvailable": false,
+    "gradleAvailable": false,
+    "apkBuiltLocally": false,
+    "physicalDeviceTested": false
   },
-  "tests": {
-    "javascript_core": {
-      "ok": true,
-      "total": 25,
-      "passed": 25,
-      "failed": 0,
-      "results": [
-        {
-          "name": "Arabic parser amount/category",
-          "pass": true
-        },
-        {
-          "name": "Personal pattern learning",
-          "pass": true
-        },
-        {
-          "name": "OTP blocked in JS parser",
-          "pass": true
-        },
-        {
-          "name": "Arabic transaction reference word is not blocked",
-          "pass": true
-        },
-        {
-          "name": "Common card used-at-for format picks correct amount not card tail",
-          "pass": true
-        },
-        {
-          "name": "Bulk splitter handles no blank line between messages",
-          "pass": true
-        },
-        {
-          "name": "Same native source key dedupes",
-          "pass": true
-        },
-        {
-          "name": "Identical raw later with different source key is preserved",
-          "pass": true
-        },
-        {
-          "name": "Two identical low-confidence notifications with different source keys stay as two reviews",
-          "pass": true
-        },
-        {
-          "name": "Confirming one identical pending review removes only exact source key",
-          "pass": true
-        },
-        {
-          "name": "Restart code cannot delete durable pending review",
-          "pass": true
-        },
-        {
-          "name": "Historical SMS same raw same near timestamp dedupes against legacy tx",
-          "pass": true
-        },
-        {
-          "name": "Historical SMS same raw much later is preserved against legacy tx",
-          "pass": true
-        },
-        {
-          "name": "Historical SMS keeps original timestamp",
-          "pass": true
-        },
-        {
-          "name": "Restore rolls back memory when native persistence fails",
-          "pass": true
-        },
-        {
-          "name": "Voice candidate chooser prefers parseable alternative",
-          "pass": true
-        },
-        {
-          "name": "Safe-to-spend reserves bills debt and goals",
-          "pass": true
-        },
-        {
-          "name": "Backup normalization retains planning and pending reviews",
-          "pass": true
-        },
-        {
-          "name": "App build marker is V2.2",
-          "pass": true
-        },
-        {
-          "name": "Malformed restored state is sanitized instead of crashing selectors",
-          "pass": true
-        },
-        {
-          "name": "persistOrRollback restores state when native encrypted save fails",
-          "pass": true
-        },
-        {
-          "name": "setBase rolls back all converted state when save fails",
-          "pass": true
-        },
-        {
-          "name": "Normalization dedupes only same pending source key, not identical raw with different keys",
-          "pass": true
-        },
-        {
-          "name": "Editing bank transaction preserves bankKey",
-          "pass": true
-        },
-        {
-          "name": "Legacy no-bankKey migration fallback dedupes only near matching event time",
-          "pass": true
-        }
-      ]
-    },
-    "planning": {
-      "ok": true,
-      "total": 12,
-      "passed": 12,
-      "failed": 0,
-      "results": [
-        {
-          "name": "Planning state exists by default",
-          "pass": true
-        },
-        {
-          "name": "Safe-to-spend subtracts recurring debt and goal contribution",
-          "pass": true
-        },
-        {
-          "name": "Upcoming calendar sorts payments",
-          "pass": true
-        },
-        {
-          "name": "Goal with no due date does not reserve monthly contribution",
-          "pass": true
-        },
-        {
-          "name": "Plan screen renders all sections",
-          "pass": true
-        },
-        {
-          "name": "Home includes safe-to-spend card after onboarding",
-          "pass": true
-        },
-        {
-          "name": "Base currency conversion includes plan amounts",
-          "pass": true
-        },
-        {
-          "name": "Backup normalization preserves and clamps plan data",
-          "pass": true
-        },
-        {
-          "name": "v2save creates goal and persists",
-          "pass": true
-        },
-        {
-          "name": "v2save rejects invalid recurring amount",
-          "pass": true
-        },
-        {
-          "name": "v2delete removes target item",
-          "pass": true
-        },
-        {
-          "name": "Ask Sanad gives deterministic safe/upcoming answers",
-          "pass": true
-        }
-      ]
-    },
-    "java_bank_filter": {
-      "total": 17,
-      "passed": 17,
-      "failed": 0,
-      "ok": true
-    }
-  },
-  "summary": {
-    "executable_tests_total": 54,
-    "executable_tests_passed": 54,
-    "executable_tests_failed": 0
-  },
-  "not_yet_verified_on_real_android": [
-    "APK compilation",
-    "Cairo provider runtime fetch on target phone",
-    "on-device Arabic speech model availability",
-    "READ_SMS runtime behavior",
-    "Notification Listener runtime delivery",
-    "backup document picker on target phone"
-  ]
+  "checks": [
+    {"name":"V3.6 static and JS critical regression","command":"node qa/test-v36-critical.js","status":"PASS"},
+    {"name":"V3.6 voice runtime syntax","command":"node --check app/src/main/assets/v36_voice.js","status":"PASS"},
+    {"name":"index.html inline JavaScript syntax","status":"PASS"},
+    {"name":"V2.7 parser regression","command":"node qa/v27_parser_test.js","status":"PASS"},
+    {"name":"BankSmsParser JVM regression","status":"PASS"},
+    {"name":"Android assembleDebug","status":"NOT_RUN_LOCAL","reason":"Android SDK/Gradle toolchain not installed in workspace; CI pipeline added"},
+    {"name":"Actual generated ggml C compile flags are Release/-O3/no -O0","status":"CI_ENFORCED_NOT_RUN_LOCAL","workflow":".github/workflows/build-v36.yml"},
+    {"name":"Physical-device microphone and Whisper inference","status":"NOT_RUN_LOCAL"}
+  ],
+  "criticalChanges": {
+    "nativeWhisperOptimization": "implemented",
+    "audioStopRace": "implemented",
+    "decryptFailureReadOnlyRecovery": "implemented",
+    "encryptedStateSnapshots": 3,
+    "webSpeechLegacyRemoved": true,
+    "voiceFinalizeWatchdogMs": 75000,
+    "versionUnified": true
+  }
 }

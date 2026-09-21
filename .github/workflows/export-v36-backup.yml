@@ -1,0 +1,28 @@
+name: Export SANAD V3.6 Full Project Backup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package V3.6 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .git .gradle app/build app/.cxx
+          zip -qr SANAD-V3.6-FULL-PROJECT-BACKUP.zip . -x 'SANAD-V3.6-FULL-PROJECT-BACKUP.zip'
+          sha256sum SANAD-V3.6-FULL-PROJECT-BACKUP.zip > SANAD-V3.6-FULL-PROJECT-BACKUP.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-V3.6-FULL-PROJECT-BACKUP
+          path: |
+            SANAD-V3.6-FULL-PROJECT-BACKUP.zip
+            SANAD-V3.6-FULL-PROJECT-BACKUP.sha256
+          retention-days: 14
+          if-no-files-found: error
