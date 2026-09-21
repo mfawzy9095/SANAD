@@ -1,0 +1,35 @@
+name: Publish SANAD V3.4 Voice Test APK
+
+on:
+  push:
+    branches: [source-v34]
+    paths:
+      - '.github/workflows/publish-v34-voice-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified APK artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          gh run download 35552398991 -R "$GITHUB_REPOSITORY" -n SANAD-V3.4-VOICE-TEST -D out
+          test -s out/SANAD-V3.4-VOICE-TEST.apk
+          sha256sum out/SANAD-V3.4-VOICE-TEST.apk | tee out/SHA256.txt
+
+      - name: Publish test release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="v3.4-voice-test"
+          gh release delete "$TAG" -R "$GITHUB_REPOSITORY" -y --cleanup-tag || true
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY"             out/SANAD-V3.4-VOICE-TEST.apk             out/SHA256.txt             --title "SANAD V3.4 Voice Test"             --notes "Isolated installable voice test. Package: com.sanad.full.voicetest. Installs beside the main SANAD app. Offline voice path; no INTERNET permission."
