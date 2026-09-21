@@ -21,7 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out
-          gh run download 35552398991 -R "$GITHUB_REPOSITORY" -n SANAD-V3.4-VOICE-TEST -D out
+          gh run download 35552589990 -R "$GITHUB_REPOSITORY" -n SANAD-V3.4-VOICE-TEST -D out
           test -s out/SANAD-V3.4-VOICE-TEST.apk
           sha256sum out/SANAD-V3.4-VOICE-TEST.apk | tee out/SHA256.txt
 
