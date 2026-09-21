@@ -84,6 +84,9 @@ public class MainActivity extends Activity {
 
     @Override protected void onPause(){
         backgroundAt=System.currentTimeMillis();
+        if(whisperVoice!=null && whisperVoice.isRecording()){
+            try{ whisperVoice.stop(); }catch(Exception ignored){}
+        }
         super.onPause();
     }
 
@@ -114,7 +117,7 @@ public class MainActivity extends Activity {
                 CairoWebFontLoader.load(MainActivity.this,web);
                 injectV27Fixes();
                 injectAssetJs("v28_runtime.js");
-                injectAssetJs("v31_voice.js");
+                injectAssetJs("v35_voice.js");
                 drainPending();
             }
         });
@@ -151,7 +154,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public String runtimeDiagnostics(){
             try{
                 JSONObject o=new JSONObject();
-                o.put("version","3.4-voice-reviewed");
+                o.put("version","3.5-whisper-only");
                 o.put("audioPermission",checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED);
                 o.put("smsPermission",checkSelfPermission(Manifest.permission.READ_SMS)==PackageManager.PERMISSION_GRANTED);
                 o.put("voiceStatus",whisperVoice==null?"unavailable":whisperVoice.status());
