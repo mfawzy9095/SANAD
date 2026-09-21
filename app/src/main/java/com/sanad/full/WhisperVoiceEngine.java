@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * V3.5 deterministic offline voice recorder.
+ * V3.6 deterministic offline voice recorder.
  *
  * The microphone opens immediately after a tap. Model loading happens in
  * parallel, so recording never waits on Whisper initialization.
@@ -216,6 +216,12 @@ public final class WhisperVoiceEngine {
 
                 int n=current.read(buf,0,buf.length,AudioRecord.READ_BLOCKING);
 
+                // V3.6: stop() only flips the intent flag. If a blocking read wakes because
+                // the user requested Stop, do not treat the resulting negative code as a mic
+                // failure and do not attempt to reopen AudioRecord. Positive samples are still
+                // processed below so the final buffer is not thrown away.
+                if(!recording.get() && n<=0) break;
+
                 if(n<0){
                     lastReadError=n;
 
@@ -312,8 +318,11 @@ public final class WhisperVoiceEngine {
                 }
             }
         }catch(Throwable t){
-            fatalAudioError=true;
-            if(lastReadError==0) lastReadError=AudioRecord.ERROR;
+            // An exception after an intentional Stop is not an AudioRecord failure.
+            if(recording.get()){
+                fatalAudioError=true;
+                if(lastReadError==0) lastReadError=AudioRecord.ERROR;
+            }
         }finally{
             safeRelease();
         }
@@ -428,12 +437,10 @@ public final class WhisperVoiceEngine {
         pendingPrepare=false;
         pendingPermissionStart=false;
 
-        if(!recording.getAndSet(false)) return;
-
-        AudioRecord r=recorder;
-        if(r!=null){
-            try{ r.stop(); }catch(Throwable ignored){}
-        }
+        // V3.6 Stop ownership rule: UI/API threads only publish stop intent.
+        // The audio worker exits its read loop and is the sole owner that stops/releases
+        // AudioRecord in safeRelease(). This removes the cross-thread stop/read race.
+        recording.set(false);
     }
 
     private AudioRecord openRecorder(int source,int min){
