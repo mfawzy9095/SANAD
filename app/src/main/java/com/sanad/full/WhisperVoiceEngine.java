@@ -7,6 +7,8 @@ import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.os.SystemClock;
+import android.os.Build;
+import android.media.AudioRecordingConfiguration;
 
 import com.sanad.full.whisper.WhisperLib;
 
@@ -49,6 +51,7 @@ public final class WhisperVoiceEngine {
     private volatile long lastSamples=0L;
     private volatile double lastRms=0.0;
     private volatile int lastPeak=0;
+    private volatile boolean lastClientSilenced=false;
 
     public WhisperVoiceEngine(Activity activity,Listener listener){
         this.activity=activity;
@@ -63,6 +66,7 @@ public final class WhisperVoiceEngine {
                 ";samples="+lastSamples+
                 ";rms="+String.format(Locale.US,"%.1f",lastRms)+
                 ";peak="+lastPeak+
+                ";silenced="+lastClientSilenced+
                 ";model="+(whisperCtx!=0L?"ready":(modelLoading?"loading":"not_loaded"));
     }
 
@@ -121,7 +125,7 @@ public final class WhisperVoiceEngine {
         }
         int rawMin=AudioRecord.getMinBufferSize(SAMPLE_RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
         final int min=Math.max(rawMin>0?rawMin:4096,4096);
-        lastReadError=0; lastSamples=0L; lastRms=0.0; lastPeak=0; lastAudioSource=0;
+        lastReadError=0; lastSamples=0L; lastRms=0.0; lastPeak=0; lastAudioSource=0; lastClientSilenced=false;
         listener.onState("starting",language);
         try{
             recorder=openRecorder(MediaRecorder.AudioSource.VOICE_RECOGNITION,min);
@@ -182,6 +186,16 @@ public final class WhisperVoiceEngine {
                     break;
                 }
                 if(n==0)continue;
+                if(Build.VERSION.SDK_INT>=29){
+                    try{
+                        AudioRecordingConfiguration cfg=current.getActiveRecordingConfiguration();
+                        if(cfg!=null && cfg.isClientSilenced()){
+                            lastClientSilenced=true;
+                            fatalAudioError=true;
+                            break;
+                        }
+                    }catch(Throwable ignored){}
+                }
                 double sum=0;
                 int peak=0;
                 for(int i=0;i<n;i++){
@@ -217,7 +231,8 @@ public final class WhisperVoiceEngine {
         if(fatalAudioError){
             recording.set(false);
             listener.onState("audio_error",String.valueOf(lastReadError));
-            listener.onError("فشل قراءة الميكروفون (AudioRecord "+lastReadError+")");
+            if(lastClientSilenced) listener.onError("الميكروفون مفتوح لكن Android كاتم التسجيل من النظام");
+            else listener.onError("فشل قراءة الميكروفون (AudioRecord "+lastReadError+")");
             listener.onState("stopped",language);
             return;
         }
