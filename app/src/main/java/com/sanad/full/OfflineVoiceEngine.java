@@ -180,7 +180,7 @@ public final class OfflineVoiceEngine {
 
         recognizer.checkRecognitionSupport(supportIntent,activity.getMainExecutor(),new RecognitionSupportCallback(){
             @Override public void onSupportResult(RecognitionSupport support){
-                if(!isCurrentDeviceSession(session,recognizer)) return;
+                if(!isSameDeviceSession(session,recognizer) || userStopped) return;
                 String installed=chooseInstalledLocale(support.getInstalledOnDeviceLanguages(),locale);
                 if(installed!=null){
                     attachListenerAndStart(session,recognizer,buildRecognizerIntent(installed),installed);
@@ -191,7 +191,7 @@ public final class OfflineVoiceEngine {
                 }
             }
             @Override public void onError(int error){
-                if(!isCurrentDeviceSession(session,recognizer)) return;
+                if(!isSameDeviceSession(session,recognizer) || userStopped) return;
                 destroyDeviceRecognizer(false);
                 active=false; usingDevice=false;
                 startWhisperFallback(session,"support_check_"+error,180L);
@@ -232,21 +232,21 @@ public final class OfflineVoiceEngine {
                                         final Intent intent,final String deviceLocale){
         recognizer.setRecognitionListener(new RecognitionListener(){
             @Override public void onReadyForSpeech(Bundle params){
-                if(isCurrentDeviceSession(session,recognizer)) listener.onState("listening_device",deviceLocale);
+                if(isActiveDeviceSession(session,recognizer)) listener.onState("listening_device",deviceLocale);
             }
             @Override public void onBeginningOfSpeech(){
-                if(isCurrentDeviceSession(session,recognizer)) listener.onState("speech",deviceLocale);
+                if(isActiveDeviceSession(session,recognizer)) listener.onState("speech",deviceLocale);
             }
             @Override public void onRmsChanged(float rmsdB){
-                if(isCurrentDeviceSession(session,recognizer))
+                if(isActiveDeviceSession(session,recognizer))
                     listener.onLevel(Math.max(0f,Math.min(12f,(rmsdB+2f)/1.5f)));
             }
             @Override public void onBufferReceived(byte[] buffer){}
             @Override public void onEndOfSpeech(){
-                if(isCurrentDeviceSession(session,recognizer)) listener.onState("processing_device",deviceLocale);
+                if(isActiveDeviceSession(session,recognizer)) listener.onState("processing_device",deviceLocale);
             }
             @Override public void onError(int error){
-                if(!isCurrentDeviceSession(session,recognizer)) return;
+                if(!isSameDeviceSession(session,recognizer)) return;
                 boolean stopped=userStopped;
                 String partial=lastDevicePartial;
                 destroyDeviceRecognizer(false);
@@ -260,7 +260,7 @@ public final class OfflineVoiceEngine {
                 startWhisperFallback(session,"device_error_"+error,220L);
             }
             @Override public void onResults(Bundle results){
-                if(!isCurrentDeviceSession(session,recognizer)) return;
+                if(!isSameDeviceSession(session,recognizer)) return;
                 String text=bestResult(results);
                 if(text.isEmpty()) text=lastDevicePartial;
                 destroyDeviceRecognizer(false);
@@ -272,7 +272,7 @@ public final class OfflineVoiceEngine {
                     listener.onDone(text.trim());
             }
             @Override public void onPartialResults(Bundle partialResults){
-                if(!isCurrentDeviceSession(session,recognizer)) return;
+                if(!isSameDeviceSession(session,recognizer)) return;
                 String text=bestResult(partialResults);
                 if(!text.isEmpty()){
                     lastDevicePartial=text;
@@ -282,13 +282,17 @@ public final class OfflineVoiceEngine {
             @Override public void onEvent(int eventType,Bundle params){}
         });
 
-        if(!isCurrentDeviceSession(session,recognizer)) return;
+        if(!isActiveDeviceSession(session,recognizer)) return;
         listener.onState("starting_device",deviceLocale);
         recognizer.startListening(intent);
     }
 
-    private boolean isCurrentDeviceSession(int session,SpeechRecognizer recognizer){
-        return session==currentSession && !userStopped && recognizer!=null && recognizer==deviceRecognizer;
+    private boolean isSameDeviceSession(int session,SpeechRecognizer recognizer){
+        return session==currentSession && recognizer!=null && recognizer==deviceRecognizer;
+    }
+
+    private boolean isActiveDeviceSession(int session,SpeechRecognizer recognizer){
+        return isSameDeviceSession(session,recognizer) && !userStopped;
     }
 
     private String bestResult(Bundle b){
