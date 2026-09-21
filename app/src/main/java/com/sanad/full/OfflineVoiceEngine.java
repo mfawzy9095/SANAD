@@ -183,7 +183,14 @@ public final class OfflineVoiceEngine {
                 if(!isSameDeviceSession(session,recognizer) || userStopped) return;
                 String installed=chooseInstalledLocale(support.getInstalledOnDeviceLanguages(),locale);
                 if(installed!=null){
-                    attachListenerAndStart(session,recognizer,buildRecognizerIntent(installed),installed);
+                    try{
+                        attachListenerAndStart(session,recognizer,buildRecognizerIntent(installed),installed);
+                    }catch(Throwable startError){
+                        if(!isSameDeviceSession(session,recognizer)) return;
+                        destroyDeviceRecognizer(true);
+                        active=false; usingDevice=false;
+                        startWhisperFallback(session,"device_start_failed",220L);
+                    }
                 }else{
                     destroyDeviceRecognizer(false);
                     active=false; usingDevice=false;
@@ -343,7 +350,7 @@ public final class OfflineVoiceEngine {
                     active=false; usingDevice=false;
                     listener.onDone(partial==null?"":partial);
                 }
-            },1200L);
+            },2800L);
             return;
         }
 
