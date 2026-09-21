@@ -5,7 +5,7 @@ import android.app.Activity;
 import android.content.pm.PackageManager;
 
 /**
- * V3.5 deterministic offline voice engine.
+ * V3.6 deterministic offline voice engine.
  *
  * One engine only: bundled whisper.cpp.
  * No Android SpeechRecognizer and no network fallback.
