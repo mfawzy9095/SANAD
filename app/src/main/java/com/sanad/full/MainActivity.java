@@ -151,7 +151,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public String runtimeDiagnostics(){
             try{
                 JSONObject o=new JSONObject();
-                o.put("version","3.3-voice-final-test");
+                o.put("version","3.4-voice-reviewed");
                 o.put("audioPermission",checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED);
                 o.put("smsPermission",checkSelfPermission(Manifest.permission.READ_SMS)==PackageManager.PERMISSION_GRANTED);
                 o.put("voiceStatus",whisperVoice==null?"unavailable":whisperVoice.status());
