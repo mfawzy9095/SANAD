@@ -128,11 +128,9 @@ public final class WhisperVoiceEngine {
         lastReadError=0; lastSamples=0L; lastRms=0.0; lastPeak=0; lastAudioSource=0; lastClientSilenced=false;
         listener.onState("starting",language);
         try{
-            recorder=openRecorder(MediaRecorder.AudioSource.VOICE_RECOGNITION,min);
-            if(recorder==null)recorder=openRecorder(MediaRecorder.AudioSource.MIC,min);
-            if(recorder==null)throw new IllegalStateException("audio init");
-            recorder.startRecording();
-            if(recorder.getRecordingState()!=AudioRecord.RECORDSTATE_RECORDING)throw new IllegalStateException("audio did not start");
+            recorder=openAndStartRecorder(MediaRecorder.AudioSource.VOICE_RECOGNITION,min);
+            if(recorder==null)recorder=openAndStartRecorder(MediaRecorder.AudioSource.MIC,min);
+            if(recorder==null)throw new IllegalStateException("audio init/start failed");
             recording.set(true);
             listener.onState("silent",language);
             audioWorker.execute(()->recordLoop(min));
@@ -165,21 +163,16 @@ public final class WhisperVoiceEngine {
                 int n=current.read(buf,0,buf.length,AudioRecord.READ_BLOCKING);
                 if(n<0){
                     lastReadError=n;
-                    if(n==AudioRecord.ERROR_DEAD_OBJECT && !recovered){
+                    if((n==AudioRecord.ERROR_DEAD_OBJECT || n==AudioRecord.ERROR_INVALID_OPERATION) && !recovered){
                         int fallbackSource=(lastAudioSource==MediaRecorder.AudioSource.VOICE_RECOGNITION)
                                 ?MediaRecorder.AudioSource.MIC:MediaRecorder.AudioSource.VOICE_RECOGNITION;
                         safeRelease();
-                        recorder=openRecorder(fallbackSource,bufferSize);
+                        recorder=openAndStartRecorder(fallbackSource,bufferSize);
                         if(recorder!=null){
-                            try{
-                                recorder.startRecording();
-                                if(recorder.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING){
-                                    recovered=true;
-                                    lastReadError=0;
-                                    listener.onState("audio_recovered",String.valueOf(fallbackSource));
-                                    continue;
-                                }
-                            }catch(Throwable ignored){}
+                            recovered=true;
+                            lastReadError=0;
+                            listener.onState("audio_recovered",String.valueOf(fallbackSource));
+                            continue;
                         }
                     }
                     fatalAudioError=true;
@@ -309,6 +302,20 @@ public final class WhisperVoiceEngine {
             if(r.getState()==AudioRecord.STATE_INITIALIZED){ lastAudioSource=source; return r; }
             try{r.release();}catch(Throwable ignored){}
         }catch(Throwable ignored){}
+        return null;
+    }
+
+    private AudioRecord openAndStartRecorder(int source,int min){
+        AudioRecord r=openRecorder(source,min);
+        if(r==null)return null;
+        try{
+            r.startRecording();
+            if(r.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING){
+                lastAudioSource=source;
+                return r;
+            }
+        }catch(Throwable ignored){}
+        try{r.release();}catch(Throwable ignored){}
         return null;
     }
 
