@@ -91,7 +91,7 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging SANAD-V3.4-UNSIGNED.apk | tee apk-badging.txt
           "$AAPT" dump permissions SANAD-V3.4-UNSIGNED.apk | tee apk-permissions.txt
-          grep -q "package: name='com.sanad.full' versionCode='33' versionName='3.4-voice-reviewed'" apk-badging.txt
+          grep -q "package: name='com.sanad.full' versionCode='34' versionName='3.4-voice-reviewed'" apk-badging.txt
           grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
           ! grep -q "android.permission.INTERNET" apk-permissions.txt
           unzip -l SANAD-V3.4-UNSIGNED.apk | tee apk-files.txt
