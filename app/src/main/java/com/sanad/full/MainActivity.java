@@ -51,6 +51,7 @@ public class MainActivity extends Activity {
     private long backgroundAt=0L;
     private long lastUnlockAt=0L;
     private long lastBackAt=0L;
+    private volatile boolean storageRecoveryRequired=false;
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
@@ -117,7 +118,7 @@ public class MainActivity extends Activity {
                 CairoWebFontLoader.load(MainActivity.this,web);
                 injectV27Fixes();
                 injectAssetJs("v28_runtime.js");
-                injectAssetJs("v35_voice.js");
+                injectAssetJs("v36_voice.js");
                 drainPending();
             }
         });
@@ -132,12 +133,38 @@ public class MainActivity extends Activity {
 
     public final class Bridge {
         @JavascriptInterface public boolean saveState(String json){
+            if(storageRecoveryRequired) return false;
             try{ db.saveState(json); SanadReminderScheduler.ensureScheduled(MainActivity.this); return true; }
             catch(Exception e){ toast("تعذر حفظ البيانات المشفرة"); return false; }
         }
+        @JavascriptInterface public boolean saveRecoveredState(String json){
+            try{
+                db.saveState(json);
+                storageRecoveryRequired=false;
+                SanadReminderScheduler.ensureScheduled(MainActivity.this);
+                return true;
+            }catch(Exception e){ toast("تعذر استعادة البيانات المشفرة"); return false; }
+        }
         @JavascriptInterface public String loadState(){
-            try{ String state=db.loadState(); return state==null?"":state; }
-            catch(Exception e){ toast("تعذر قراءة البيانات المشفرة"); return ""; }
+            JSONObject out=new JSONObject();
+            try{
+                String state=db.loadState();
+                storageRecoveryRequired=false;
+                out.put("ok",true);
+                out.put("found",state!=null);
+                if(state!=null) out.put("state",state);
+                out.put("snapshots",db.countStateSnapshots());
+            }catch(Exception e){
+                storageRecoveryRequired=true;
+                try{
+                    out.put("ok",false);
+                    out.put("error","state_load_failed");
+                    out.put("cause",e.getClass().getSimpleName());
+                    out.put("snapshots",db.countStateSnapshots());
+                }catch(Exception ignored){}
+                toast("تعذر قراءة البيانات المشفرة — تم تفعيل وضع الاسترداد للقراءة فقط");
+            }
+            return out.toString();
         }
         @JavascriptInterface public boolean clearState(){
             try{
@@ -146,6 +173,7 @@ public class MainActivity extends Activity {
                 getSharedPreferences("sanad_prefs",MODE_PRIVATE).edit().clear().apply();
                 getSharedPreferences("sanad_reminder_state",MODE_PRIVATE).edit().clear().apply();
                 AppLockStore.clear(MainActivity.this);
+                storageRecoveryRequired=false;
                 return true;
             }catch(Exception e){ toast("تعذر حذف البيانات المحلية"); return false; }
         }
@@ -154,7 +182,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public String runtimeDiagnostics(){
             try{
                 JSONObject o=new JSONObject();
-                o.put("version","3.5-whisper-only");
+                o.put("version",BuildConfig.VERSION_NAME);
                 o.put("audioPermission",checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED);
                 o.put("smsPermission",checkSelfPermission(Manifest.permission.READ_SMS)==PackageManager.PERMISSION_GRANTED);
                 o.put("voiceStatus",whisperVoice==null?"unavailable":whisperVoice.status());
@@ -162,6 +190,8 @@ public class MainActivity extends Activity {
                 o.put("sdk",Build.VERSION.SDK_INT);
                 o.put("manufacturer",Build.MANUFACTURER);
                 o.put("model",Build.MODEL);
+                o.put("storageReadOnly",storageRecoveryRequired);
+                o.put("stateSnapshots",db.countStateSnapshots());
                 return o.toString();
             }catch(Exception e){return "{}";}
         }
