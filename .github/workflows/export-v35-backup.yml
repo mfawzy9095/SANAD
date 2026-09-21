@@ -1,0 +1,50 @@
+name: Export SANAD V3.5 Full Project Backup
+
+on:
+  push:
+    branches: [source-v35]
+    paths:
+      - '.github/workflows/export-v35-backup.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: source-v35
+
+      - name: Add pinned whisper.cpp and multilingual model
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf app/src/main/cpp/whisper.cpp
+          git clone --depth 1 --branch v1.7.6 https://github.com/ggerganov/whisper.cpp.git app/src/main/cpp/whisper.cpp
+          rm -rf app/src/main/cpp/whisper.cpp/.git
+          mkdir -p app/src/main/assets/models
+          curl -L --fail --retry 4 --retry-delay 5             -o app/src/main/assets/models/ggml-base-q5_1.bin             "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin?download=true"
+          test "$(stat -c%s app/src/main/assets/models/ggml-base-q5_1.bin)" -gt 50000000
+          test -f HANDOFF_V35.md
+
+      - name: Package complete buildable project
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .git .gradle app/build
+          zip -qr SANAD-V3.5-FULL-PROJECT-BACKUP.zip .             -x 'SANAD-V3.5-FULL-PROJECT-BACKUP.zip'
+          sha256sum SANAD-V3.5-FULL-PROJECT-BACKUP.zip > SANAD-V3.5-FULL-PROJECT-BACKUP.sha256
+          ls -lh SANAD-V3.5-FULL-PROJECT-BACKUP.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-V3.5-FULL-PROJECT-BACKUP
+          path: |
+            SANAD-V3.5-FULL-PROJECT-BACKUP.zip
+            SANAD-V3.5-FULL-PROJECT-BACKUP.sha256
+          retention-days: 7
+          if-no-files-found: error
