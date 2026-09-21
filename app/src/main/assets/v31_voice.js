@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-window.__SANAD_VOICE_ENGINE__="3.3-voice-final-test";
+window.__SANAD_VOICE_ENGINE__="3.4-voice-reviewed";
 
 var phase="idle";
 var lastPartial="";
