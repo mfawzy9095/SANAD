@@ -152,7 +152,7 @@ jobs:
         with:
           name: SANAD-V3.5-FULL-PROJECT-BACKUP
           path: |
-            SANAD-V3.5-FULL-PROJECT-BACKUP.zip
-            full-project-sha256.txt
+            /tmp/sanad-v35-backup/SANAD-V3.5-FULL-PROJECT-BACKUP.zip
+            /tmp/sanad-v35-backup/full-project-sha256.txt
           retention-days: 7
           if-no-files-found: error
