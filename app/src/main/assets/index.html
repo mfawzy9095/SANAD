@@ -1452,15 +1452,46 @@ var UI = {
   txq:"", txRange:"month", txCat:null, openRow:null, cbPick:null,
   ob:{step:0, lang:"ar", cur:"AED", budget:"", demo:true}
 };
+var STORAGE_READ_ONLY=false;
+var STORAGE_LOAD_ERROR=null;
+var STORAGE_SNAPSHOTS=0;
+function enterStorageRecovery(info){
+  STORAGE_READ_ONLY=true;
+  STORAGE_LOAD_ERROR=info||{error:"state_load_failed"};
+  STORAGE_SNAPSHOTS=Math.max(0,parseInt((info&&info.snapshots)||0,10)||0);
+}
+function leaveStorageRecovery(){
+  STORAGE_READ_ONLY=false; STORAGE_LOAD_ERROR=null;
+  var el=document.getElementById("storage-recovery-overlay"); if(el&&el.parentNode)el.parentNode.removeChild(el);
+}
+function showStorageRecoveryOverlay(){
+  if(!STORAGE_READ_ONLY||document.getElementById("storage-recovery-overlay"))return;
+  var ov=document.createElement("div"); ov.id="storage-recovery-overlay";
+  ov.style.cssText="position:fixed;inset:0;z-index:99999;background:rgba(9,18,22,.96);display:flex;align-items:center;justify-content:center;padding:24px;";
+  var box=document.createElement("div"); box.style.cssText="width:min(460px,100%);background:var(--card,#fff);color:var(--ink,#172126);border:1px solid var(--line,#dfe6e8);border-radius:22px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.35);text-align:center;";
+  var title=document.createElement("div"); title.style.cssText="font-size:19px;font-weight:800;margin-bottom:10px;"; title.textContent=LANG==="ar"?"وضع استرداد البيانات":"Data recovery mode";
+  var body=document.createElement("div"); body.style.cssText="font-size:14px;line-height:1.8;color:var(--ink-2,#526269);";
+  body.textContent=LANG==="ar"?"تعذر فك تشفير بيانات سند الحالية. تم إيقاف الحفظ والمزامنة حتى لا يتم استبدال بياناتك بحالة فارغة. استرجع نسخة احتياطية موثوقة لإعادة التفعيل.":"SANAD could not decrypt the current state. Saving and sync are disabled so your data cannot be overwritten by an empty state. Restore a trusted backup to continue.";
+  var meta=document.createElement("div"); meta.style.cssText="font-size:12px;margin-top:10px;color:var(--ink-3,#77868c);"; meta.textContent=(LANG==="ar"?"نسخ محلية سابقة محفوظة: ":"Local previous snapshots retained: ")+STORAGE_SNAPSHOTS;
+  var btn=document.createElement("button"); btn.className="btn p"; btn.style.cssText="margin-top:18px;width:100%;"; btn.textContent=LANG==="ar"?"استرجاع من Backup":"Restore from backup";
+  btn.onclick=function(){var A=nativeBridge();if(A&&typeof A.importBackup==="function"){try{A.importBackup();}catch(e){}}};
+  box.appendChild(title);box.appendChild(body);box.appendChild(meta);box.appendChild(btn);ov.appendChild(box);document.body.appendChild(ov);
+}
 function nativeBridge(){ return (window.Android && typeof window.Android === "object") ? window.Android : null; }
-function save(){
+function save(forceRecoveryWrite){
+  if(STORAGE_READ_ONLY&&!forceRecoveryWrite)return false;
   var raw="";
   try{ raw=JSON.stringify(S); }catch(e){ return false; }
-  var A=nativeBridge();
+  var A=nativeBridge(),ok=false;
   if(A && typeof A.saveState==="function"){
-    try{ return A.saveState(raw)!==false; }catch(e){ return false; }
+    try{
+      if(forceRecoveryWrite&&typeof A.saveRecoveredState==="function") ok=A.saveRecoveredState(raw)!==false;
+      else ok=A.saveState(raw)!==false;
+      if(ok&&forceRecoveryWrite)leaveStorageRecovery();
+      return ok;
+    }catch(e){ return false; }
   }
-  try{ localStorage.setItem(KEY,raw); return true; }catch(e){ return false; }
+  try{ localStorage.setItem(KEY,raw); if(forceRecoveryWrite)leaveStorageRecovery(); return true; }catch(e){ return false; }
 }
 function normalizeLoaded(p){
   if (!p || typeof p!=="object" || !p.settings || typeof p.settings!=="object") return false;
@@ -1584,20 +1615,39 @@ function persistOrRollback(before,msg){
 }
 
 function load(){
-  var A = nativeBridge(), raw = null, p = null;
-  if (A && typeof A.loadState === "function"){
-    try { raw = A.loadState(); } catch(e){ raw = null; }
-    if (raw){ try { p = JSON.parse(raw); if (normalizeLoaded(p)) return; } catch(e){} }
-    // One-time migration from the old WebView/localStorage build into encrypted SQLite.
-    try {
-      raw = localStorage.getItem(KEY);
-      if (raw){ p=JSON.parse(raw); if(normalizeLoaded(p)){ if(save()){ try{localStorage.removeItem(KEY);}catch(e){} } return; } }
-    } catch(e){}
+  var A=nativeBridge(),raw=null,p=null,env=null;
+  if(A&&typeof A.loadState==="function"){
+    try{raw=A.loadState();}catch(e){enterStorageRecovery({error:"bridge_load_exception",cause:String(e)});return;}
+    try{env=raw?JSON.parse(raw):null;}catch(e){env=null;}
+
+    // V3.6 native contract: explicit result envelope. A decrypt/read failure must never
+    // look like a new empty installation, because the next save would overwrite evidence.
+    if(env&&typeof env.ok==="boolean"){
+      STORAGE_SNAPSHOTS=Math.max(0,parseInt(env.snapshots||0,10)||0);
+      if(!env.ok){enterStorageRecovery(env);return;}
+      if(env.found){
+        if(typeof env.state!=="string"){enterStorageRecovery({error:"invalid_state_envelope",snapshots:STORAGE_SNAPSHOTS});return;}
+        try{p=JSON.parse(env.state);}catch(e){enterStorageRecovery({error:"invalid_state_json",snapshots:STORAGE_SNAPSHOTS});return;}
+        if(!normalizeLoaded(p)){enterStorageRecovery({error:"invalid_state_schema",snapshots:STORAGE_SNAPSHOTS});return;}
+        return;
+      }
+    }else if(raw){
+      try{
+        p=JSON.parse(raw);
+        if(p&&p.settings&&normalizeLoaded(p))return;
+        enterStorageRecovery({error:"unexpected_load_contract"});return;
+      }catch(e){enterStorageRecovery({error:"legacy_state_parse_failed"});return;}
+    }
+
+    try{
+      raw=localStorage.getItem(KEY);
+      if(raw){p=JSON.parse(raw);if(normalizeLoaded(p)){if(save()){try{localStorage.removeItem(KEY);}catch(e){}}return;}}
+    }catch(e){}
     return;
   }
-  try { raw = localStorage.getItem(KEY); } catch(e){ return; }
-  if (!raw) return;
-  try { p = JSON.parse(raw); normalizeLoaded(p); } catch(e){}
+  try{raw=localStorage.getItem(KEY);}catch(e){return;}
+  if(!raw)return;
+  try{p=JSON.parse(raw);normalizeLoaded(p);}catch(e){}
 }
 
 function demo(cur, cats){
@@ -1925,7 +1975,7 @@ function scrAdd(){
     '<button class="'+(m === "bank" ? "on" : "")+'" data-act="mode" data-m="bank">'+ic("msg",15)+' '+esc(t("modeBank"))+'</button></div>';
 
   if (m === "voice"){
-    var supported = !!((nativeBridge() && typeof nativeBridge().startVoice === "function") || window.SpeechRecognition || window.webkitSpeechRecognition);
+    var supported = !!(nativeBridge() && typeof nativeBridge().startVoice === "function");
     body = '<div class="card cp"><div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:14px 0 4px">'+
       '<button class="micb" id="micb" data-act="mic" aria-label="'+esc(t("voicePrompt"))+'">'+ic("mic",34,2)+'</button>'+
       '<div id="wave" style="height:46px;display:grid;place-items:center;color:var(--ink-3);font-size:13px;font-weight:700">'+esc(t("voiceHint"))+'</div>'+
@@ -3073,7 +3123,7 @@ function applyBackupPayload(raw){
     var data=(wrap&&wrap.app==="sanad"&&wrap.data)?wrap.data:wrap;
     if(!data || !data.settings || !Array.isArray(data.transactions)) throw new Error("invalid");
     if(!normalizeLoaded(data)) throw new Error("invalid");
-    if(!save()) throw new Error("persist");
+    if(!save(STORAGE_READ_ONLY)) throw new Error("persist");
     try{ localStorage.removeItem(KEY); }catch(e){}
     LANG=S.settings.language||"ar"; UI.stack=[{r:"home",p:{}}]; render(false); toast(t("restoreDone"));
     return true;
@@ -3092,92 +3142,8 @@ function restoreJson(){
 }
 
 /* ─────────── voice ─────────── */
-var rec = null, recTimer = null, voiceNativeActive=false, voiceAwaitingResult=false, voiceChunks=[], voicePartial="", voiceLevel=0;
-function waveHtml(level){
-  var h='<div class="wave" id="vbars">',i,l=Math.max(0,Number(level)||0);
-  for(i=0;i<9;i++){ var ht=12+Math.min(34,Math.max(0,(l+2)*2.2)+((i%3)*3)); h+='<i style="height:'+ht.toFixed(0)+'px;animation:none"></i>'; }
-  return h+'</div>';
-}
-function stopVoiceUI(){
-  if(recTimer){clearTimeout(recTimer);recTimer=null;}
-  var mb=document.getElementById("micb"); if(mb)mb.className="micb";
-  var w=document.getElementById("wave"); if(w)w.innerHTML=esc(t("voiceHint"));
-  var l=document.getElementById("vlabel"); if(l)l.textContent=t("voicePrompt");
-  var st=document.getElementById("vstop"); if(st)st.style.display="none";
-}
-function voiceUiStart(){
-  voiceNativeActive=true; voiceAwaitingResult=false; voiceChunks=[]; voicePartial="";
-  var mb=document.getElementById("micb"); if(mb)mb.className="micb rec";
-  var w=document.getElementById("wave"); if(w)w.innerHTML=waveHtml(0);
-  var l=document.getElementById("vlabel"); if(l)l.textContent=LANG==="ar"?"لا يوجد كلام الآن":"No speech yet";
-  var st=document.getElementById("vstop"); if(st)st.style.display="inline-flex";
-}
-function chooseVoiceCandidate(list){
-  var best="",score=-1,i;
-  for(i=0;i<list.length;i++){
-    var s=String(list[i]||"").trim(); if(!s)continue;
-    var p=aiParse(s,{kw:S.keywordRules,cats:S.categories}),sc=0;
-    if(p.amount!==null)sc+=5;if(p.currency)sc+=2;if(p.merchant)sc+=2;if(p.category)sc+=2;if(p.date)sc+=1;sc+=Math.min(2,s.length/40);
-    if(sc>score){score=sc;best=s;}
-  }
-  return best;
-}
-function renderVoiceTranscript(){
-  var lv=document.getElementById("vlive"); if(lv)lv.textContent=voiceChunks.concat(voicePartial?[voicePartial]:[]).join(" ").trim();
-}
-window.sanadNativeVoiceLevel=function(level){ voiceLevel=Number(level)||0; var w=document.getElementById("wave"); if(w&&voiceNativeActive)w.innerHTML=waveHtml(voiceLevel); };
-window.sanadNativeVoiceState=function(state,detail){
-  var l=document.getElementById("vlabel"),w=document.getElementById("wave");
-  if(!voiceNativeActive&&state!=="stopped")voiceUiStart();
-  if(state==="loading_model"){ if(l)l.textContent=LANG==="ar"?"جاري تجهيز محرك العربية داخل سند…":"Preparing offline Arabic engine…"; }
-  else if(state==="silent"||state==="starting"||state==="ready_locale"){ if(l)l.textContent=LANG==="ar"?"الميكروفون شغال — لا يوجد كلام الآن":"Microphone on — no speech now"; if(w)w.innerHTML=waveHtml(0); }
-  else if(state==="speech"){ if(l)l.textContent=LANG==="ar"?"صوت موجود… اتكلم براحتك":"Voice detected… keep talking"; }
-  else if(state==="processing"){ voiceAwaitingResult=true; if(l)l.textContent=LANG==="ar"?"انتهى التسجيل — جاري فهم الكلام بالعربي…":"Recording stopped — transcribing offline…"; }
-  else if(state==="stopped" && !voiceAwaitingResult){ voiceNativeActive=false; stopVoiceUI(); }
-};
-window.sanadNativeVoicePartial=function(text){ voicePartial=String(text||"").trim(); renderVoiceTranscript(); };
-window.sanadNativeVoiceChunk=function(payload){
-  try{ var list=typeof payload==="string"?JSON.parse(payload):payload; if(!Array.isArray(list))list=[String(payload||"")]; var s=chooseVoiceCandidate(list); voicePartial=""; if(s){ var last=voiceChunks.length?voiceChunks[voiceChunks.length-1]:""; if(N(last)!==N(s))voiceChunks.push(s); renderVoiceTranscript(); } }
-  catch(e){}
-};
-window.sanadNativeVoiceResult=window.sanadNativeVoiceChunk;
-window.sanadNativeVoiceDone=function(text){
-  var finalText=String(text||voiceChunks.concat(voicePartial?[voicePartial]:[]).join(" ")).replace(/\s+/g," ").trim();
-  voiceAwaitingResult=false; voiceNativeActive=false; voicePartial=""; voiceChunks=[]; stopVoiceUI();
-  var lv=document.getElementById("vlive"); if(lv)lv.textContent=finalText;
-  if(finalText){ UI.addText=finalText; runParse("voice"); }
-  else toast(LANG==="ar"?"ما سمعتش كلام واضح — جرّب تتكلم قريب من الميكروفون":"No clear speech detected","err");
-};
-window.sanadNativeVoiceError=function(msg){ voiceAwaitingResult=false; voiceNativeActive=false; stopVoiceUI(); var f=document.getElementById("vfall"); if(f)f.style.display="block"; if(msg)toast(String(msg),"err"); };
-function finishVoice(){
-  if(voiceAwaitingResult)return;
-  var A=nativeBridge();
-  if(A&&typeof A.stopVoice==="function"){
-    voiceAwaitingResult=true;
-    var l=document.getElementById("vlabel"); if(l)l.textContent=LANG==="ar"?"جاري إغلاق الميكروفون وفهم الكلام…":"Stopping microphone and transcribing…";
-    try{A.stopVoice();return;}catch(e){voiceAwaitingResult=false;}
-  }
-  if(rec){try{rec.stop();}catch(e){}}
-  var text=voiceChunks.concat(voicePartial?[voicePartial]:[]).join(" ").replace(/\s+/g," ").trim(); voiceNativeActive=false; voicePartial=""; voiceChunks=[]; stopVoiceUI();
-  if(text){UI.addText=text; var lv=document.getElementById("vlive"); if(lv)lv.textContent=text; runParse("voice");}
-}
-function startVoice(){
-  if(voiceNativeActive)return;
-  var A=nativeBridge();
-  if(A&&typeof A.startVoice==="function"){
-    voiceUiStart(); try{A.startVoice((S.settings&&S.settings.voiceLocale)||(LANG==="ar"?"ar-EG":"en-US"));return;}catch(e){voiceNativeActive=false;stopVoiceUI();}
-  }
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR){sampleVoice();return;}
-  try{
-    rec=new SR();rec.lang=LANG==="ar"?"ar-EG":"en-US";rec.interimResults=true;rec.continuous=true;voiceUiStart();
-    rec.onresult=function(e){var s="",i;for(i=0;i<e.results.length;i++)s+=e.results[i][0].transcript+" ";voicePartial=s.trim();renderVoiceTranscript();};
-    rec.onerror=function(){voiceNativeActive=false;stopVoiceUI();};rec.onend=function(){if(voiceNativeActive){try{rec.start();}catch(e){}}};rec.start();
-  }catch(e){voiceNativeActive=false;sampleVoice();}
-}
-function sampleVoice(){
-  var arr=LANG==="ar"?["دفعت 47 درهم في كارفور امبارح","قهوة 20","خدت المرتب 8000 درهم","دفعت 50 ريال أوبر امبارح"]:["spent 47 AED at Carrefour yesterday","coffee 20","got my salary 8000 AED","paid 50 SAR Uber yesterday"];
-  var s=arr[Math.floor(Math.random()*arr.length)],i=0;voiceUiStart();var iv=setInterval(function(){i+=2;voicePartial=s.slice(0,i);renderVoiceTranscript();if(i>=s.length){clearInterval(iv);voiceChunks=[s];voicePartial="";}},55);
-}
+/* V3.6: native Whisper voice is owned exclusively by injected v36_voice.js.
+   Web Speech API and sample/fake transaction fallbacks were deliberately removed. */
 
 /* ─────────── swipe ─────────── */
 var lastSwipe = 0;
@@ -3266,7 +3232,7 @@ document.addEventListener("click", function(e){
   else if (act === "back") back();
   else if (act === "add"){ UI.draft = null; UI.parsed = null; UI.bankResults = null; UI.editAll = false; UI.editing = false; UI.busy = false; go("add"); }
   else if (act === "addmode"){ UI.draft = null; UI.parsed = null; UI.bankResults = null; UI.editing = false; UI.editAll = false; UI.addMode = el.getAttribute("data-m"); go("add"); if(UI.addMode==="bank") setTimeout(requestNativeBankInbox,180); }
-  else if (act === "mode"){ if(UI.addMode==="voice"&&m!=="voice"&&voiceNativeActive) finishVoice(); UI.addMode = m; UI.draft = null; UI.parsed = null; if(m!=="bank") UI.bankResults = null; render(false); if(m==="bank") setTimeout(requestNativeBankInbox,180); }
+  else if (act === "mode"){ if(UI.addMode==="voice"&&m!=="voice"&&typeof window.finishVoice==="function") window.finishVoice(); UI.addMode = m; UI.draft = null; UI.parsed = null; if(m!=="bank") UI.bankResults = null; render(false); if(m==="bank") setTimeout(requestNativeBankInbox,180); }
   else if (act === "settings") go("settings");
   else if (act === "gocats") go("categories");
   else if (act === "gokw"){ closeSheet(); go("keywords"); }
@@ -3281,10 +3247,9 @@ document.addEventListener("click", function(e){
   else if (act === "ex"){ UI.addText = v; render(false); focusEnd("ai-in"); }
   else if (act === "exb"){ UI.addBank = EX_BANK[bi] || ""; UI.bankResults = null; render(false); focusEnd("bk-in"); }
   else if (act === "parse") runParse(el.getAttribute("data-k"));
-  else if (act === "mic") startVoice();
-  else if (act === "voicestop") finishVoice();
+  else if (act === "mic"){ if(typeof window.startVoice==="function") window.startVoice(); }
+  else if (act === "voicestop"){ if(typeof window.finishVoice==="function") window.finishVoice(); }
   else if (act === "banksync") refreshNativeBankInbox();
-  else if (act === "sample") sampleVoice();
   else if (act === "restart"){ UI.draft = null; UI.parsed = null; UI.bankResults = null; UI.editAll = false; render(false); }
   else if (act === "toggledit"){ UI.editAll = !UI.editAll; render(false); }
   else if (act === "editf"){ UI.editAll = true; render(false); }
@@ -3556,6 +3521,7 @@ function boot(){
   if (!S.settings.monthStartDay) S.settings.monthStartDay = 1;
   if (!S.settings.voiceLocale) S.settings.voiceLocale = S.settings.language === "ar" ? "ar-EG" : "en-US";
   render(false);
+  if(STORAGE_READ_ONLY){showStorageRecoveryOverlay();return;}
   if(S.pendingBankReviews.length) setTimeout(showPendingNativeReviews,120);
   var A=nativeBridge(); if(A && typeof A.drainPendingBankMessages==="function") setTimeout(function(){try{A.drainPendingBankMessages();}catch(e){}},300);
   if(A && typeof A.ensureAppNotifications==="function" && S.settings.notif && (S.settings.notif.budget||S.settings.notif.weekly||S.settings.notif.ai)) setTimeout(function(){try{A.ensureAppNotifications();}catch(e){}},900);
@@ -3567,7 +3533,7 @@ window.onerror = function(msg, src, line){
 try { boot(); } catch (err){
   document.getElementById("view").innerHTML = '<div class="errbox">' + esc(err && err.message ? err.message : String(err)) + '</div>';
 }
-window.SANAD_BUILD={version:"2.6-financial-core",persistence:"encrypted-sqlite-bridge+migration",voice:"whisper.cpp-base-q5_1-offline+continuous-recording+rms",bank:"initial-full-sync+incremental-refresh+review-only+sms-received-time+raw-preview+learning",learning:"merchant+weighted-patterns+raw-input-confirmed",backup:"password-aes256gcm-export+restore+legacy-json-import",visual:"original-ui-cairo+new-app-icon",planning:"balance-aware-safe-to-spend+cycle-reserves+safety-buffer+goals+recurring+debts+calendar+local-ask"};
+window.SANAD_BUILD={version:"3.6-critical-stabilization",persistence:"encrypted-sqlite-bridge+migration",voice:"whisper.cpp-base-q5_1-offline+continuous-recording+rms",bank:"initial-full-sync+incremental-refresh+review-only+sms-received-time+raw-preview+learning",learning:"merchant+weighted-patterns+raw-input-confirmed",backup:"password-aes256gcm-export+restore+legacy-json-import",visual:"original-ui-cairo+new-app-icon",planning:"balance-aware-safe-to-spend+cycle-reserves+safety-buffer+goals+recurring+debts+calendar+local-ask"};
 </script>
 </body>
 </html>
