@@ -7,6 +7,7 @@
 #include "whisper.h"
 
 #define TAG "SANAD-Whisper"
+#define SANAD_VERSION "3.6-critical-stabilization"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
@@ -21,6 +22,7 @@ static void asset_close(void *ctx) { AAsset_close((AAsset *)ctx); }
 JNIEXPORT jlong JNICALL
 Java_com_sanad_full_whisper_WhisperLib_initContextFromAsset(JNIEnv *env, jclass clazz, jobject assetManager, jstring pathStr) {
     (void)clazz;
+    LOGI("SANAD %s: initializing Whisper context", SANAD_VERSION);
     const char *path = (*env)->GetStringUTFChars(env, pathStr, NULL);
     AAssetManager *mgr = AAssetManager_fromJava(env, assetManager);
     AAsset *asset = AAssetManager_open(mgr, path, AASSET_MODE_STREAMING);
@@ -64,6 +66,7 @@ Java_com_sanad_full_whisper_WhisperLib_transcribe(JNIEnv *env, jclass clazz, jlo
     p.no_context = true;
     p.single_segment = false;
 
+    LOGI("SANAD %s: transcribe samples=%d threads=%d language=%s", SANAD_VERSION, (int)n, (int)p.n_threads, p.language);
     int rc = whisper_full(ctx, p, audio, n);
     (*env)->ReleaseFloatArrayElements(env, audioData, audio, JNI_ABORT);
     if (languageStr && language) (*env)->ReleaseStringUTFChars(env, languageStr, language);
