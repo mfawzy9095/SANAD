@@ -2,6 +2,26 @@ cmake_minimum_required(VERSION 3.22.1)
 project(sanad_whisper LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+option(SANAD_FORCE_NATIVE_OPTIMIZED "Force optimized native Whisper/ggml flags for all APK variants" ON)
+if(SANAD_FORCE_NATIVE_OPTIMIZED)
+    # AGP normally maps assembleDebug to CMAKE_BUILD_TYPE=Debug, which injects -O0.
+    # SANAD voice tests need production-like native performance, so force the native
+    # graph (including whisper.cpp/ggml C files) to Release and replace Debug flags too.
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "SANAD native build type" FORCE)
+    set(CMAKE_C_FLAGS_DEBUG "-O3 -g -DNDEBUG" CACHE STRING "" FORCE)
+    set(CMAKE_CXX_FLAGS_DEBUG "-O3 -g -DNDEBUG" CACHE STRING "" FORCE)
+    set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    message(STATUS "SANAD native build: type=Release; C=${CMAKE_C_FLAGS_RELEASE}; CXX=${CMAKE_CXX_FLAGS_RELEASE}")
+else()
+    message(STATUS "SANAD native build: type=${CMAKE_BUILD_TYPE}; C_DEBUG=${CMAKE_C_FLAGS_DEBUG}; CXX_DEBUG=${CMAKE_CXX_FLAGS_DEBUG}")
+endif()
+
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
