@@ -2,7 +2,7 @@ name: Build SANAD V3.6 Critical Stabilization
 
 on:
   push:
-    branches: [source-v36]
+    branches: [source-v36, voice-hybrid-groq-trial]
   workflow_dispatch:
 
 permissions:
@@ -57,11 +57,14 @@ jobs:
           mkdir -p /tmp/sanad-banktest
           javac -d /tmp/sanad-banktest app/src/main/java/com/sanad/full/BankSmsParser.java qa/TestBankSmsParser.java
           java -cp /tmp/sanad-banktest TestBankSmsParser
+          javac -d /tmp/sanad-banktest app/src/main/java/com/sanad/full/VoiceWav.java qa/TestVoiceWav.java
+          java -cp /tmp/sanad-banktest TestVoiceWav
           grep -q "versionCode 36" app/build.gradle
           grep -q "versionName '3.6-critical-stabilization'" app/build.gradle
           grep -q 'injectAssetJs("v36_voice.js")' app/src/main/java/com/sanad/full/MainActivity.java
           ! grep -R -qE 'SpeechRecognition|webkitSpeechRecognition|sampleVoice' app/src/main/assets/index.html app/src/main/assets/v36_voice.js
-          ! grep -q "android.permission.INTERNET" app/src/main/AndroidManifest.xml
+          grep -q "android.permission.INTERNET" app/src/main/AndroidManifest.xml
+          grep -q "android.permission.ACCESS_NETWORK_STATE" app/src/main/AndroidManifest.xml
 
       - name: Convert Debug APK to isolated V3.6 device test app
         shell: bash
@@ -140,7 +143,7 @@ jobs:
           grep -q "versionName='3.6-critical-stabilization-device-test'" device-test-badging.txt
           grep -q "application-label:'SANAD V3.6 Device Test'" device-test-badging.txt
           grep -q "android.permission.RECORD_AUDIO" device-test-permissions.txt
-          ! grep -q "android.permission.INTERNET" device-test-permissions.txt
+          grep -q "android.permission.INTERNET" device-test-permissions.txt
           unzip -l SANAD-V3.6-CRITICAL-DEVICE-TEST.apk | tee device-test-files.txt
           grep -q "assets/models/ggml-base-q5_1.bin" device-test-files.txt
           grep -q "assets/v36_voice.js" device-test-files.txt

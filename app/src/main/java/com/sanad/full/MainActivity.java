@@ -169,6 +169,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public boolean clearState(){
             try{
                 db.clearState();
+                VoiceCloudSettings.clear(MainActivity.this);
                 try{CryptoStore.deleteKey();}catch(Exception ignored){}
                 getSharedPreferences("sanad_prefs",MODE_PRIVATE).edit().clear().apply();
                 getSharedPreferences("sanad_reminder_state",MODE_PRIVATE).edit().clear().apply();
@@ -197,6 +198,8 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public void startVoice(String locale){ runOnUiThread(()->{ if(whisperVoice!=null) whisperVoice.start(locale); }); }
         @JavascriptInterface public void stopVoice(){ runOnUiThread(()->{ if(whisperVoice!=null) whisperVoice.stop(); }); }
+        @JavascriptInterface public boolean isVoiceCloudConfigured(){ return VoiceCloudSettings.isConfigured(MainActivity.this); }
+        @JavascriptInterface public void configureVoiceCloud(){ runOnUiThread(MainActivity.this::showVoiceCloudSettings); }
         @JavascriptInterface public void openAppSettings(){ runOnUiThread(()->{
             Intent i=new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()));
             startActivity(i);
@@ -224,6 +227,44 @@ public class MainActivity extends Activity {
                 startActivityForResult(i,REQ_IMPORT);
             });
         }
+    }
+
+    private void showVoiceCloudSettings(){
+        final boolean configured=VoiceCloudSettings.isConfigured(this);
+        final EditText input=new EditText(this);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        input.setHint("gsk_...");
+        int pad=(int)(20*getResources().getDisplayMetrics().density);
+        input.setPadding(pad,pad/2,pad,pad/2);
+        AlertDialog dialog=new AlertDialog.Builder(this)
+                .setTitle("التحويل الصوتي عبر Groq")
+                .setMessage(configured
+                        ?"الخدمة مفعّلة. أدخل مفتاحًا جديدًا لتغييره، أو اختر المحرك المحلي فقط. يُرسل الصوت إلى Groq عند الاتصال بالإنترنت."
+                        :"أدخل مفتاح Groq المجاني لتجربة Whisper Large V3 عبر الإنترنت. بدون مفتاح سيعمل Whisper المحلي.")
+                .setView(input)
+                .setPositiveButton("حفظ المفتاح",null)
+                .setNeutralButton("محلي فقط",null)
+                .setNegativeButton("إلغاء",(d,w)->{})
+                .create();
+        dialog.setOnShowListener(x->{
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+                try{
+                    VoiceCloudSettings.setKey(this,input.getText().toString());
+                    input.setText("");
+                    Toast.makeText(this,"تم تفعيل التحويل السحابي",Toast.LENGTH_SHORT).show();
+                    dialog.dismiss();
+                }catch(Exception e){
+                    input.setError("مفتاح غير صالح أو تعذر حفظه. تأكد أنه يبدأ بـ gsk_");
+                }
+            });
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v->{
+                VoiceCloudSettings.clear(this);
+                Toast.makeText(this,"سيعمل الصوت محليًا فقط",Toast.LENGTH_SHORT).show();
+                dialog.dismiss();
+            });
+        });
+        dialog.show();
     }
 
     private void showUnlockIfNeeded(boolean force){

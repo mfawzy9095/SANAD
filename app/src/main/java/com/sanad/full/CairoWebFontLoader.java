@@ -27,7 +27,7 @@ import java.util.Map;
  * Loads the real Cairo font from the Google Fonts provider exposed by Google Play Services,
  * then injects it into the SANAD WebView as an @font-face named "Cairo".
  *
- * The app itself does not need android.permission.INTERNET for this path; the system font
+ * The system font path itself does not use the app's INTERNET permission;
  * provider / Google Play Services handles acquisition and caching.
  */
 final class CairoWebFontLoader {

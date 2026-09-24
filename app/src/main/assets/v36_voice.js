@@ -6,9 +6,9 @@ window.__SANAD_VOICE_ENGINE__="3.6-critical-stabilization";
 var phase="idle";
 var lastPartial="";
 var voicePartial="";
-var autoStartToken=0;
 var finalizeWatchdog=null;
-var FINALIZE_WATCHDOG_MS=75000;
+var finalizationTimedOut=false;
+var FINALIZE_WATCHDOG_MS=150000;
 
 function bridge(){try{return window.Android||null;}catch(e){return null;}}
 function byId(id){return document.getElementById(id);}
@@ -41,6 +41,7 @@ function markIdle(){
 }
 function finalizeTimeout(){
   if(phase!=="finalizing")return;
+  finalizationTimedOut=true;
   phase="idle";
   clearWatchdog();
   markIdle();
@@ -54,6 +55,10 @@ function armFinalizeWatchdog(){
 
 window.startVoice=function(){
   if(phase!=="idle")return;
+  if(finalizationTimedOut){
+    say("التسجيل السابق لسه بينتهي — جرّب بعد قليل","Previous recording is still finishing — try shortly");
+    return;
+  }
   var A=bridge();
   if(!A||typeof A.startVoice!=="function"){
     markIdle();
@@ -61,6 +66,11 @@ window.startVoice=function(){
     if(typeof toast==="function")toast(isAr()?"محرك الصوت المحلي غير متاح":"Local voice engine unavailable","err");
     return;
   }
+  try{
+    if(typeof A.voiceStatus==="function"&&A.voiceStatus()==="processing"){
+      say("جاري إنهاء التسجيل السابق…","Finishing the previous recording…");return;
+    }
+  }catch(e){}
   clearWatchdog();clearTranscript();
   phase="starting";setMicBusy(true);setStop(false);
   say("جاري فتح الميكروفون…","Opening microphone…");
@@ -105,6 +115,17 @@ window.sanadNativeVoiceState=function(state,detail){
   if(state==="model_loading_background"){
     if(phase==="idle")say("Whisper بيتجهز…","Preparing Whisper…");return;
   }
+  if(state==="cloud_ready"){
+    if(phase==="idle")say("جاهز — اضغط واتكلم","Ready — tap and speak");
+    return;
+  }
+  if(state==="cloud_fallback"){
+    if(finalizationTimedOut)return;
+    phase="finalizing";setMicBusy(true);setStop(false);armFinalizeWatchdog();
+    say("الخدمة عبر الإنترنت غير متاحة — جاري التحويل على الهاتف…","Online voice unavailable — transcribing on this phone…");
+    if(String(detail).indexOf("HTTP 401")>=0 && typeof toast==="function")toast(isAr()?"مفتاح Groq غير صالح؛ سيعمل الصوت محليًا":"Groq key rejected; using local voice","err");
+    return;
+  }
   if(state==="model_ready"){
     if(phase==="idle"){markIdle();say("جاهز — اضغط واتكلم","Ready — tap and speak");}
     else if(phase==="listening")say("سامعك — اتكلم دلوقتي","Listening — speak now");
@@ -114,15 +135,21 @@ window.sanadNativeVoiceState=function(state,detail){
     phase="listening";markListening();say("تم إعادة فتح الميكروفون — كمل كلام","Microphone recovered — keep speaking");return;
   }
   if(state==="processing"){
+    if(finalizationTimedOut)return;
     phase="finalizing";setMicBusy(true);setStop(false);armFinalizeWatchdog();
-    say(detail==="waiting_model"?"تم التسجيل — جاري تجهيز Whisper ثم التحويل…":"جاري تحويل الصوت إلى نص…",
-        detail==="waiting_model"?"Recorded — preparing Whisper then transcribing…":"Transcribing speech…");return;
+    say(detail==="cloud_transcribing"?"جاري تحويل الصوت عبر الإنترنت…":(detail==="waiting_model"?"تم التسجيل — جاري تجهيز Whisper ثم التحويل…":"جاري تحويل الصوت إلى نص…"),
+        detail==="cloud_transcribing"?"Transcribing online…":(detail==="waiting_model"?"Recorded — preparing Whisper then transcribing…":"Transcribing speech…"));return;
   }
   if(state==="audio_open_error"||state==="audio_error"||state==="model_error"){
     clearWatchdog();phase="idle";markIdle();
     if(state==="audio_open_error")say("الميكروفون لم يفتح","Microphone could not open");
     else if(state==="audio_error")say("فشل قراءة الميكروفون","Microphone read failed");
     else say("فشل تحميل Whisper","Whisper failed to load");
+    return;
+  }
+  if(state==="stopped"&&finalizationTimedOut){
+    finalizationTimedOut=false;
+    markIdle();
     return;
   }
   if(state==="stopped"&&phase!=="finalizing"){
@@ -145,6 +172,7 @@ window.sanadNativeVoiceChunk=function(payload){
 };
 window.sanadNativeVoiceResult=window.sanadNativeVoiceChunk;
 window.sanadNativeVoiceDone=function(text){
+  if(finalizationTimedOut)return;
   var finalText=String(text||lastPartial||voicePartial||"").replace(/\s+/g," ").trim();
   clearWatchdog();phase="idle";markIdle();voicePartial="";lastPartial="";
   var v=byId("vlive");if(v)v.textContent=finalText;
@@ -152,6 +180,7 @@ window.sanadNativeVoiceDone=function(text){
   else{say("ما وصلنيش نص واضح — جرّب تاني","No clear text — try again");if(typeof toast==="function")toast(isAr()?"ما وصلنيش نص واضح":"No clear text","err");}
 };
 window.sanadNativeVoiceError=function(msg){
+  if(finalizationTimedOut)return;
   clearWatchdog();phase="idle";markIdle();say("حصل خطأ في الصوت","Voice error");if(msg&&typeof toast==="function")toast(String(msg),"err");
 };
 window.sanadVoiceDiagnostics=function(){
@@ -170,15 +199,5 @@ if(typeof MutationObserver!=="undefined"&&document&&typeof document.createElemen
   });
   try{diagObserver.observe(document.documentElement,{subtree:true,childList:true});}catch(e){}
 }
-
-// Keep the existing interaction: entering Voice automatically opens the microphone.
-document.addEventListener("click",function(e){
-  var x=e.target&&e.target.closest?e.target.closest("[data-act]"):null;if(!x)return;
-  var act=x.getAttribute("data-act"),mode=x.getAttribute("data-m");
-  if((act==="mode"||act==="addmode")&&mode==="voice"){
-    var token=++autoStartToken;
-    setTimeout(function(){if(token!==autoStartToken)return;if(byId("micb")&&phase==="idle")window.startVoice();},260);
-  }
-},false);
 
 })();

@@ -42,7 +42,7 @@ ok('JS build version unified',/version:"3\.6-critical-stabilization"/.test(html)
 
 const v36=text('app/src/main/assets/v36_voice.js');
 ok('voice runtime version unified',/__SANAD_VOICE_ENGINE__="3\.6-critical-stabilization"/.test(v36));
-ok('finalize watchdog configured',/FINALIZE_WATCHDOG_MS=75000/.test(v36)&&/armFinalizeWatchdog/.test(v36));
+ok('finalize watchdog configured',/FINALIZE_WATCHDOG_MS=150000/.test(v36)&&/armFinalizeWatchdog/.test(v36));
 
 // Runtime JS regression with a fake native bridge.
 let starts=0,stops=0,parses=0,watchdog=null;
@@ -64,7 +64,7 @@ global.document={
 };
 global.MutationObserver=function(){this.observe=()=>{};};
 const realSetTimeout=global.setTimeout,realClearTimeout=global.clearTimeout;
-global.setTimeout=(fn,ms)=>{if(ms===75000){watchdog=fn;return 99;}return 98;};
+global.setTimeout=(fn,ms)=>{if(ms===150000){watchdog=fn;return 99;}return 98;};
 global.clearTimeout=(id)=>{if(id===99)watchdog=null;};
 vm.runInThisContext(v36,{filename:'v36_voice.js'});
 startVoice();
@@ -75,8 +75,15 @@ sanadNativeVoicePartial('دفعت خمسين درهم في كارفور');
 ok('partial text visible',els.vlive.textContent.includes('كارفور'));
 finishVoice();
 ok('finish reaches native stop',stops===1&&els.micb.disabled===true&&typeof watchdog==='function');
+sanadNativeVoiceState('processing','cloud_transcribing');
+ok('cloud processing stays busy',els.micb.disabled===true&&els.vlabel.textContent.includes('الإنترنت'));
+sanadNativeVoiceState('cloud_fallback','HTTP 429');
+ok('cloud failure keeps the same recording in finalization',els.micb.disabled===true&&els.vlabel.textContent.includes('الهاتف'));
 watchdog();
 ok('watchdog recovers UI from finalizing',els.micb.disabled===false&&els.vstop.style.display==='none');
+sanadNativeVoiceDone('late result');
+ok('late cloud result after timeout is ignored',parses===0);
+sanadNativeVoiceState('stopped','ar');
 startVoice();
 sanadNativeVoiceState('listening','model_ready');
 sanadNativeVoiceDone('دفعت خمسين درهم في كارفور');
