@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * V3.6 deterministic offline voice recorder.
+ * One recording for cloud Whisper Large V3 and the bundled offline fallback.
  *
  * The microphone opens immediately after a tap. Model loading happens in
  * parallel, so recording never waits on Whisper initialization.
@@ -43,7 +43,9 @@ public final class WhisperVoiceEngine {
     private final ExecutorService audioWorker=Executors.newSingleThreadExecutor();
     private final ExecutorService inferenceWorker=Executors.newSingleThreadExecutor();
     private final AtomicBoolean recording=new AtomicBoolean(false);
+    private final AtomicBoolean processing=new AtomicBoolean(false);
     private final AtomicBoolean partialBusy=new AtomicBoolean(false);
+    private final GroqVoiceTranscriber cloud;
 
     private volatile AudioRecord recorder;
     private volatile long whisperCtx=0L;
@@ -52,6 +54,8 @@ public final class WhisperVoiceEngine {
     private volatile boolean pendingPermissionStart=false;
     private volatile boolean pendingPrepare=false;
     private volatile String language="ar";
+    private volatile String lastEngine="none";
+    private volatile String lastCloudError="none";
 
     private volatile int lastAudioSource=0;
     private volatile int lastReadError=0;
@@ -63,6 +67,7 @@ public final class WhisperVoiceEngine {
     public WhisperVoiceEngine(Activity activity,Listener listener){
         this.activity=activity;
         this.listener=listener;
+        this.cloud=new GroqVoiceTranscriber(activity);
     }
 
     public boolean isRecording(){ return recording.get(); }
@@ -75,13 +80,18 @@ public final class WhisperVoiceEngine {
                 ";peak="+lastPeak+
                 ";silenced="+lastClientSilenced+
                 ";recording="+recording.get()+
-                ";model="+(whisperCtx!=0L?"ready":(modelLoading?"loading":(modelFailed?"failed":"not_loaded")));
+                ";model="+(whisperCtx!=0L?"ready":(modelLoading?"loading":(modelFailed?"failed":"not_loaded")))+
+                ";cloudConfigured="+VoiceCloudSettings.isConfigured(activity)+
+                ";lastEngine="+lastEngine+
+                ";lastCloudError="+lastCloudError;
     }
 
     public String status(){
         if(activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)
             return "permission_required";
         if(recording.get()) return "recording";
+        if(processing.get()) return "processing";
+        if(cloud.canTryCloud()) return "cloud_ready";
         if(modelLoading) return "loading_model";
         if(modelFailed) return "model_error";
         return whisperCtx!=0L?"ready":"model_not_ready";
@@ -95,8 +105,12 @@ public final class WhisperVoiceEngine {
             return;
         }
         pendingPrepare=false;
-        if(whisperCtx==0L && !modelLoading) warmup();
-        listener.onState(whisperCtx!=0L?"ready":"model_loading_background",language);
+        if(cloud.canTryCloud()) {
+            listener.onState("cloud_ready",language);
+        } else {
+            if(whisperCtx==0L && !modelLoading) warmup();
+            listener.onState(whisperCtx!=0L?"ready":"model_loading_background",language);
+        }
     }
 
     public void warmup(){
@@ -105,10 +119,7 @@ public final class WhisperVoiceEngine {
         modelFailed=false;
         inferenceWorker.execute(()->{
             try{
-                long ctx=WhisperLib.initContextFromAsset(activity.getAssets(),"models/ggml-base-q5_1.bin");
-                if(ctx==0L) throw new IllegalStateException("model init failed");
-                whisperCtx=ctx;
-                modelFailed=false;
+                loadLocalModel();
                 listener.onState("model_ready",language);
             }catch(Throwable t){
                 modelFailed=true;
@@ -120,8 +131,16 @@ public final class WhisperVoiceEngine {
         });
     }
 
+    private void loadLocalModel() {
+        if(whisperCtx!=0L) return;
+        long ctx=WhisperLib.initContextFromAsset(activity.getAssets(),"models/ggml-base-q5_1.bin");
+        if(ctx==0L) throw new IllegalStateException("model init failed");
+        whisperCtx=ctx;
+        modelFailed=false;
+    }
+
     public void start(String locale){
-        if(recording.get()) return;
+        if(recording.get() || processing.get()) return;
 
         String l=locale==null?"ar":locale.toLowerCase(Locale.ROOT);
         language=l.startsWith("en")?"en":"ar";
@@ -136,8 +155,9 @@ public final class WhisperVoiceEngine {
 
         pendingPermissionStart=false;
 
-        // Start model initialization in parallel. Do NOT wait for it before opening the mic.
-        if(whisperCtx==0L && !modelLoading) warmup();
+        // Start the local model in parallel only when it is the selected path.
+        boolean cloudAvailable=cloud.canTryCloud();
+        if(!cloudAvailable && whisperCtx==0L && !modelLoading) warmup();
 
         int rawMin=AudioRecord.getMinBufferSize(
                 SAMPLE_RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
@@ -161,7 +181,7 @@ public final class WhisperVoiceEngine {
                 throw new IllegalStateException("AudioRecord init/start failed");
 
             recording.set(true);
-            listener.onState("listening",modelLoading?"model_loading":"model_ready");
+            listener.onState("listening",cloudAvailable?"cloud_ready":(modelLoading?"model_loading":"model_ready"));
             audioWorker.execute(()->recordLoop(min));
         }catch(Throwable t){
             safeRelease();
@@ -298,7 +318,7 @@ public final class WhisperVoiceEngine {
                     listener.onState(speech?"speech":"listening",language);
                 }
 
-                if(whisperCtx!=0L && signal &&
+                if(!cloud.canTryCloud() && whisperCtx!=0L && signal &&
                         now-lastPartial>=PARTIAL_INTERVAL_MS &&
                         pcm.size()>=SAMPLE_RATE*2){
                     lastPartial=now;
@@ -354,25 +374,37 @@ public final class WhisperVoiceEngine {
             return;
         }
 
-        listener.onState("processing",modelLoading?"waiting_model":"transcribing");
+        processing.set(true);
+        listener.onState("processing",cloud.canTryCloud()?"cloud_transcribing":(modelLoading?"waiting_model":"transcribing"));
 
-        // The warmup task was queued before this final task, so the same single-thread
-        // inference executor guarantees model initialization finishes first.
+        // The single inference worker serializes any earlier local warmup and this
+        // final transcription. Cloud failures reuse these exact PCM bytes locally.
         inferenceWorker.execute(()->{
             try{
-                if(whisperCtx==0L){
-                    listener.onError("نموذج Whisper المحلي لم يتم تحميله");
-                    return;
+                if(cloud.canTryCloud()){
+                    try {
+                        String text=cloud.transcribe(bytes,SAMPLE_RATE,language);
+                        lastEngine="groq_whisper_large_v3";
+                        lastCloudError="none";
+                        listener.onDone(text);
+                        return;
+                    } catch(Exception cloudError) {
+                        // A failed request never discards the recording or creates a transaction.
+                        lastCloudError=cloudError.getClass().getSimpleName()+":"+String.valueOf(cloudError.getMessage());
+                        listener.onState("cloud_fallback",lastCloudError);
+                    }
                 }
-
+                if(whisperCtx==0L) loadLocalModel();
                 String text=transcribe(bytes);
+                lastEngine="local_whisper_base";
                 if(text.isEmpty())
-                    listener.onError("وصل الصوت إلى Whisper لكن لم يتم استخراج نص واضح");
+                    listener.onError("لم يتم استخراج نص واضح من الصوت");
                 else
                     listener.onDone(text);
             }catch(Throwable t){
-                listener.onError("حصل خطأ أثناء تحويل الصوت إلى نص");
+                listener.onError("تعذر تحويل الصوت محليًا. راجع تشخيص الميكروفون وحاول مرة أخرى.");
             }finally{
+                processing.set(false);
                 listener.onState("stopped",language);
             }
         });

@@ -394,7 +394,7 @@ T.ar = {
   proc:"سند يقرأ النص…", procV:"سند يسمعك…", procB:"سند يقرأ الرسائل ويستخرج العمليات…",
   voicePrompt:"اضغط وقل مصروفك", voiceEx:"مثال: دفعت 30 درهم قهوة في ستاربكس", listening:"يستمع…",
   voiceHint:"تحدث بجملة طبيعية واحدة", voiceNo:"المتصفح لا يدعم الإدخال الصوتي هنا", voiceTry:"جرّب عينة صوتية",
-  bankTitle:"الصق رسائل البنك (رسالة أو أكثر)", bankPh:"Hello Mohamed Abd,\nYour du Pay Card ending in 7105 has been used for AED 9.00 at ALSURUR TRADITIONAL RE. …",
+  bankTitle:"الصق رسائل البنك (رسالة أو أكثر)", bankPh:"الصق رسالة البنك هنا لمراجعة العملية…",
   bankHint:"سند يقرأ كل الرسائل دفعة واحدة: يستخرج العمليات، يتجاهل المرفوضة وغير المالية، وما يخلط الرصيد أو الرسوم بالمبلغ.",
   parseBank:"استخرج العمليات من الرسائل", examples:"جرّب مثالًا",
   bankFound:"رسائل مالية للمراجعة", bankIgnored:"تم استبعاد {n} رسالة غير مالية أو أمنية",
@@ -496,7 +496,7 @@ T.en = {
   proc:"Sanad is reading…", procV:"Sanad is listening…", procB:"Sanad is reading messages and extracting transactions…",
   voicePrompt:"Tap and say your expense", voiceEx:"e.g. spent 30 AED on coffee at Starbucks", listening:"Listening…",
   voiceHint:"Speak one natural sentence", voiceNo:"Voice input is not supported in this browser", voiceTry:"Try a voice sample",
-  bankTitle:"Paste bank messages (one or many)", bankPh:"Hello Mohamed Abd,\nYour du Pay Card ending in 7105 has been used for AED 9.00 at ALSURUR TRADITIONAL RE. …",
+  bankTitle:"Paste bank messages (one or many)", bankPh:"Paste a bank message here to review the transaction…",
   bankHint:"Sanad reads all messages at once: extracts transactions, skips declined and non-financial ones, and never mistakes balance or fees for the amount.",
   parseBank:"Extract transactions from messages", examples:"Try an example",
   bankFound:"Financial messages to review", bankIgnored:"Excluded {n} non-financial/security message(s)",
@@ -1427,7 +1427,7 @@ var AI = {
 var KEY = "sanad.v7";
 var S = {
   onboarded:false,
-  user:{name:"محمد", nameEn:"Mohamed"},
+  user:{name:"مستخدم", nameEn:"User"},
   settings:{language:"ar", baseCurrency:"AED", theme:"light", monthStartDay:1, voiceLocale:"ar-EG",
     ai:{autoLearn:true, minConfidence:0.6},
     notif:{budget:true, weekly:true, ai:true}},
@@ -1497,8 +1497,8 @@ function normalizeLoaded(p){
   if (!p || typeof p!=="object" || !p.settings || typeof p.settings!=="object") return false;
   var i,k,c,a,tx,n,nowIso=new Date().toISOString(),seen={},clean=[],builtin={},def,rule,scores,total,id;
 
-  if (!p.user || typeof p.user!=="object") p.user={name:"محمد",nameEn:"Mohamed"};
-  p.user.name=String(p.user.name||"محمد").slice(0,120); p.user.nameEn=String(p.user.nameEn||"Mohamed").slice(0,120);
+  if (!p.user || typeof p.user!=="object") p.user={name:"مستخدم",nameEn:"User"};
+  p.user.name=String(p.user.name||"مستخدم").slice(0,120); p.user.nameEn=String(p.user.nameEn||"User").slice(0,120);
 
   if (p.settings.language!=="ar" && p.settings.language!=="en") p.settings.language="ar";
   if (!Cur.valid(p.settings.baseCurrency)) p.settings.baseCurrency="AED";
@@ -1959,13 +1959,10 @@ function notifCount(s){
 }
 
 /* ─────────── SMART ADD ─────────── */
-var DUPAY1 = "Hello Mohamed Abd,\nYour du Pay Card ending in 7105 has been used for AED 9.00 at ALSURUR TRADITIONAL RE. Your available balance is now AED 302.97 and your transaction ID is DEM77QAUGN. Fee AED 0.00, VAT AED 0.00.\n\nHello Mohamed Abd,\nYour du Pay Card ending in 7105 has been used for AED 49.64 at Noon Food. Your available balance is now AED 51.09 and your transaction ID is DET97XKPSL. Fee AED 0.00.";
-var DUPAY2 = "Hello Mohamed Abd,\nYour transaction of AED 80.00 at HNS RESTAURANT on your du Pay Card ending in 7105 has been declined due to insufficient Balance. If you have any questions, please visit dupay.ae or call us at 80038729.";
-var DUPAY3 = "Hello Mohamed Abd,\nYou've received AED 3,500.00 to your du Pay wallet. Your available balance is now AED 3,500.53, and the transaction ID is: DG108RWYIQ";
 var EX_TEXT = {ar:["دفعت 47 درهم في كارفور امبارح","قهوة 20","خدت المرتب 8000 درهم","دفعت 50 ريال أوبر امبارح","فاتورة كهرباء 180"],
   en:["spent 47 AED at Carrefour yesterday","coffee 20","got my salary 8000 AED","paid 50 SAR Uber yesterday","electricity bill 180"]};
-var EX_BANK = [DUPAY1, DUPAY2, DUPAY3, "تم خصم 42.50 درهم من بطاقتكم **** 1234 لدى كارفور. الرصيد 5,240.10 درهم"];
-var EX_BANK_LBL = ["du Pay: عمليتين شراء (دفعة واحدة)","du Pay: عملية مرفوضة (تُتجاهل)","du Pay: إيداع محفظة (دخل)","رسالة بنك بالعربية"];
+var EX_BANK = [];
+var EX_BANK_LBL = [];
 
 function scrAdd(){
   var m = UI.addMode, i, body = "", chips = "", exs;
@@ -1983,6 +1980,7 @@ function scrAdd(){
       '<div id="vlabel" style="font-size:15px;font-weight:700">'+esc(t("voicePrompt"))+'</div>'+
       '<div class="hint" style="margin-top:6px">'+esc(t("voiceEx"))+'</div>'+
       '<button class="btn s sm" id="vstop" data-act="voicestop" style="display:none;margin-top:10px">'+ic("check",16)+' '+(LANG==="ar"?"إنهاء":"Finish")+'</button></div>'+
+      '<button class="chip sm" data-act="voicecloud">'+(LANG==="ar"?"إعداد الصوت عبر الإنترنت":"Online voice settings")+'</button>'+
       '<div id="vfall" class="card cp" style="width:100%;background:var(--amber-tint);border-color:transparent;text-align:center;display:'+(supported ? "none" : "block")+'">'+
       '<p style="margin:0 0 10px;font-size:13px;color:var(--ink-2);line-height:1.6">'+ic("alert",14)+' '+esc(t("voiceNo"))+'</p>'+
       '<button class="btn s sm" data-act="sample">'+ic("mic",16)+' '+esc(t("voiceTry"))+'</button></div></div></div>';
@@ -2609,7 +2607,7 @@ function scrCards(){
     '<button class="'+(UI.cardKind === "bank" ? "on" : "")+'" data-act="setkind" data-v="bank">'+ic("bld",13)+' '+esc(t("kindBank"))+'</button>'+
     '<button class="'+(UI.cardKind === "wallet" ? "on" : "")+'" data-act="setkind" data-v="wallet">'+ic("wallet",13)+' '+esc(t("kindWallet"))+'</button>'+
     '<button class="'+(UI.cardKind === "cash" ? "on" : "")+'" data-act="setkind" data-v="cash">'+ic("usd",13)+' '+esc(t("kindCash"))+'</button></div>'+
-    '<div class="fl" style="margin-top:12px">'+esc(t("last4"))+'</div><input class="field" id="cdlast4" inputmode="numeric" maxlength="4" placeholder="7105">'+
+    '<div class="fl" style="margin-top:12px">'+esc(t("last4"))+'</div><input class="field" id="cdlast4" inputmode="numeric" maxlength="4" placeholder="0000">'+
     '<div class="fl" style="margin-top:12px">'+(LANG==="ar"?'الرصيد الحالي (اختياري)':'Current balance (optional)')+'</div><input class="field" id="cdbalance" type="number" inputmode="decimal" placeholder="0">'+
     '<div class="fl" style="margin-top:12px">'+esc(t("color"))+'</div><div class="chips wrap">';
   for (i=0;i<PALETTE.length;i++){
@@ -3249,6 +3247,7 @@ document.addEventListener("click", function(e){
   else if (act === "parse") runParse(el.getAttribute("data-k"));
   else if (act === "mic"){ if(typeof window.startVoice==="function") window.startVoice(); }
   else if (act === "voicestop"){ if(typeof window.finishVoice==="function") window.finishVoice(); }
+  else if (act === "voicecloud"){ var voiceBridge=nativeBridge(); if(voiceBridge&&typeof voiceBridge.configureVoiceCloud==="function") voiceBridge.configureVoiceCloud(); }
   else if (act === "banksync") refreshNativeBankInbox();
   else if (act === "restart"){ UI.draft = null; UI.parsed = null; UI.bankResults = null; UI.editAll = false; render(false); }
   else if (act === "toggledit"){ UI.editAll = !UI.editAll; render(false); }
@@ -3435,7 +3434,7 @@ document.addEventListener("click", function(e){
     try { if(A && typeof A.clearState==="function") cleared=A.clearState()!==false; } catch(e){ cleared=false; }
     if(!cleared){ toast(LANG==="ar"?"تعذر حذف البيانات؛ لم يتم تغيير الحساب":"Could not delete local data; account was not changed","err"); return; }
     try { localStorage.removeItem(KEY); } catch(e){}
-    S={onboarded:false,user:{name:"محمد",nameEn:"Mohamed"},
+    S={onboarded:false,user:{name:"مستخدم",nameEn:"User"},
       settings:{language:oldLang,baseCurrency:oldCur,theme:"light",monthStartDay:1,voiceLocale:oldLang==="ar"?"ar-EG":"en-US",ai:{autoLearn:true,minConfidence:0.6},notif:{budget:true,weekly:true,ai:true}},
       categories:CATS.slice(),accounts:defaultAccounts(),keywordRules:[],transactions:[],budgets:{monthly:0,categories:{}},merchantRules:{},patternRules:{},pendingBankReviews:[],goals:[],recurring:[],debts:[],v2:{safetyBuffer:0}};
     UI.stack=[{r:"home",p:{}}]; UI.draft=null; UI.parsed=null; UI.bankResults=null; UI.addText=""; UI.addBank="";
@@ -3533,7 +3532,7 @@ window.onerror = function(msg, src, line){
 try { boot(); } catch (err){
   document.getElementById("view").innerHTML = '<div class="errbox">' + esc(err && err.message ? err.message : String(err)) + '</div>';
 }
-window.SANAD_BUILD={version:"3.6-critical-stabilization",persistence:"encrypted-sqlite-bridge+migration",voice:"whisper.cpp-base-q5_1-offline+continuous-recording+rms",bank:"initial-full-sync+incremental-refresh+review-only+sms-received-time+raw-preview+learning",learning:"merchant+weighted-patterns+raw-input-confirmed",backup:"password-aes256gcm-export+restore+legacy-json-import",visual:"original-ui-cairo+new-app-icon",planning:"balance-aware-safe-to-spend+cycle-reserves+safety-buffer+goals+recurring+debts+calendar+local-ask"};
+window.SANAD_BUILD={version:"3.6-critical-stabilization",persistence:"encrypted-sqlite-bridge+migration",voice:"groq-whisper-large-v3-optional+whisper.cpp-base-q5_1-fallback",bank:"initial-full-sync+incremental-refresh+review-only+sms-received-time+raw-preview+learning",learning:"merchant+weighted-patterns+raw-input-confirmed",backup:"password-aes256gcm-export+restore+legacy-json-import",visual:"original-ui-cairo+new-app-icon",planning:"balance-aware-safe-to-spend+cycle-reserves+safety-buffer+goals+recurring+debts+calendar+local-ask"};
 </script>
 </body>
 </html>

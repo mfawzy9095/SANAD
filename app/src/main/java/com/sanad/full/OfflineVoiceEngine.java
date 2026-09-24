@@ -5,10 +5,7 @@ import android.app.Activity;
 import android.content.pm.PackageManager;
 
 /**
- * V3.6 deterministic offline voice engine.
- *
- * One engine only: bundled whisper.cpp.
- * No Android SpeechRecognizer and no network fallback.
+ * Cloud Whisper when configured and online, bundled Whisper otherwise.
  */
 public final class OfflineVoiceEngine {
     public interface Listener {
@@ -40,7 +37,7 @@ public final class OfflineVoiceEngine {
     public boolean isRecording(){ return whisper.isRecording(); }
 
     public String diagnostics(){
-        return "engine=whisper_only;"+whisper.diagnostics();
+        return "engine=hybrid_whisper;"+whisper.diagnostics();
     }
 
     public String status(){

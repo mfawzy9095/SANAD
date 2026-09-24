@@ -1,5 +1,9 @@
 # SANAD V3.6 — Review Entry Point
 
+The current workspace also contains an **experimental hybrid voice path**. See
+`HYBRID_VOICE_TRIAL.md` for setup, behavior, and validation limits. The V3.6
+handoff below describes the original offline-only baseline.
+
 Current release: **3.6-critical-stabilization** (`versionCode 36`).
 
 Start with:
