@@ -1,0 +1,136 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownsUser(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function allowedUserCollection(name) {
+      return name == 'accounts'
+        || name == 'instruments'
+        || name == 'transactions'
+        || name == 'categories'
+        || name == 'tags'
+        || name == 'people'
+        || name == 'recurring'
+        || name == 'budgets'
+        || name == 'savings'
+        || name == 'receipts'
+        || name == 'tombstones'
+        || name == 'devices';
+    }
+
+    function validOwnedCreate(uid, recordId) {
+      return request.resource.data.ownerUid == uid
+        && request.resource.data.id == recordId
+        && request.resource.data.schemaVersion is int
+        && request.resource.data.schemaVersion >= 1
+        && request.resource.data.revision == 1
+        && request.resource.data.deviceId is string
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function validOwnedUpdate(uid, recordId) {
+      return resource.data.ownerUid == uid
+        && request.resource.data.ownerUid == uid
+        && request.resource.data.id == recordId
+        && request.resource.data.schemaVersion is int
+        && request.resource.data.schemaVersion >= resource.data.schemaVersion
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.deviceId is string
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function familyMember(familyId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/families/$(familyId)/members/$(request.auth.uid));
+    }
+
+    function familyOwner(familyId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/families/$(familyId)).data.ownerUid == request.auth.uid;
+    }
+
+    match /users/{uid} {
+      allow read: if ownsUser(uid);
+      allow create: if ownsUser(uid) && request.resource.data.uid == uid;
+      allow update: if ownsUser(uid)
+        && resource.data.uid == uid
+        && request.resource.data.uid == uid;
+      allow delete: if false;
+
+      match /{collection}/{recordId} {
+        allow read: if ownsUser(uid) && allowedUserCollection(collection);
+        allow create: if ownsUser(uid)
+          && allowedUserCollection(collection)
+          && validOwnedCreate(uid, recordId);
+        allow update: if ownsUser(uid)
+          && allowedUserCollection(collection)
+          && validOwnedUpdate(uid, recordId);
+
+        // Normal clients use soft-delete + tombstones.
+        allow delete: if false;
+      }
+    }
+
+    match /families/{familyId} {
+      allow read: if familyMember(familyId);
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.id == familyId;
+      allow update: if familyOwner(familyId)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.id == resource.data.id;
+      allow delete: if false;
+
+      match /members/{uid} {
+        allow read: if familyMember(familyId);
+
+        // Membership is written by trusted backend/Admin SDK after an invite is accepted.
+        allow create, update, delete: if false;
+      }
+
+      match /sharedTransactions/{shareId} {
+        allow read: if familyMember(familyId);
+
+        allow create: if familyMember(familyId)
+          && request.resource.data.id == shareId
+          && request.resource.data.familyId == familyId
+          && request.resource.data.ownerUid == request.auth.uid
+          && request.resource.data.revision == 1
+          && request.resource.data.updatedAt == request.time;
+
+        allow update: if familyMember(familyId)
+          && resource.data.ownerUid == request.auth.uid
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.familyId == familyId
+          && request.resource.data.revision == resource.data.revision + 1
+          && request.resource.data.updatedAt == request.time;
+
+        // Owner may remove the sanitized shared projection on unshare.
+        allow delete: if familyMember(familyId)
+          && resource.data.ownerUid == request.auth.uid;
+      }
+    }
+
+    // Server/Admin-only surfaces. Client enumeration is explicitly denied.
+    match /familyInvites/{inviteId} {
+      allow read, write: if false;
+    }
+
+    match /phoneDirectory/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
