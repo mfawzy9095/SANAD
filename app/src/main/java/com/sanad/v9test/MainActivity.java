@@ -54,6 +54,8 @@ public final class MainActivity extends Activity {
     private Uri cameraOutputUri;
     private String pendingDownloadName;
     private byte[] pendingDownloadBytes;
+    private long backgroundedAtMs = 0L;
+    private boolean authInProgress = false;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -275,6 +277,7 @@ public final class MainActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQ_DEVICE_AUTH) {
+            authInProgress = false;
             notifyJsDeviceAuthResult(resultCode == RESULT_OK);
             return;
         }
@@ -437,19 +440,24 @@ public final class MainActivity extends Activity {
                         android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL);
                 BiometricPrompt prompt = builder.build();
                 CancellationSignal signal = new CancellationSignal();
+                authInProgress = true;
                 prompt.authenticate(signal, getMainExecutor(), new BiometricPrompt.AuthenticationCallback() {
                     @Override
                     public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                        authInProgress = false;
                         notifyJsDeviceAuthResult(true);
                     }
 
                     @Override
                     public void onAuthenticationError(int errorCode, CharSequence errString) {
+                        authInProgress = false;
                         notifyJsDeviceAuthResult(false);
                     }
                 });
                 return;
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+                authInProgress = false;
+            }
         }
         Intent confirm = km.createConfirmDeviceCredentialIntent("SANAD — سند", subtitle);
         if (confirm == null) {
@@ -457,8 +465,10 @@ public final class MainActivity extends Activity {
             return;
         }
         try {
+            authInProgress = true;
             startActivityForResult(confirm, REQ_DEVICE_AUTH);
         } catch (ActivityNotFoundException e) {
+            authInProgress = false;
             notifyJsDeviceAuthResult(false);
         }
     }
@@ -469,6 +479,41 @@ public final class MainActivity extends Activity {
         if (requestCode == REQ_NOTIFICATION_PERMISSION) {
             boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
             notifyJsPermissionResult(granted);
+        }
+    }
+
+    private void notifyJsAppBackgrounded(long atMs) {
+        if (webView == null) return;
+        webView.evaluateJavascript(
+                "window.sanadAppBackgrounded&&window.sanadAppBackgrounded(" + atMs + ");",
+                null
+        );
+    }
+
+    private void notifyJsAppForegrounded(long atMs) {
+        if (webView == null) return;
+        webView.evaluateJavascript(
+                "window.sanadAppForegrounded&&window.sanadAppForegrounded(" + atMs + ");",
+                null
+        );
+    }
+
+    @Override
+    protected void onStop() {
+        if (!authInProgress) {
+            backgroundedAtMs = System.currentTimeMillis();
+            notifyJsAppBackgrounded(backgroundedAtMs);
+        }
+        super.onStop();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (!authInProgress && backgroundedAtMs > 0L) {
+            long now = System.currentTimeMillis();
+            notifyJsAppForegrounded(now);
+            backgroundedAtMs = 0L;
         }
     }
 
