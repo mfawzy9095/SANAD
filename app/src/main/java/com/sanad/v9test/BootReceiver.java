@@ -10,7 +10,9 @@ public final class BootReceiver extends BroadcastReceiver {
         if (intent == null) return;
         String action = intent.getAction();
         if (Intent.ACTION_BOOT_COMPLETED.equals(action) ||
-                "android.intent.action.MY_PACKAGE_REPLACED".equals(action)) {
+                "android.intent.action.MY_PACKAGE_REPLACED".equals(action) ||
+                Intent.ACTION_TIME_CHANGED.equals(action) ||
+                Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
             NotificationScheduler.rescheduleStored(context);
         }
     }
