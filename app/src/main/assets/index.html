@@ -297,11 +297,6 @@ details.adv-details summary::-webkit-details-marker{display:none}
 details.adv-details summary::after{content:"▾";font-size:12px;color:var(--text-3);transition:transform .2s}
 details.adv-details[open] summary::after{transform:rotate(180deg)}
 details.adv-details .adv-body{padding:0 14px 14px}
-.keypad{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px 20px calc(12px + env(safe-area-inset-bottom))}
-.keypad button{padding:16px 0;border-radius:14px;background:var(--surface-2);font-size:20px;font-weight:500}
-.keypad button:active{background:var(--surface-3);transform:scale(.94)}
-.keypad .save{grid-column:span 3;background:var(--primary);color:var(--on-primary);font-size:15px}
-.keypad .del{color:var(--error)}
 .dialog-backdrop{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity .2s}
 .dialog-backdrop.on{opacity:1;pointer-events:auto}
 .dialog{background:var(--surface);border-radius:28px;padding:24px 20px 16px;max-width:340px;width:100%;box-shadow:var(--shadow-3)}
@@ -642,7 +637,6 @@ main{padding-inline:14px;padding-bottom:126px}
 .sheet-footer{flex-shrink:0;padding:10px 18px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--outline);background:color-mix(in srgb,var(--surface) 96%,transparent);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
 .tx-footer .tx-save-btn{height:54px;border-radius:16px;font-size:15px}
 .tx-save-icon{display:grid;place-items:center;width:26px;height:26px;border-radius:9px;background:rgba(255,255,255,.16);font-size:15px}
-.keypad{display:none!important}
 .cat-scroll{gap:7px;padding:2px 0 10px}
 .cat-chip-s{border-radius:13px;padding:9px 12px;border:1px solid var(--outline);font-weight:700;transition:transform .16s,border-color .16s,background .16s}
 .cat-chip-s:active{transform:scale(.96)}
@@ -4860,37 +4854,6 @@ function setTxDate(d){
     renderTxSheet();
   }
 }
-function keyNum(k){
-  if (!S.form) return;
-  buzz(5);
-  const a = String(S.form.amount || '');
-  if (k === 'back') S.form.amount = a.slice(0, -1);
-  else if (k === '.'){
-    if (!a) S.form.amount = '0.';
-    else if (!a.includes('.')) S.form.amount = a + '.';
-  } else {
-    if (a.includes('.') && a.split('.')[1].length >= 2) {}
-    else if (a.replace('.','').length >= 9) {}
-    else {
-      const base = (a === '0' && k !== '.') ? '' : a;
-      S.form.amount = base + k;
-    }
-  }
-  const ad = document.getElementById('amtDisp');
-  if (ad) ad.textContent = dispAmount(S.form.amount);
-  const f = S.form;
-  if (!f.source) return;
-  const acc = Finance.getAccount(f.source.accountId);
-  const accCur = acc ? acc.currency : 'EGP';
-  if (f.currency !== accCur){
-    const fxRes = document.querySelectorAll('.fx-box .fx-result');
-    if (fxRes.length >= 2){
-      const rate = Number(f.fxRate) || 0;
-      const amtNum = parseFloat(f.amount) || 0;
-      fxRes[1].innerHTML = fmt(amtNum) + ' ' + Finance.curSymbol(f.currency) + ' = <b>' + fmt(amtNum * rate) + ' ' + Finance.curSymbol(accCur) + '</b>';
-    }
-  }
-}
 async function saveTx(){
   if (!canWrite()){ toast('وضع القراءة فقط'); return; }
   const f = S.form;
@@ -8262,8 +8225,6 @@ document.addEventListener('click', e => {
       else delTxConfirm(S.form.id);
       return;
     }
-    const kk = t.closest('#keypad button[data-k]');
-    if (kk){ keyNum(kk.dataset.k); return; }
     const tagdel = t.closest('[data-tagdel]');
     if (tagdel && S.form && S.form.tags){ S.form.tags.splice(parseInt(tagdel.dataset.tagdel,10), 1); renderTxSheet(); return; }
     const tagadd = t.closest('[data-tagadd]');
