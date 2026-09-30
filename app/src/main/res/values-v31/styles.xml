@@ -2,7 +2,7 @@
 <resources>
     <style name="Theme.Sanad" parent="@android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowSplashScreenBackground">@color/sanad_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/sanad_app_icon</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
         <item name="android:windowSplashScreenIconBackgroundColor">@color/sanad_background</item>
         <item name="android:windowBackground">@color/sanad_background</item>
         <item name="android:statusBarColor">@color/sanad_background</item>
