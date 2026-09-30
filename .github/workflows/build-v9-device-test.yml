@@ -191,7 +191,7 @@ jobs:
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
           grep -q "package: name='com.sanad.v9test'" apk-badging.txt
           grep -q "versionCode='90707'" apk-badging.txt
-          grep -q "versionName='9.0.7-device-test-6'" apk-badging.txt
+          grep -q "versionName='9.0.7-local-stable'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
           ! grep -q "android.permission.READ_SMS" apk-permissions.txt
           ! grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
