@@ -9027,7 +9027,7 @@ const SanadI18n = {
   lang:'ar',
   exact:{
     'الرئيسية':'Home','المعاملات':'Transactions','الحسابات':'Accounts','الالتزامات':'Recurring','التقارير':'Reports','الإعدادات':'Settings',
-    'عام':'General','الوضع الفاتح':'Appearance','إخفاء المبالغ':'Hide amounts','الإشعارات':'Notifications','تعمل أثناء فتح التطبيق فقط':'Works while the app is open',
+    'عام':'General','الوضع الفاتح':'Appearance','إخفاء المبالغ':'Hide amounts','الإشعارات':'Notifications','تعمل أثناء فتح التطبيق فقط':'Works while the app is open','تنبيهات الالتزامات حتى عند إغلاق التطبيق':'Recurring reminders even when the app is closed',
     'البلد الافتراضية':'Default country','يبدأ التطبيق بهذه البلد عند فتحه.':'The app opens with this country.','الالتزامات والاشتراكات':'Recurring & subscriptions','إدارة الالتزامات':'Manage recurring items',
     'الادخار':'Savings','هدف الادخار':'Savings goal','لم يُحدد':'Not set','التصنيفات والأشخاص':'Categories & people','فئات المصاريف':'Expense categories','فئات الدخل':'Income categories','الأشخاص':'People','الوسوم':'Tags',
     'نسخ احتياطية تلقائية':'Automatic snapshots','البيانات':'Data','تصدير نسخة احتياطية':'Export financial backup','استيراد نسخة احتياطية':'Import financial backup','حذف كل البيانات':'Delete all data',
@@ -9091,7 +9091,7 @@ const SanadI18n = {
     'الحساب غير موجود':'Account not found','بطاقة الديبت ترتبط بحساب بنكي فقط':'A debit card can only be linked to a bank account','المديونية الافتتاحية لا يمكن أن تكون سالبة':'Opening debt cannot be negative','حد البطاقة لا يمكن أن يكون سالبًا':'Card limit cannot be negative','الرصيد الافتتاحي للبطاقة المدفوعة لا يمكن أن يكون سالبًا':'Prepaid opening balance cannot be negative',
     'حساب مؤرشف':'Archived account','هذا هو الحساب الافتراضي للمصروفات.':'This is the default spending account.','هذا هو الحساب الأساسي في الرئيسية.':'This is the primary Home account.','مقفل لأن بالبطاقة معاملات':'Locked because the card has transactions',
     'قيمة الدين عند بداية استخدام التطبيق.':'Debt amount when you started using SANAD.','الشهر (للسنوي)':'Month (yearly)','إعادة المحاولة':'Retry','لا يمكن أرشفة الحساب':'Account cannot be archived','لا يمكن حذف الحساب':'Account cannot be deleted','لا يمكن أرشفة البطاقة':'Card cannot be archived',
-        'حساباتك في كل بلد':'Your accounts in every country','نظّم حساباتك حسب البلد — الإمارات، مصر، المغرب.':'Organize your accounts by country — UAE, Egypt, and Morocco.','بطاقاتك وحساباتك':'Your cards and accounts','ديبت تسحب من حسابها. الكريدت دين. الكاش والمحفظة أرصدة حقيقية.':'Debit cards use their linked account. Credit cards create debt. Cash and wallets hold real balances.','حدود إنفاق ذكية':'Smart spending limits','حدد ميزانية لكل فئة، وسننبهك قبل أن تتجاوزها.':'Set a budget for each category and SANAD will warn you before you exceed it.','التالي':'Next','تخطي':'Skip',
+        'حساباتك في كل بلد':'Your accounts in every country','نظّم حساباتك حسب البلد — الإمارات، مصر، المغرب.':'Organize your accounts by country — UAE, Egypt, and Morocco.','بطاقاتك وحساباتك':'Your cards and accounts','ديبت تسحب من حسابها. الكريدت دين. الكاش والمحفظة أرصدة حقيقية.':'Debit cards use their linked account. Credit cards create debt. Cash and wallets hold real balances.','ديبت تسحب من حسابها. الكريدت دين. والمحفظة والأرصدة المدفوعة مقدمًا أرصدة حقيقية.':'Debit cards use their linked account. Credit cards create debt. Wallets and prepaid balances hold real balances.','حدود إنفاق ذكية':'Smart spending limits','حدد ميزانية لكل فئة، وسننبهك قبل أن تتجاوزها.':'Set a budget for each category and SANAD will warn you before you exceed it.','التالي':'Next','تخطي':'Skip',
     '+ إضافة':'+ Add','⭐ افتراضية':'⭐ Default','⭐ أساسي':'⭐ Primary','افتراضي':'Default','بطاقة مؤرشفة':'Archived card','حساب مؤرشف':'Archived account','لا توجد':'None','إعادة المحاولة':'Retry','تعديل الرصيد الحقيقي':'Adjust actual balance','سداد':'Repay','تسوية المديونية':'Reconcile debt',
     'هذا هو':'This is','الحساب الافتراضي':'default account','الحساب الأساسي':'primary account','لا يظهر في الإدخال الجديد.':'It will not appear in new entries.','أضف الأشخاص الذين تحوّل لهم بشكل متكرر.':'Add people you transfer to regularly.','لا توجد حسابات':'No accounts','لا توجد بطاقات':'No cards',
     'مقفل — استخدم "تسوية المديونية".':'Locked — use “Reconcile debt”.','مقفل — استخدم "تعديل الرصيد الحقيقي".':'Locked — use “Adjust actual balance”.','قيمة الدين عند بداية استخدام التطبيق.':'Debt amount when you started using SANAD.','رصيد الحساب عند تاريخ البداية.':'Account balance on the start date.',
@@ -9311,7 +9311,7 @@ const SanadSecurity = {
     try{
       let authMode='webauthn',credentialId=null;
       if(this.nativeAvailable()){
-        const verified=await this.nativeAuth('تفعيل قفل SANAD');
+        const verified=await this.nativeAuth(SanadI18n.lang==='en'?'Enable SANAD lock':'تفعيل قفل SANAD');
         if(!verified){toast('لم يتم التحقق من قفل الجهاز');return;}
         authMode='android-device';
       }else{
@@ -9333,7 +9333,7 @@ const SanadSecurity = {
     if(!this.cfg.enabled){this.finishUnlock();return true;}
     if(this.cfg.authMode==='android-device'||(!this.cfg.credentialId&&this.nativeAvailable())){
       if(!this.nativeAvailable()){toast('قفل الجهاز غير متاح — استخدم رمز الاسترداد');return false;}
-      const ok=await this.nativeAuth('فتح SANAD');
+      const ok=await this.nativeAuth(SanadI18n.lang==='en'?'Unlock SANAD':'فتح SANAD');
       if(ok){this.finishUnlock();return true;}
       toast('تعذر التحقق');return false;
     }
