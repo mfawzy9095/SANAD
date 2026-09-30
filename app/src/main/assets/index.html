@@ -5797,6 +5797,8 @@ async function delRepayment(){
     return true;
   });
   if (!result.ok){ render(); toast('تعذر الحفظ'); return; }
+  /* V9.0.7: repayment transfers can own receipts; clean only after durable financial delete. */
+  try {const rec=await SanadExtStorage.getReceipt(f.id);if(rec){await SanadExtStorage.delReceipt(f.id);await SanadCloud.markReceiptDirty(f.id,true);}if(SanadFamily&&SanadFamily.isShared(f.id))await SanadFamily.setShared(f.id,false);} catch(e){console.warn('V9 repayment post-delete cleanup',e);}
   /* V8.8.4.3 FIX 13: recompute budget alerts after delete */
   try {
     if (t){
@@ -8988,8 +8990,10 @@ async function boot(){
    Local-first features: i18n, theme modes, app privacy lock,
    receipt attachments, Firebase cloud adapter, family sharing.
    ========================================================= */
-const SANAD_V9_VERSION = '9.0.6';
+const SANAD_V9_VERSION = '9.0.7';
 const SANAD_FIREBASE_SDK = '10.14.1';
+/* Local Stable policy: cloud/family remain disabled until V9.1 per-record sync + rules ship. */
+const SANAD_CLOUD_FAMILY_BETA_ENABLED = false;
 
 const SanadExtStorage = {
   db:null, mode:'memory', memKV:new Map(), memReceipts:new Map(),
@@ -9013,44 +9017,23 @@ const SanadExtStorage = {
   },
   async get(key, fallback=null){
     if(this.mode!=='idb' || !this.db) return this.memKV.has(key)?deepClone(this.memKV.get(key)):fallback;
-    try{
-      return await new Promise((resolve,reject)=>{
-        const tx=this.db.transaction('kv','readonly'); const r=tx.objectStore('kv').get(key);
-        r.onsuccess=()=>resolve(r.result?deepClone(r.result.value):fallback); r.onerror=()=>reject(r.error);
-      });
-    }catch(_){return fallback;}
+    try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('kv','readonly');const r=tx.objectStore('kv').get(key);r.onsuccess=()=>resolve(r.result?deepClone(r.result.value):fallback);r.onerror=()=>reject(r.error);});}catch(_){return fallback;}
   },
   async set(key,value){
     if(this.mode!=='idb' || !this.db){this.memKV.set(key,deepClone(value)); return true;}
-    try{
-      return await new Promise((resolve,reject)=>{
-        const tx=this.db.transaction('kv','readwrite'); tx.objectStore('kv').put({key,value:deepClone(value)});
-        tx.oncomplete=()=>resolve(true); tx.onerror=()=>reject(tx.error); tx.onabort=()=>reject(tx.error||new Error('aborted'));
-      });
-    }catch(_){return false;}
+    try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('kv','readwrite');tx.objectStore('kv').put({key,value:deepClone(value)});tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('aborted'));});}catch(_){return false;}
   },
-  async del(key){
-    if(this.mode!=='idb' || !this.db){this.memKV.delete(key); return true;}
-    try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('kv','readwrite');tx.objectStore('kv').delete(key);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);});}catch(_){return false;}
+  async del(key){if(this.mode!=='idb' || !this.db){this.memKV.delete(key);return true;}try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('kv','readwrite');tx.objectStore('kv').delete(key);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);});}catch(_){return false;}},
+  async putReceipt(txId,blob,meta){if(!txId||!blob)return false;const rec={txId,blob,meta:Object.assign({updatedAt:Date.now()},meta||{})};if(this.mode!=='idb'||!this.db){this.memReceipts.set(txId,rec);return true;}try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readwrite');tx.objectStore('receipts').put(rec);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);});}catch(_){return false;}},
+  async getReceipt(txId){if(this.mode!=='idb'||!this.db)return this.memReceipts.get(txId)||null;try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readonly');const r=tx.objectStore('receipts').get(txId);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error);});}catch(_){return null;}},
+  async delReceipt(txId){if(this.mode!=='idb'||!this.db){this.memReceipts.delete(txId);return true;}try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readwrite');tx.objectStore('receipts').delete(txId);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);});}catch(_){return false;}},
+  async listReceipts(){if(this.mode!=='idb'||!this.db)return Array.from(this.memReceipts.values());try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readonly');const r=tx.objectStore('receipts').getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});}catch(_){return [];}},
+  async replaceReceipts(records){
+    records=Array.isArray(records)?records:[];
+    if(this.mode!=='idb'||!this.db){const next=new Map();for(const rec of records){if(!rec||!rec.txId||!rec.blob)return false;next.set(rec.txId,rec);}this.memReceipts=next;return true;}
+    try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readwrite'),store=tx.objectStore('receipts');store.clear();for(const rec of records){if(!rec||!rec.txId||!rec.blob){tx.abort();return;}store.put(rec);}tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('receipt replace aborted'));});}catch(_){return false;}
   },
-  async putReceipt(txId, blob, meta){
-    if(!txId || !blob) return false;
-    const rec={txId,blob,meta:Object.assign({updatedAt:Date.now()},meta||{})};
-    if(this.mode!=='idb'||!this.db){this.memReceipts.set(txId,rec);return true;}
-    try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readwrite');tx.objectStore('receipts').put(rec);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);});}catch(_){return false;}
-  },
-  async getReceipt(txId){
-    if(this.mode!=='idb'||!this.db) return this.memReceipts.get(txId)||null;
-    try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readonly');const r=tx.objectStore('receipts').get(txId);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error);});}catch(_){return null;}
-  },
-  async delReceipt(txId){
-    if(this.mode!=='idb'||!this.db){this.memReceipts.delete(txId);return true;}
-    try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readwrite');tx.objectStore('receipts').delete(txId);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);});}catch(_){return false;}
-  },
-  async listReceipts(){
-    if(this.mode!=='idb'||!this.db) return Array.from(this.memReceipts.values());
-    try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readonly');const r=tx.objectStore('receipts').getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});}catch(_){return [];}
-  }
+  async pruneReceiptOrphans(validIds){const valid=validIds instanceof Set?validIds:new Set(validIds||[]),all=await this.listReceipts();let removed=0;for(const rec of all){if(rec&&rec.txId&&!valid.has(rec.txId)){if(await this.delReceipt(rec.txId))removed++;}}return removed;}
 };
 
 const SanadI18n = {
@@ -9098,6 +9081,7 @@ const SanadI18n = {
     'التزام متكرر':'Recurring item','مصروف متكرر':'Recurring expense','اشتراك، إيجار، فاتورة':'Subscription, rent, or bill','دخل متكرر':'Recurring income','راتب، إيجار مستلم':'Salary or rent received','تعديل التزام':'Edit recurring item','الاسم':'Name','الحالة':'Status','نشط':'Active','غير نشط':'Inactive',
     'من حساب':'From account','إلى':'To','تصوير / اختيار فاتورة':'Capture / choose receipt','حساباتي':'My accounts','شخص آخر':'Another person','التحويل بين حساباتك لا يُحسب مصروفًا. رسوم التحويل فقط تُحسب.':'Transfers between your accounts are not counted as spending. Only transfer fees are counted.','حفظ التحويل':'Save transfer',
     'دين':'Debt','المتاح':'available',
+    'السحابة والعائلة':'Cloud & family','مؤجل إلى V9.1':'Deferred to V9.1','معطّل في النسخة المحلية المستقرة':'Disabled in the Local Stable release','التطبيق مقفول لحماية خصوصيتك.':'SANAD is locked to protect your privacy.','استخدام رمز الاسترداد':'Use recovery code','فتح بالبصمة / قفل الجهاز':'Unlock with biometric / device lock','لا يتم حفظ أو إرسال بيانات بصمتك إلى SANAD.':'SANAD does not store or transmit biometric data.','بيانات القفل غير متاحة. أعد فتح SANAD عندما يعود التخزين الآمن.':'Lock data is unavailable. Reopen SANAD when persistent storage is available.','يحتاج القفل إلى HTTPS ومتصفح يدعم WebAuthn/Passkeys وتخزين محلي دائم.':'The lock requires HTTPS, WebAuthn/Passkeys, and persistent local storage.','تعذر حفظ إعدادات القفل':'Could not save lock settings',
     'الأشخاص للتحويلات الخارجية':'People for external transfers','أضف الأشخاص الذين تحوّل لهم بشكل متكرر.':'Add people you transfer money to regularly.','شخص جديد':'New person','العملة الافتراضية':'Default currency',
     'مخصصة':'Custom','تعديل فئة':'Edit category','يعني إيه وسوم؟':'What are tags?','زي الهاشتاج — تجمّع تحتها معاملات مرتبطة.':'Like hashtags — group related transactions together.','وسم جديد':'New tag','اسم الوسم':'Tag name',
     'المبلغ المستهدف':'Target amount','المدخر حالياً (يدوي)':'Saved so far (manual)','هذا الرقم لا يُحسب تلقائياً.':'This number is not calculated automatically.','تاريخ مستهدف (اختياري)':'Target date (optional)','إضافة للادخار':'Add to savings',
@@ -9316,46 +9300,44 @@ const SanadReceipts = {
 };
 
 const SanadSecurity = {
-  cfg:{enabled:false,credentialId:null,recoveryHash:null}, unlocked:true,
+  cfg:{enabled:false,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false}, unlocked:true, pendingStart:false, markerKey:'sanad_security_enabled_v1',
   b64(bytes){return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');},
-  unb64(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const bin=atob(s);return Uint8Array.from(bin,c=>c.charCodeAt(0));},
+  unb64(s){s=String(s||'').replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const bin=atob(s);return Uint8Array.from(bin,c=>c.charCodeAt(0));},
   random(n=32){const a=new Uint8Array(n);crypto.getRandomValues(a);return a;},
+  normalizeRecovery(s){return String(s||'').replace(/[^0-9]/g,'');},
+  markerEnabled(){try{return localStorage.getItem(this.markerKey)==='1';}catch(_){return false;}},
+  setMarker(on){try{localStorage.setItem(this.markerKey,on?'1':'0');return true;}catch(_){return false;}},
   async hash(s){const b=new TextEncoder().encode(String(s));return this.b64(await crypto.subtle.digest('SHA-256',b));},
-  supported(){return !!(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials&&crypto.subtle);},
-  async init(){this.cfg=Object.assign({enabled:false,credentialId:null,recoveryHash:null},await SanadExtStorage.get('security',{}));this.unlocked=!this.cfg.enabled;},
-  ensureOverlay(){
-    let el=document.getElementById('sanadLock');if(el)return el;el=document.createElement('div');el.id='sanadLock';el.className='sanad-lock';el.hidden=true;
-    el.innerHTML='<div class="lock-card"><img class="lock-logo" src="sanad_logo.webp" alt="SANAD"><h2>SANAD · سند</h2><p>التطبيق مقفول لحماية خصوصيتك.</p><button type="button" class="btn primary" data-sanad-act="unlock">🔐 فتح بالبصمة / قفل الجهاز</button><button type="button" class="btn text" data-sanad-act="recovery-unlock">استخدام رمز الاسترداد</button><div class="lock-note">لا يتم حفظ أو إرسال بيانات بصمتك إلى SANAD.</div></div>';document.body.appendChild(el);return el;
-  },
-  show(){if(!this.cfg.enabled)return;this.unlocked=false;const el=this.ensureOverlay();el.hidden=false;SanadI18n.apply(el);},
-  hide(){this.unlocked=true;const el=this.ensureOverlay();el.hidden=true;},
+  async recoveryDigest(code,saltB64,iterations){const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(this.normalizeRecovery(code)),{name:'PBKDF2'},false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:this.unb64(saltB64),iterations:Number(iterations)||210000,hash:'SHA-256'},key,256);return this.b64(bits);},
+  supported(){return !!(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials&&crypto.subtle&&SanadExtStorage.mode==='idb');},
+  async init(){const marker=this.markerEnabled(),stored=await SanadExtStorage.get('security',null),base={enabled:false,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(stored&&typeof stored==='object'){this.cfg=Object.assign(base,stored);this.setMarker(!!this.cfg.enabled);}else if(marker){this.cfg=Object.assign(base,{enabled:true,storageUnavailable:true});}else this.cfg=base;this.unlocked=!this.cfg.enabled;this.pendingStart=false;},
+  ensureOverlay(){let el=document.getElementById('sanadLock');if(el)return el;el=document.createElement('div');el.id='sanadLock';el.className='sanad-lock';el.hidden=true;el.innerHTML='<div class="lock-card"><div class="lock-logo">س</div><h2>SANAD · سند</h2><p>التطبيق مقفول لحماية خصوصيتك.</p><button type="button" class="btn primary" data-sanad-act="unlock">🔐 فتح بالبصمة / قفل الجهاز</button><button type="button" class="btn text" data-sanad-act="recovery-unlock">استخدام رمز الاسترداد</button><div class="lock-note">لا يتم حفظ أو إرسال بيانات بصمتك إلى SANAD.</div></div>';document.body.appendChild(el);return el;},
+  show(){if(!this.cfg.enabled)return;this.unlocked=false;const app=document.getElementById('app'),ob=document.getElementById('onboard');if(app)app.hidden=true;if(ob)ob.hidden=true;const el=this.ensureOverlay();const p=el.querySelector('.lock-card>p'),unlockBtn=el.querySelector('[data-sanad-act="unlock"]'),recoveryBtn=el.querySelector('[data-sanad-act="recovery-unlock"]');if(this.cfg.storageUnavailable){if(p)p.textContent='بيانات القفل غير متاحة. أعد فتح SANAD عندما يعود التخزين الآمن.';if(unlockBtn)unlockBtn.hidden=true;if(recoveryBtn)recoveryBtn.hidden=true;}else{if(p)p.textContent='التطبيق مقفول لحماية خصوصيتك.';if(unlockBtn)unlockBtn.hidden=false;if(recoveryBtn)recoveryBtn.hidden=false;}el.hidden=false;SanadI18n.apply(el);hideSanadBootSplash();},
+  finishUnlock(){this.unlocked=true;const el=this.ensureOverlay();el.hidden=true;if(this.pendingStart){this.pendingStart=false;_sanadCoreStartApp();SanadV9.afterStart(true);}else{const app=document.getElementById('app');if(app)app.hidden=false;}},
+  hide(){this.finishUnlock();},
   async enable(){
-    if(!this.supported()){await dialog({emoji:'🔐',title:'القفل غير متاح',msg:'يحتاج القفل إلى HTTPS ومتصفح يدعم WebAuthn/Passkeys.',okText:'حسناً',hideCancel:true});return;}
+    if(!this.supported()){await dialog({emoji:'🔐',title:'القفل غير متاح',msg:'يحتاج القفل إلى HTTPS ومتصفح يدعم WebAuthn/Passkeys وتخزين محلي دائم.',okText:'حسناً',hideCancel:true});return;}
     try{
       const cred=await navigator.credentials.create({publicKey:{challenge:this.random(),rp:{name:'SANAD'},user:{id:this.random(),name:'sanad-local-user',displayName:'SANAD local lock'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],timeout:60000,attestation:'none',authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'preferred'}}});
-      if(!cred)throw new Error('No credential');const recovery=Array.from(this.random(8)).map(x=>(x%10)).join('');
-      this.cfg={enabled:true,credentialId:this.b64(cred.rawId),recoveryHash:await this.hash(recovery)};await SanadExtStorage.set('security',this.cfg);this.unlocked=true;render();
+      if(!cred)throw new Error('No credential');
+      const digits=Array.from(this.random(16)).map(x=>(x%10)).join(''),recovery=digits.replace(/(\d{4})(?=\d)/g,'$1-');
+      const salt=this.b64(this.random(16)),iterations=210000,recoveryHash=await this.recoveryDigest(digits,salt,iterations);
+      this.cfg={enabled:true,credentialId:this.b64(cred.rawId),recoveryHash,recoverySalt:salt,recoveryKdf:'PBKDF2-SHA256',recoveryIterations:iterations};
+      if(!await SanadExtStorage.set('security',this.cfg))throw new Error('security settings write failed');
+      this.setMarker(true);this.unlocked=true;render();
       await dialog({emoji:'🛡️',title:'تم تفعيل القفل',msg:'احتفظ برمز الاسترداد في مكان آمن:\n\n'+recovery+'\n\nسيُطلب فقط إذا تعذر استخدام بصمة/قفل الجهاز.',okText:'حفظته',hideCancel:true});
     }catch(e){console.error(e);toast('لم يتم تفعيل القفل');}
   },
-  async disable(){
-    const ok=await dialog({emoji:'🔓',title:'إيقاف قفل التطبيق',msg:'سيتم إيقاف طلب البصمة/قفل الجهاز عند فتح SANAD.',okText:'إيقاف'});if(!ok)return;
-    this.cfg={enabled:false,credentialId:null,recoveryHash:null};await SanadExtStorage.set('security',this.cfg);this.hide();render();
-  },
-  async unlock(){
-    if(!this.cfg.enabled){this.hide();return true;} if(!this.supported()){toast('القفل غير متاح في هذه البيئة');return false;}
-    try{const cred=await navigator.credentials.get({publicKey:{challenge:this.random(),allowCredentials:[{type:'public-key',id:this.unb64(this.cfg.credentialId)}],timeout:60000,userVerification:'required'}});if(cred){this.hide();return true;}}catch(e){console.warn('unlock failed',e);}toast('تعذر التحقق');return false;
-  },
-  async recovery(){
-    const code=prompt(SanadI18n.lang==='en'?'Enter recovery code':'أدخل رمز الاسترداد');if(!code)return;
-    if(await this.hash(code)===this.cfg.recoveryHash){this.cfg={enabled:false,credentialId:null,recoveryHash:null};await SanadExtStorage.set('security',this.cfg);this.hide();render();toast('تم فتح التطبيق وإيقاف القفل');}else toast('رمز غير صحيح');
-  }
+  async disable(){const ok=await dialog({emoji:'🔓',title:'إيقاف قفل التطبيق',msg:'سيتم إيقاف طلب البصمة/قفل الجهاز عند فتح SANAD.',okText:'إيقاف'});if(!ok)return;const next={enabled:false,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(!await SanadExtStorage.set('security',next)){toast('تعذر حفظ إعدادات القفل');return;}this.cfg=next;this.setMarker(false);this.finishUnlock();render();},
+  async unlock(){if(!this.cfg.enabled){this.finishUnlock();return true;}if(!this.supported()){toast('القفل غير متاح في هذه البيئة — استخدم رمز الاسترداد');return false;}try{const cred=await navigator.credentials.get({publicKey:{challenge:this.random(),allowCredentials:[{type:'public-key',id:this.unb64(this.cfg.credentialId)}],timeout:60000,userVerification:'required'}});if(cred){this.finishUnlock();return true;}}catch(e){console.warn('unlock failed',e);}toast('تعذر التحقق');return false;},
+  async recovery(){const code=prompt(SanadI18n.lang==='en'?'Enter recovery code':'أدخل رمز الاسترداد');if(!code)return;let got='';try{got=(this.cfg.recoveryKdf==='PBKDF2-SHA256'&&this.cfg.recoverySalt)?await this.recoveryDigest(code,this.cfg.recoverySalt,this.cfg.recoveryIterations):await this.hash(this.normalizeRecovery(code));}catch(e){console.warn('recovery verify failed',e);}if(got&&got===this.cfg.recoveryHash){const next={enabled:false,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(!await SanadExtStorage.set('security',next)){toast('تعذر حفظ إعدادات القفل');return;}this.cfg=next;this.setMarker(false);this.finishUnlock();render();toast('تم فتح التطبيق وإيقاف القفل');}else toast('رمز غير صحيح');}
 };
 
 const SanadCloud = {
   config:null,sdk:null,app:null,auth:null,db:null,storage:null,user:null,status:'not-configured',error:null,meta:{dirty:false,revision:0,lastRemoteRevision:0,lastSync:null,deviceId:null,receiptDirty:{}},applyingRemote:false,
   async init(){
     this.config=await SanadExtStorage.get('firebaseConfig',null);this.meta=Object.assign(this.meta,await SanadExtStorage.get('syncMeta',{}));if(!this.meta.deviceId){this.meta.deviceId='web-'+uid('d');await this.saveMeta();}
+    if(!SANAD_CLOUD_FAMILY_BETA_ENABLED){this.status='deferred';return;}
     if(this.config){try{await this.connect();}catch(e){this.status='error';this.error=e;console.warn('Firebase init:',e);}}
   },
   async saveMeta(){await SanadExtStorage.set('syncMeta',this.meta);},
@@ -9366,7 +9348,7 @@ const SanadCloud = {
     const [app,auth,fs,st]=await Promise.all([import(base+'firebase-app.js'),import(base+'firebase-auth.js'),import(base+'firebase-firestore.js'),import(base+'firebase-storage.js')]);this.sdk={app,auth,fs,st};return this.sdk;
   },
   validConfig(c){return c&&typeof c==='object'&&c.apiKey&&c.authDomain&&c.projectId&&c.appId;},
-  async configure(raw){let c=raw;if(typeof raw==='string'){try{c=JSON.parse(raw);}catch(_){toast('Firebase JSON غير صالح');return false;}}if(!this.validConfig(c)){toast('Firebase config غير مكتمل');return false;}this.config=c;await SanadExtStorage.set('firebaseConfig',c);this.status='connecting';try{await this.connect(true);render();toast('تم حفظ إعداد Firebase');return true;}catch(e){this.status='error';this.error=e;render();toast('تعذر الاتصال بـ Firebase');return false;}},
+  async configure(raw){if(!SANAD_CLOUD_FAMILY_BETA_ENABLED){toast('السحابة والعائلة مؤجلة إلى V9.1');return false;}let c=raw;if(typeof raw==='string'){try{c=JSON.parse(raw);}catch(_){toast('Firebase JSON غير صالح');return false;}}if(!this.validConfig(c)){toast('Firebase config غير مكتمل');return false;}this.config=c;await SanadExtStorage.set('firebaseConfig',c);this.status='connecting';try{await this.connect(true);render();toast('تم حفظ إعداد Firebase');return true;}catch(e){this.status='error';this.error=e;render();toast('تعذر الاتصال بـ Firebase');return false;}},
   async connect(force){
     if(!this.config)return; if(this.app&&!force)return; const sdk=await this.loadSdk();
     try{this.app=sdk.app.getApps().find(a=>a.name==='sanad-v9')||sdk.app.initializeApp(this.config,'sanad-v9');}catch(e){this.app=sdk.app.getApps().find(a=>a.name==='sanad-v9');if(!this.app)throw e;}
@@ -9380,6 +9362,7 @@ const SanadCloud = {
     const current=this.config?JSON.stringify(this.config,null,2):'';openSheet('<div class="sheet-head"><button type="button" class="close" data-act="close-sheet">✕</button><h2>إعداد Firebase</h2><div style="width:36px"></div></div><div class="sheet-body"><div class="help-box"><span class="hi">☁️</span><div class="ht">ألصق Firebase Web config من Project settings. لا يتم إرسال الإعداد لأي جهة أخرى.</div></div><div class="field"><label>Firebase config (JSON)</label><textarea id="firebaseConfigText" rows="10" dir="ltr" spellcheck="false" placeholder="{ &quot;apiKey&quot;: ... }">'+esc(current)+'</textarea></div><button class="btn primary" type="button" data-sanad-act="save-firebase">حفظ والاتصال</button></div>','firebase-config');
   },
   async signInGoogle(){
+    if(!SANAD_CLOUD_FAMILY_BETA_ENABLED){toast('السحابة والعائلة مؤجلة إلى V9.1');return false;}
     if(!this.config){this.openConfig();return;}try{if(!this.auth)await this.connect();const p=new this.sdk.auth.GoogleAuthProvider();p.setCustomParameters({prompt:'select_account'});const mobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);if(mobile){await this.sdk.auth.signInWithRedirect(this.auth,p);}else{const r=await this.sdk.auth.signInWithPopup(this.auth,p);this.user=r.user;this.status='signed-in';render();toast('تم تسجيل الدخول');}}catch(e){console.error(e);toast('تعذر تسجيل الدخول: '+(e.code||e.message||''));}
   },
   async signOut(){if(this.auth)try{await this.sdk.auth.signOut(this.auth);}catch(_){}this.user=null;this.status=this.config?'ready':'not-configured';render();},
@@ -9403,7 +9386,7 @@ const SanadCloud = {
     let migrated;try{migrated=Schema.migrate(state);}catch(e){throw new Error('Remote migration failed');}const errs=Schema.validateStateStrict(migrated);if(errs.length)throw new Error('Remote integrity failed: '+errs.slice(0,3).join(' | '));
     const before=snapshotState();if(!S.previewMode){const snap=await writeRotatedPreCritSnapshot(before);if(!snap.ok)throw new Error('Safety snapshot failed');}
     this.applyingRemote=true;try{loadStateInto(migrated);Finance.ensureAllPrimaries();const v=await verifiedWriteState(snapshotState(),before);if(!v.ok){loadStateInto(before);throw new Error('Verified remote write failed');}}finally{this.applyingRemote=false;}
-    await loadSnapshots();await recomputePendingRecurring();applyTheme();render();
+    await loadSnapshots();await recomputePendingRecurring();applyTheme();render();return true;
   },
   async pullRemote(force=false){
     if(!this.user||!this.db){toast('سجّل الدخول أولاً');return false;}const snap=await this.sdk.fs.getDoc(this.stateDoc());if(!snap.exists()){toast('لا توجد نسخة سحابية');return false;}const remote=snap.data();
@@ -9411,6 +9394,7 @@ const SanadCloud = {
     await this.safeApplyRemote(remote.state);await this.downloadReceipts(remote.receiptIds||[]);this.meta.dirty=false;this.meta.revision=Number(remote.revision)||0;this.meta.lastRemoteRevision=this.meta.revision;this.meta.lastSync=Date.now();await this.saveMeta();toast('تم تنزيل البيانات السحابية');return true;
   },
   async syncNow(){
+    if(!SANAD_CLOUD_FAMILY_BETA_ENABLED){toast('السحابة والعائلة مؤجلة إلى V9.1');return false;}
     if(!this.user){this.signInGoogle();return;}try{const snap=await this.sdk.fs.getDoc(this.stateDoc());if(!snap.exists())return this.pushLocal(true);const r=snap.data();const localFp=stateFingerprint(snapshotState());if(r.fingerprint===localFp){this.meta.dirty=false;this.meta.lastRemoteRevision=Number(r.revision)||0;this.meta.lastSync=Date.now();await this.saveMeta();render();toast('كل شيء متزامن');return true;}if(this.meta.dirty)return this.pushLocal(false);return this.pullRemote(false);}catch(e){console.error(e);toast('فشلت المزامنة');return false;}
   },
   async verifyPhoneSheet(){
@@ -9428,14 +9412,15 @@ const SanadFamily = {
   async save(){await SanadExtStorage.set('family',this.state);render();},
   isActive(){return !!this.state.id;},
   isShared(txId){return (this.state.sharedTxIds||[]).includes(txId);},
-  async setShared(txId,on){const s=new Set(this.state.sharedTxIds||[]),d=new Set(this.state.pendingUnshareIds||[]);if(on){s.add(txId);d.delete(txId);}else{s.delete(txId);d.add(txId);}this.state.sharedTxIds=Array.from(s);this.state.pendingUnshareIds=Array.from(d);await this.save();await SanadCloud.markDirty();},
-  injectTxToggle(){if(!S.form||S.form._sheet!=='tx'||!this.isActive())return;const adv=document.querySelector('#sheet .adv-body');if(!adv||adv.querySelector('[data-family-share-toggle]'))return;const row=document.createElement('div');row.className='family-share-row';row.innerHTML='<div><b>👨‍👩‍👧 مشاركة مع العائلة</b><span>تظهر في القسم المشترك فقط</span></div><div class="switch '+(S.form.id&&this.isShared(S.form.id)?'on':'')+'" data-family-share-toggle></div>';adv.appendChild(row);SanadI18n.apply(row);},
-  async create(name){name=String(name||'').trim();if(!name){toast('أدخل اسم العائلة');return;}const id='fam_'+uid('');this.state={id,name,members:[],sharedTxIds:[],pendingUnshareIds:[]};if(SanadCloud.user)this.state.members=[{uid:SanadCloud.user.uid,name:SanadCloud.user.displayName||'',email:SanadCloud.user.email||'',phone:SanadCloud.user.phoneNumber||'',role:'owner'}];await this.save();if(SanadCloud.user&&SanadCloud.db){const u=SanadCloud.user;await SanadCloud.sdk.fs.setDoc(SanadCloud.sdk.fs.doc(SanadCloud.db,'families',id),{name,ownerUid:u.uid,memberUids:[u.uid],members:{[u.uid]:{name:u.displayName||'',email:u.email||'',phone:u.phoneNumber||'',role:'owner'}},createdAt:SanadCloud.sdk.fs.serverTimestamp()});}closeSheet();toast('تم إنشاء العائلة');},
+  async setShared(txId,on){if(on&&!SANAD_CLOUD_FAMILY_BETA_ENABLED)return false;const s=new Set(this.state.sharedTxIds||[]),d=new Set(this.state.pendingUnshareIds||[]);if(on){s.add(txId);d.delete(txId);}else{s.delete(txId);d.add(txId);}this.state.sharedTxIds=Array.from(s);this.state.pendingUnshareIds=Array.from(d);const ok=await SanadExtStorage.set('family',this.state);if(!ok)return false;if(SANAD_CLOUD_FAMILY_BETA_ENABLED)await SanadCloud.markDirty();return true;},
+  injectTxToggle(){if(!SANAD_CLOUD_FAMILY_BETA_ENABLED)return;if(!S.form||S.form._sheet!=='tx'||!this.isActive())return;const adv=document.querySelector('#sheet .adv-body');if(!adv||adv.querySelector('[data-family-share-toggle]'))return;const row=document.createElement('div');row.className='family-share-row';row.innerHTML='<div><b>👨‍👩‍👧 مشاركة مع العائلة</b><span>تظهر في القسم المشترك فقط</span></div><div class="switch '+(S.form.id&&this.isShared(S.form.id)?'on':'')+'" data-family-share-toggle></div>';adv.appendChild(row);SanadI18n.apply(row);},
+  async create(name){if(!SANAD_CLOUD_FAMILY_BETA_ENABLED){toast('السحابة والعائلة مؤجلة إلى V9.1');return;} name=String(name||'').trim();if(!name){toast('أدخل اسم العائلة');return;}const id='fam_'+uid('');this.state={id,name,members:[],sharedTxIds:[],pendingUnshareIds:[]};if(SanadCloud.user)this.state.members=[{uid:SanadCloud.user.uid,name:SanadCloud.user.displayName||'',email:SanadCloud.user.email||'',phone:SanadCloud.user.phoneNumber||'',role:'owner'}];await this.save();if(SanadCloud.user&&SanadCloud.db){const u=SanadCloud.user;await SanadCloud.sdk.fs.setDoc(SanadCloud.sdk.fs.doc(SanadCloud.db,'families',id),{name,ownerUid:u.uid,memberUids:[u.uid],members:{[u.uid]:{name:u.displayName||'',email:u.email||'',phone:u.phoneNumber||'',role:'owner'}},createdAt:SanadCloud.sdk.fs.serverTimestamp()});}closeSheet();toast('تم إنشاء العائلة');},
   async loadRemote(){if(!this.isActive()||!SanadCloud.user||!SanadCloud.db)return;try{const fs=SanadCloud.sdk.fs;const fam=await fs.getDoc(fs.doc(SanadCloud.db,'families',this.state.id));if(fam.exists()){const d=fam.data();this.state.name=d.name||this.state.name;this.state.members=Object.entries(d.members||{}).map(([uid,v])=>Object.assign({uid},v));await SanadExtStorage.set('family',this.state);}const q=await fs.getDocs(fs.collection(SanadCloud.db,'families',this.state.id,'shared'));this.remoteShared=q.docs.map(x=>x.data().tx).filter(Boolean);}catch(e){console.warn('family load',e);}},
-  async syncShared(){if(!this.isActive()||!SanadCloud.user||!SanadCloud.db)return;const fs=SanadCloud.sdk.fs;const pending=[...(this.state.pendingUnshareIds||[])];for(const id of pending){try{await fs.deleteDoc(fs.doc(SanadCloud.db,'families',this.state.id,'shared',id));this.state.pendingUnshareIds=(this.state.pendingUnshareIds||[]).filter(x=>x!==id);}catch(e){console.warn('family unshare sync',id,e);}}for(const id of this.state.sharedTxIds||[]){const tx=S.transactions.find(t=>t.id===id);if(!tx)continue;await fs.setDoc(fs.doc(SanadCloud.db,'families',this.state.id,'shared',id),{tx:deepClone(tx),ownerUid:SanadCloud.user.uid,updatedAt:fs.serverTimestamp()},{merge:true});}await SanadExtStorage.set('family',this.state);},
-  async invitePhone(phone){phone=String(phone||'').replace(/[\s()-]/g,'');if(!/^\+[1-9]\d{7,14}$/.test(phone)){toast('أدخل رقم E.164 صحيح');return;}if(!SanadCloud.user||!SanadCloud.db){toast('سجّل الدخول أولاً');return;}if(!this.isActive()){toast('أنشئ عائلة أولاً');return;}try{const fs=SanadCloud.sdk.fs;await fs.setDoc(fs.doc(SanadCloud.db,'familyInvites',phone),{familyId:this.state.id,familyName:this.state.name,targetPhone:phone,role:'member',createdBy:SanadCloud.user.uid,status:'pending',createdAt:fs.serverTimestamp()});toast('تم إنشاء دعوة للرقم');}catch(e){console.error(e);toast('تعذر إنشاء الدعوة');}},
-  async acceptPhoneInvite(){if(!SanadCloud.user||!SanadCloud.db){toast('سجّل الدخول أولاً');return;}const phone=SanadCloud.user.phoneNumber;if(!phone){SanadCloud.verifyPhoneSheet();return;}try{const fs=SanadCloud.sdk.fs;const ir=fs.doc(SanadCloud.db,'familyInvites',phone);const snap=await fs.getDoc(ir);if(!snap.exists()){toast('لا توجد دعوة لهذا الرقم');return;}const inv=snap.data(),famRef=fs.doc(SanadCloud.db,'families',inv.familyId),fam=await fs.getDoc(famRef);if(!fam.exists())throw new Error('family missing');const d=fam.data(),members=Object.assign({},d.members||{});members[SanadCloud.user.uid]={name:SanadCloud.user.displayName||'',email:SanadCloud.user.email||'',phone,role:inv.role||'member'};await fs.updateDoc(famRef,{memberUids:fs.arrayUnion(SanadCloud.user.uid),members});await fs.deleteDoc(ir);this.state.id=inv.familyId;this.state.name=inv.familyName||d.name||'';await this.loadRemote();await this.save();toast('تم الانضمام للعائلة');}catch(e){console.error(e);toast('تعذر قبول الدعوة');}},
+  async syncShared(){if(!SANAD_CLOUD_FAMILY_BETA_ENABLED)return;if(!this.isActive()||!SanadCloud.user||!SanadCloud.db)return;const fs=SanadCloud.sdk.fs;const pending=[...(this.state.pendingUnshareIds||[])];for(const id of pending){try{await fs.deleteDoc(fs.doc(SanadCloud.db,'families',this.state.id,'shared',id));this.state.pendingUnshareIds=(this.state.pendingUnshareIds||[]).filter(x=>x!==id);}catch(e){console.warn('family unshare sync',id,e);}}for(const id of this.state.sharedTxIds||[]){const tx=S.transactions.find(t=>t.id===id);if(!tx)continue;await fs.setDoc(fs.doc(SanadCloud.db,'families',this.state.id,'shared',id),{tx:deepClone(tx),ownerUid:SanadCloud.user.uid,updatedAt:fs.serverTimestamp()},{merge:true});}await SanadExtStorage.set('family',this.state);},
+  async invitePhone(phone){if(!SANAD_CLOUD_FAMILY_BETA_ENABLED){toast('السحابة والعائلة مؤجلة إلى V9.1');return;} phone=String(phone||'').replace(/[\s()-]/g,'');if(!/^\+[1-9]\d{7,14}$/.test(phone)){toast('أدخل رقم E.164 صحيح');return;}if(!SanadCloud.user||!SanadCloud.db){toast('سجّل الدخول أولاً');return;}if(!this.isActive()){toast('أنشئ عائلة أولاً');return;}try{const fs=SanadCloud.sdk.fs;await fs.setDoc(fs.doc(SanadCloud.db,'familyInvites',phone),{familyId:this.state.id,familyName:this.state.name,targetPhone:phone,role:'member',createdBy:SanadCloud.user.uid,status:'pending',createdAt:fs.serverTimestamp()});toast('تم إنشاء دعوة للرقم');}catch(e){console.error(e);toast('تعذر إنشاء الدعوة');}},
+  async acceptPhoneInvite(){if(!SANAD_CLOUD_FAMILY_BETA_ENABLED){toast('السحابة والعائلة مؤجلة إلى V9.1');return;} if(!SanadCloud.user||!SanadCloud.db){toast('سجّل الدخول أولاً');return;}const phone=SanadCloud.user.phoneNumber;if(!phone){SanadCloud.verifyPhoneSheet();return;}try{const fs=SanadCloud.sdk.fs;const ir=fs.doc(SanadCloud.db,'familyInvites',phone);const snap=await fs.getDoc(ir);if(!snap.exists()){toast('لا توجد دعوة لهذا الرقم');return;}const inv=snap.data(),famRef=fs.doc(SanadCloud.db,'families',inv.familyId),fam=await fs.getDoc(famRef);if(!fam.exists())throw new Error('family missing');const d=fam.data(),members=Object.assign({},d.members||{});members[SanadCloud.user.uid]={name:SanadCloud.user.displayName||'',email:SanadCloud.user.email||'',phone,role:inv.role||'member'};await fs.updateDoc(famRef,{memberUids:fs.arrayUnion(SanadCloud.user.uid),members});await fs.deleteDoc(ir);this.state.id=inv.familyId;this.state.name=inv.familyName||d.name||'';await this.loadRemote();await this.save();toast('تم الانضمام للعائلة');}catch(e){console.error(e);toast('تعذر قبول الدعوة');}},
   async open(){
+    if(!SANAD_CLOUD_FAMILY_BETA_ENABLED){toast('السحابة والعائلة مؤجلة إلى V9.1');return;}
     await this.loadRemote();const members=(this.state.members||[]).map(m=>'<div class="family-member"><span class="fm-avatar">'+esc((m.name||m.email||'?').slice(0,1).toUpperCase())+'</span><div><b>'+esc(m.name||m.email||'Member')+'</b><span>'+esc(m.phone||m.email||'')+' · '+esc(m.role||'member')+'</span></div></div>').join('');
     const localShared=(this.state.sharedTxIds||[]).map(id=>S.transactions.find(t=>t.id===id)).filter(Boolean);const shared=[...this.remoteShared,...localShared].filter((t,i,a)=>a.findIndex(x=>x.id===t.id)===i).sort(compareTxDesc).slice(0,20);
     const sharedHtml=shared.length?'<div class="tx-list">'+shared.map(t=>txRowHtml(t,false)).join('')+'</div>':'<div class="empty mini"><div class="em">👨‍👩‍👧</div><p>لا توجد معاملات مشتركة</p></div>';
@@ -9444,46 +9429,42 @@ const SanadFamily = {
     }
     openSheet('<div class="sheet-head"><button type="button" class="close" data-act="close-sheet">✕</button><h2>'+esc(this.state.name||'العائلة')+'</h2><div style="width:36px"></div></div><div class="sheet-body"><div class="family-summary"><div><span>المعاملات المشتركة</span><b>'+shared.length+'</b></div><div><span>الأعضاء</span><b>'+(this.state.members||[]).length+'</b></div></div><div class="sec"><h2>الأعضاء</h2></div>'+(members||'<div class="empty mini"><p>سيظهر الأعضاء بعد المزامنة</p></div>')+'<div class="field"><label>دعوة برقم الهاتف (E.164)</label><div class="inline-field"><input id="familyPhoneInvite" type="tel" inputmode="tel" dir="ltr" placeholder="+9715XXXXXXXX"><button class="btn primary" data-sanad-act="invite-family-phone">دعوة</button></div></div><button class="btn" data-sanad-act="accept-family-invite">قبول دعوة برقم هاتفي</button><div class="sec"><h2>المعاملات المشتركة</h2></div>'+sharedHtml+'</div>','family');SanadI18n.apply(document.getElementById('sheet'));
   },
-  cardHtml(){if(!this.isActive())return '<div class="family-home-card" data-sanad-act="open-family"><div class="fh-ico">👨‍👩‍👧</div><div><b>العائلة</b><span>أنشئ مساحة مشتركة اختيارية</span></div><span class="fh-arrow">›</span></div>';const n=(this.state.sharedTxIds||[]).length;return '<div class="family-home-card active" data-sanad-act="open-family"><div class="fh-ico">👨‍👩‍👧</div><div><b>'+esc(this.state.name||'العائلة')+'</b><span>'+n+' معاملات مشتركة</span></div><span class="fh-arrow">›</span></div>';}
+  async pruneMissingTransactions(){const valid=new Set(S.transactions.map(t=>t.id)),shared=this.state.sharedTxIds||[],removed=shared.filter(id=>!valid.has(id));if(!removed.length)return 0;this.state.sharedTxIds=shared.filter(id=>valid.has(id));this.state.pendingUnshareIds=Array.from(new Set([...(this.state.pendingUnshareIds||[]),...removed]));await SanadExtStorage.set('family',this.state);return removed.length;},
+  cardHtml(){if(!SANAD_CLOUD_FAMILY_BETA_ENABLED)return '';if(!this.isActive())return '<div class="family-home-card" data-sanad-act="open-family"><div class="fh-ico">👨‍👩‍👧</div><div><b>العائلة</b><span>أنشئ مساحة مشتركة اختيارية</span></div><span class="fh-arrow">›</span></div>';const n=(this.state.sharedTxIds||[]).length;return '<div class="family-home-card active" data-sanad-act="open-family"><div class="fh-ico">👨‍👩‍👧</div><div><b>'+esc(this.state.name||'العائلة')+'</b><span>'+n+' معاملات مشتركة</span></div><span class="fh-arrow">›</span></div>';}
 };
 
 const SanadFullBackup = {
   async blobToDataURL(blob){return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});},
-  dataURLToBlob(data){const [h,b]=data.split(',');const mime=(h.match(/data:([^;]+)/)||[])[1]||'application/octet-stream';const bin=atob(b);const a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:mime});},
-  async export(){
-    const state=snapshotState(),errs=Schema.validateStateStrict(state);if(errs.length){toast('تم منع التصدير: بيانات غير صالحة');return;}const receipts=await SanadExtStorage.listReceipts();const packed=[];for(const r of receipts){if(!r.blob)continue;packed.push({txId:r.txId,meta:r.meta||{},data:await this.blobToDataURL(r.blob)});}
-    const features={family:SanadFamily.state,syncMeta:Object.assign({},SanadCloud.meta,{dirty:true}),firebaseConfig:SanadCloud.config||null};delete features.syncMeta.receiptDirty;
-    const payload={format:'SANAD_FULL_BACKUP',version:1,appVersion:SANAD_V9_VERSION,exportedAt:new Date().toISOString(),finance:{...state,integrity:{version:1,fingerprint:stateFingerprint(state)}},features,receipts:packed};
-    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sanad-full-backup-'+isoToday()+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},3000);toast('تم التصدير');
-  },
+  dataURLToBlob(data){if(typeof data!=='string'||!/^data:image\/(?:jpeg|png|webp);base64,/i.test(data))throw new Error('invalid receipt data');const [h,b]=data.split(','),mime=(h.match(/data:([^;]+)/)||[])[1]||'';const bin=atob(b||'');if(bin.length>20*1024*1024)throw new Error('receipt too large');const a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:mime});},
+  async export(){const state=snapshotState(),errs=Schema.validateStateStrict(state);if(errs.length){toast('تم منع التصدير: بيانات غير صالحة');return;}const validIds=new Set(state.transactions.map(t=>t.id)),receipts=await SanadExtStorage.listReceipts(),packed=[];for(const r of receipts){if(!r||!r.blob||!validIds.has(r.txId))continue;packed.push({txId:r.txId,meta:r.meta||{},data:await this.blobToDataURL(r.blob)});}const features={family:SanadFamily.state,syncMeta:Object.assign({},SanadCloud.meta,{dirty:true}),firebaseConfig:SanadCloud.config||null};delete features.syncMeta.receiptDirty;const payload={format:'SANAD_FULL_BACKUP',version:1,appVersion:SANAD_V9_VERSION,exportedAt:new Date().toISOString(),finance:{...state,integrity:{version:1,fingerprint:stateFingerprint(state)}},features,receipts:packed};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sanad-full-backup-'+isoToday()+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},3000);toast('تم التصدير');},
   importPicker(){let i=document.getElementById('sanadFullImport');if(!i){i=document.createElement('input');i.type='file';i.accept='.json,application/json';i.id='sanadFullImport';i.hidden=true;document.body.appendChild(i);i.addEventListener('change',()=>this.importFile(i.files&&i.files[0]));}i.value='';i.click();},
-  async importFile(file){if(!file)return;let data;try{data=JSON.parse(await file.text());}catch(_){toast('الملف ليس JSON صالح');return;}if(!data||data.format!=='SANAD_FULL_BACKUP'||!data.finance){toast('ليست نسخة SANAD كاملة');return;}const fp=data.finance.integrity&&data.finance.integrity.fingerprint;if(fp&&stateFingerprint(data.finance)!==fp){toast('النسخة تالفة — بصمة السلامة غير مطابقة');return;}let migrated;try{migrated=Schema.migrate(data.finance);}catch(e){toast('النسخة غير متوافقة');return;}const errs=Schema.validateStateStrict(migrated);if(errs.length){toast('تم رفض النسخة لحماية البيانات');return;}const ok=await dialog({emoji:'📦',title:'استيراد نسخة كاملة',msg:'سيتم استبدال البيانات المالية والمرفقات المحلية الحالية.',okText:'استيراد'});if(!ok)return;try{await SanadCloud.safeApplyRemote(migrated);for(const r of (data.receipts||[])){if(r.txId&&r.data)await SanadExtStorage.putReceipt(r.txId,this.dataURLToBlob(r.data),r.meta||{});}if(data.features&&data.features.family){SanadFamily.state=Object.assign(SanadFamily.state,data.features.family);await SanadExtStorage.set('family',SanadFamily.state);}if(data.features&&data.features.firebaseConfig){await SanadExtStorage.set('firebaseConfig',data.features.firebaseConfig);SanadCloud.config=data.features.firebaseConfig;}SanadCloud.meta.dirty=true;await SanadCloud.saveMeta();render();toast('تم الاستيراد');}catch(e){console.error(e);toast('تعذر الاستيراد');}}
+  prepare(data){if(!data||data.format!=='SANAD_FULL_BACKUP'||Number(data.version)!==1||!data.finance)throw new Error('not-full-backup');const fp=data.finance.integrity&&data.finance.integrity.fingerprint;if(!fp||typeof fp!=='string')throw new Error('missing-integrity');if(stateFingerprint(data.finance)!==fp)throw new Error('fingerprint-mismatch');let migrated;try{migrated=Schema.migrate(data.finance);}catch(_){throw new Error('migration-failed');}const errs=Schema.validateStateStrict(migrated);if(errs.length)throw new Error('schema-invalid:'+errs.slice(0,3).join('|'));const validIds=new Set(migrated.transactions.map(t=>t.id)),seen=new Set(),receipts=[];if(!Array.isArray(data.receipts||[]))throw new Error('receipts-invalid');for(const r of (data.receipts||[])){if(!r||typeof r.txId!=='string'||!r.txId||!validIds.has(r.txId)||seen.has(r.txId)||typeof r.data!=='string')throw new Error('receipt-invalid');const blob=this.dataURLToBlob(r.data);if(!/^image\//.test(blob.type))throw new Error('receipt-type');seen.add(r.txId);receipts.push({txId:r.txId,blob,meta:Object.assign({updatedAt:Date.now()},r.meta||{})});}return {migrated,receipts};},
+  async importData(data,ask=true){
+    let prepared;try{prepared=this.prepare(data);}catch(e){const code=e&&e.message||'';if(code==='fingerprint-mismatch')toast('النسخة تالفة — بصمة السلامة غير مطابقة');else if(code==='not-full-backup')toast('ليست نسخة SANAD كاملة');else if(code==='migration-failed')toast('النسخة غير متوافقة');else toast('تم رفض النسخة لحماية البيانات');return false;}
+    if(ask){const ok=await dialog({emoji:'📦',title:'استيراد نسخة كاملة',msg:'سيتم استبدال البيانات المالية والمرفقات المحلية الحالية.',okText:'استيراد'});if(!ok)return false;}
+    const beforeFinance=snapshotState(),beforeReceipts=await SanadExtStorage.listReceipts(),beforeFamily=deepClone(SanadFamily.state),beforeFirebase=SanadCloud.config?deepClone(SanadCloud.config):null,beforeMeta=deepClone(SanadCloud.meta);
+    const valid=new Set(prepared.migrated.transactions.map(t=>t.id)),incomingFamily=Object.assign({id:null,name:'',members:[],sharedTxIds:[],pendingUnshareIds:[]},(data.features&&data.features.family)||{});
+    incomingFamily.sharedTxIds=Array.isArray(incomingFamily.sharedTxIds)?incomingFamily.sharedTxIds.filter(id=>valid.has(id)):[];incomingFamily.pendingUnshareIds=Array.isArray(incomingFamily.pendingUnshareIds)?Array.from(new Set(incomingFamily.pendingUnshareIds.filter(id=>typeof id==='string'))):[];
+    let incomingFirebase=(data.features&&data.features.firebaseConfig)||null;if(incomingFirebase&&(!SanadCloud.validConfig(incomingFirebase)||JSON.stringify(incomingFirebase).length>20000)){toast('تم رفض النسخة لحماية البيانات');return false;}
+    try{
+      const financeOk=await SanadCloud.safeApplyRemote(prepared.migrated);if(!financeOk)throw new Error('finance restore failed');
+      if(!await SanadExtStorage.replaceReceipts(prepared.receipts))throw new Error('receipt replace failed');
+      if(!await SanadExtStorage.set('family',incomingFamily))throw new Error('family restore failed');
+      if(incomingFirebase){if(!await SanadExtStorage.set('firebaseConfig',incomingFirebase))throw new Error('firebase config restore failed');}else if(!await SanadExtStorage.del('firebaseConfig'))throw new Error('firebase config clear failed');
+      SanadFamily.state=incomingFamily;SanadCloud.config=incomingFirebase;SanadCloud.meta=Object.assign({},beforeMeta,{dirty:true,receiptDirty:{},lastSync:null});if(!await SanadExtStorage.set('syncMeta',SanadCloud.meta))throw new Error('sync meta restore failed');render();toast('تم الاستيراد');return true;
+    }catch(e){console.error(e);try{await SanadCloud.safeApplyRemote(beforeFinance);}catch(_){}try{await SanadExtStorage.replaceReceipts(beforeReceipts);}catch(_){}try{await SanadExtStorage.set('family',beforeFamily);SanadFamily.state=beforeFamily;}catch(_){}try{if(beforeFirebase)await SanadExtStorage.set('firebaseConfig',beforeFirebase);else await SanadExtStorage.del('firebaseConfig');SanadCloud.config=beforeFirebase;}catch(_){}try{SanadCloud.meta=beforeMeta;await SanadExtStorage.set('syncMeta',beforeMeta);}catch(_){}try{render();}catch(_){}toast('تعذر الاستيراد');return false;}
+  },
+  async importFile(file){if(!file)return false;let data;try{data=JSON.parse(await file.text());}catch(_){toast('الملف ليس JSON صالح');return false;}return this.importData(data,true);}
 };
 
 const SanadV9 = {
   initialized:false,
-  async bootstrap(){
-    await SanadExtStorage.init();await Promise.all([SanadSecurity.init(),SanadFamily.init(),SanadCloud.init().catch(e=>console.warn(e))]);SanadTheme.init();SanadI18n.watch();this.ensureGlobalInputs();this.initialized=true;
-  },
+  async bootstrap(){await SanadExtStorage.init();await Promise.all([SanadSecurity.init(),SanadFamily.init(),SanadCloud.init().catch(e=>console.warn(e))]);SanadTheme.init();SanadI18n.watch();this.ensureGlobalInputs();this.initialized=true;},
   ensureGlobalInputs(){SanadReceipts.ensureInput();},
-  settingsHtml(){
-    const lang=S.settings.language==='en'?'en':'ar',mode=SanadTheme.mode();const sec=SanadSecurity.cfg.enabled?'مفعّل':'غير مفعّل';const u=SanadCloud.user;const cloudStatus=u?('متصل · '+esc(u.displayName||u.email||'')):(SanadCloud.config?'جاهز لتسجيل الدخول':'غير متصل');const fam=SanadFamily.isActive()?esc(SanadFamily.state.name):'لا توجد عائلة';
-    return '<div class="sec"><h2>اللغة والمظهر</h2></div><div class="card feature-card"><div class="feature-row"><div><b>🌐 اللغة</b><span>Arabic / English</span></div><div class="seg"><button type="button" class="'+(lang==='ar'?'on':'')+'" data-sanad-act="lang" data-value="ar">العربية</button><button type="button" class="'+(lang==='en'?'on':'')+'" data-sanad-act="lang" data-value="en">English</button></div></div><div class="feature-row"><div><b>🎨 المظهر</b><span>فاتح، داكن أو حسب الجهاز</span></div><div class="seg"><button type="button" class="'+(mode==='light'?'on':'')+'" data-sanad-act="theme" data-value="light">☀️</button><button type="button" class="'+(mode==='dark'?'on':'')+'" data-sanad-act="theme" data-value="dark">🌙</button><button type="button" class="'+(mode==='system'?'on':'')+'" data-sanad-act="theme" data-value="system">◐</button></div></div></div>'+
-      '<div class="sec"><h2>الأمان والخصوصية</h2></div><div class="list"><div class="list-item" data-sanad-act="toggle-security"><div class="li-ico">🔐</div><div class="li-body"><b>قفل بالبصمة / الجهاز</b><span>'+sec+(SanadSecurity.supported()?'':' · يحتاج HTTPS')+'</span></div><div class="li-arrow">›</div></div></div>'+
-      '<div class="sec"><h2>الحساب والمزامنة</h2></div><div class="list"><div class="list-item" data-sanad-act="google-auth"><div class="li-ico">G</div><div class="li-body"><b>'+(u?'تسجيل الخروج':'تسجيل الدخول بحساب Google')+'</b><span>'+cloudStatus+'</span></div><div class="li-arrow">›</div></div><div class="list-item" data-sanad-act="sync-now"><div class="li-ico">☁️</div><div class="li-body"><b>مزامنة الآن</b><span>'+(SanadCloud.meta.lastSync?new Date(SanadCloud.meta.lastSync).toLocaleString():'لم تتم المزامنة بعد')+'</span></div><div class="li-arrow">›</div></div><div class="list-item" data-sanad-act="firebase-config"><div class="li-ico">⚙️</div><div class="li-body"><b>إعداد Firebase</b><span>'+(SanadCloud.config?'تم إدخال الإعداد':'مطلوب لتفعيل السحابة')+'</span></div><div class="li-arrow">›</div></div>'+(u?'<div class="list-item" data-sanad-act="verify-phone"><div class="li-ico">📱</div><div class="li-body"><b>رقم الهاتف</b><span>'+esc(u.phoneNumber||'غير موثق')+'</span></div><div class="li-arrow">›</div></div>':'')+'</div>'+
-      '<div class="sec"><h2>العائلة والمشاركة</h2></div><div class="list"><div class="list-item" data-sanad-act="open-family"><div class="li-ico">👨‍👩‍👧</div><div class="li-body"><b>إدارة العائلة</b><span>'+fam+'</span></div><div class="li-arrow">›</div></div></div>'+
-      '<div class="sec"><h2>نسخة احتياطية كاملة</h2></div><button type="button" class="btn" data-sanad-act="full-export">📦 تصدير كامل مع الفواتير</button><button type="button" class="btn" data-sanad-act="full-import">📥 استيراد نسخة كاملة</button>';
-  },
+  settingsHtml(){const lang=S.settings.language==='en'?'en':'ar',mode=SanadTheme.mode(),sec=SanadSecurity.cfg.enabled?'مفعّل':'غير مفعّل',langDesc=lang==='en'?'Arabic / English':'العربية / الإنجليزية',enLabel=lang==='en'?'English':'الإنجليزية';return '<div class="sec"><h2>اللغة والمظهر</h2></div><div class="card feature-card"><div class="feature-row"><div><b>🌐 اللغة</b><span>'+langDesc+'</span></div><div class="seg"><button type="button" class="'+(lang==='ar'?'on':'')+'" data-sanad-act="lang" data-value="ar">العربية</button><button type="button" class="'+(lang==='en'?'on':'')+'" data-sanad-act="lang" data-value="en">'+enLabel+'</button></div></div><div class="feature-row"><div><b>🎨 المظهر</b><span>فاتح، داكن أو حسب الجهاز</span></div><div class="seg"><button type="button" class="'+(mode==='light'?'on':'')+'" data-sanad-act="theme" data-value="light">☀️</button><button type="button" class="'+(mode==='dark'?'on':'')+'" data-sanad-act="theme" data-value="dark">🌙</button><button type="button" class="'+(mode==='system'?'on':'')+'" data-sanad-act="theme" data-value="system">◐</button></div></div></div>'+'<div class="sec"><h2>الأمان والخصوصية</h2></div><div class="list"><div class="list-item" data-sanad-act="toggle-security"><div class="li-ico">🔐</div><div class="li-body"><b>قفل بالبصمة / الجهاز</b><span>'+sec+(SanadSecurity.supported()?'':' · يحتاج HTTPS')+'</span></div><div class="li-arrow">›</div></div></div>'+'<div class="sec"><h2>السحابة والعائلة</h2></div><div class="list"><div class="list-item" aria-disabled="true"><div class="li-ico">☁️</div><div class="li-body"><b>مؤجل إلى V9.1</b><span>معطّل في النسخة المحلية المستقرة</span></div></div></div>'+'<div class="sec"><h2>نسخة احتياطية كاملة</h2></div><button type="button" class="btn" data-sanad-act="full-export">📦 تصدير كامل مع الفواتير</button><button type="button" class="btn" data-sanad-act="full-import">📥 استيراد نسخة كاملة</button>';},
   async setLanguage(lang){if(!['ar','en'].includes(lang)||!canWrite())return;const prev=S.settings.language;S.settings.language=lang;const ok=await persist();if(!ok){S.settings.language=prev;return;}render();requestAnimationFrame(()=>SanadI18n.apply(document));},
-  async afterStart(){SanadTheme.apply();SanadI18n.apply();if(SanadSecurity.cfg.enabled)SanadSecurity.show();hideSanadBootSplash();},
-  async click(el){
-    const a=el.dataset.sanadAct,v=el.dataset.value;
-    if(a==='lang')return this.setLanguage(v); if(a==='theme')return SanadTheme.set(v); if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable(); if(a==='unlock')return SanadSecurity.unlock(); if(a==='recovery-unlock')return SanadSecurity.recovery();
-    if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;} if(a==='remove-receipt')return SanadReceipts.removeCurrent(); if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);
-    if(a==='firebase-config')return SanadCloud.openConfig(); if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||''); if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle(); if(a==='sync-now')return SanadCloud.syncNow(); if(a==='verify-phone')return SanadCloud.verifyPhoneSheet(); if(a==='send-phone-code')return SanadCloud.sendPhoneCode(); if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();
-    if(a==='open-family')return SanadFamily.open(); if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||''); if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||''); if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();
-    if(a==='full-export')return SanadFullBackup.export(); if(a==='full-import')return SanadFullBackup.importPicker();
-  }
+  async afterStart(fromUnlock=false){SanadTheme.apply();SanadI18n.apply();const validIds=new Set(S.transactions.map(t=>t.id));await SanadExtStorage.pruneReceiptOrphans(validIds);await SanadFamily.pruneMissingTransactions();if(SanadSecurity.cfg.enabled&&!SanadSecurity.unlocked){SanadSecurity.show();return;}hideSanadBootSplash();},
+  async click(el){const a=el.dataset.sanadAct,v=el.dataset.value;if(a==='lang')return this.setLanguage(v);if(a==='theme')return SanadTheme.set(v);if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable();if(a==='unlock')return SanadSecurity.unlock();if(a==='recovery-unlock')return SanadSecurity.recovery();if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;}if(a==='remove-receipt')return SanadReceipts.removeCurrent();if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);if(a==='firebase-config')return SanadCloud.openConfig();if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||'');if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle();if(a==='sync-now')return SanadCloud.syncNow();if(a==='verify-phone')return SanadCloud.verifyPhoneSheet();if(a==='send-phone-code')return SanadCloud.sendPhoneCode();if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();if(a==='open-family')return SanadFamily.open();if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||'');if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||'');if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();if(a==='full-export')return SanadFullBackup.export();if(a==='full-import')return SanadFullBackup.importPicker();}
 };
 
 /* ===== non-destructive wrappers around the stable V8.9.1 core ===== */
@@ -9499,7 +9480,7 @@ const _sanadCoreSaveTx=saveTx; saveTx=async function(){const ids=new Set(S.trans
 const _sanadCoreSaveTransfer=saveTransfer; saveTransfer=async function(){const ids=new Set(S.transactions.map(t=>t.id));const edit=S.form&&S.form.id;const pending=SanadReceipts.pending;await _sanadCoreSaveTransfer();const added=S.transactions.find(t=>!ids.has(t.id));const targetId=edit||(added&&added.id);if(targetId&&pending)await SanadReceipts.attachAfterSave(ids,edit,pending);};
 const _sanadCoreCommit=commitCriticalMutation; commitCriticalMutation=async function(fn){const r=await _sanadCoreCommit(fn);if(r&&r.ok&&!r.noop)await SanadCloud.markDirty();return r;};
 const _sanadCorePersist=persist; persist=async function(){const r=await _sanadCorePersist();if(r)await SanadCloud.markDirty();return r;};
-const _sanadCoreStartApp=startApp; startApp=function(){_sanadCoreStartApp();setTimeout(()=>SanadV9.afterStart(),0);};
+const _sanadCoreStartApp=startApp; startApp=function(){if(SanadSecurity.cfg.enabled&&!SanadSecurity.unlocked){SanadSecurity.pendingStart=true;const app=document.getElementById('app'),ob=document.getElementById('onboard');if(app)app.hidden=true;if(ob)ob.hidden=true;SanadTheme.apply();SanadI18n.apply();SanadSecurity.show();return;}_sanadCoreStartApp();setTimeout(()=>SanadV9.afterStart(),0);};
 const _sanadCoreToast=toast; toast=function(msg,ms){return _sanadCoreToast(SanadI18n.text(msg),ms);};
 const _sanadCoreDialog=dialog; dialog=function(opts){opts=Object.assign({},opts||{});if(opts.title)opts.title=SanadI18n.text(opts.title);if(opts.msg)opts.msg=SanadI18n.text(opts.msg);if(opts.okText)opts.okText=SanadI18n.text(opts.okText);if(opts.cancelText)opts.cancelText=SanadI18n.text(opts.cancelText);if(SanadI18n.lang==='en'){if(!opts.okText)opts.okText='Confirm';if(!opts.cancelText)opts.cancelText='Cancel';}return _sanadCoreDialog(opts);};
 const _sanadCoreMonthLabel=monthLabel; monthLabel=function(key){const [y,m]=key.split('-').map(Number);const loc=(S.settings&&S.settings.language==='en')?'en-US':'ar-EG-u-nu-latn';return new Date(y,m-1,1).toLocaleDateString(loc,{month:'long',year:'numeric'});};
@@ -9508,7 +9489,7 @@ const _sanadCoreExportData=exportData; exportData=async function(){const oldCrea
 /* interaction hooks owned by V9; core handler remains untouched */
 document.addEventListener('click',e=>{
   const el=e.target.closest&&e.target.closest('[data-sanad-act]');if(el){e.preventDefault();e.stopPropagation();SanadV9.click(el);return;}
-  const sh=e.target.closest&&e.target.closest('[data-family-share-toggle]');if(sh){sh.classList.toggle('on');buzz(6);return;}
+  const sh=e.target.closest&&e.target.closest('[data-family-share-toggle]');if(sh){if(!SANAD_CLOUD_FAMILY_BETA_ENABLED)return;sh.classList.toggle('on');buzz(6);return;}
 },true);
 
 
