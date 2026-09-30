@@ -702,12 +702,24 @@ body{font-family:"Cairo",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,T
 #sanadBootSplash{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f6fffe;overflow:hidden;transition:opacity .32s ease,visibility .32s ease;animation:sanadSplashSafety 0s linear 7s forwards}
 #sanadBootSplash.hide{opacity:0;visibility:hidden;pointer-events:none}
 #sanadBootSplash .sb-full{display:block;width:100%;height:100%;object-fit:contain;object-position:center center;background:#f6fffe}
+#sanadBootSplash .sb-full.sb-logo-fallback{width:min(56vw,280px);height:auto;object-fit:contain;background:transparent;filter:drop-shadow(0 14px 28px rgba(0,90,95,.18))}
 @keyframes sanadSplashSafety{to{opacity:0;visibility:hidden;pointer-events:none}}
 
 </style>
 </head>
 <body>
-<div id="sanadBootSplash" aria-hidden="true"><img class="sb-full" alt="SANAD" src="sanad_splash.webp" decoding="sync" fetchpriority="high" draggable="false"></div><script>window.__sanadSplashBorn=performance.now();</script>
+<div id="sanadBootSplash" aria-hidden="true"><img class="sb-full" id="sanadSplashImage" alt="SANAD" src="sanad_splash.webp" decoding="sync" fetchpriority="high" draggable="false"></div><script>
+window.__sanadSplashBorn=performance.now();
+(function(){
+  var im=document.getElementById('sanadSplashImage');
+  if(!im)return;
+  im.addEventListener('error',function once(){
+    im.removeEventListener('error',once);
+    im.classList.add('sb-logo-fallback');
+    im.src='sanad_logo.webp';
+  });
+})();
+</script>
 
 <input type="file" id="importFile" accept=".json,application/json" style="display:none">
 
@@ -755,7 +767,7 @@ body{font-family:"Cairo",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,T
 
 <script>
 /* =========================================================
-   SANAD V9.0.5 — Device Test 5
+   SANAD V9.0.6 — Device Test 6
    Schema: 16 (unchanged)
    ========================================================= */
 
@@ -9067,7 +9079,7 @@ const SanadI18n = {
     'الحساب والمزامنة':'Account & sync','تسجيل الدخول بحساب Google':'Sign in with Google','تسجيل الخروج':'Sign out','مزامنة الآن':'Sync now','إعداد Firebase':'Configure Firebase','غير متصل':'Not connected','متصل':'Connected','العائلة والمشاركة':'Family & sharing','إدارة العائلة':'Manage family','لا توجد عائلة':'No family yet',
     'الفواتير والمرفقات':'Receipts & attachments','إرفاق فاتورة':'Attach receipt','تصوير فاتورة':'Capture receipt','اختيار صورة':'Choose image','إزالة الفاتورة':'Remove receipt','فاتورة مرفقة':'Receipt attached','لا توجد فاتورة':'No receipt attached',
     'العائلة':'Family','أنشئ مساحة مشتركة اختيارية':'Create an optional shared space','لا توجد معاملات مشتركة':'No shared transactions','سيظهر الأعضاء بعد المزامنة':'Members will appear after sync',
-    'إضافة حساب':'Add account','أضف حساب':'Add account','أضف بطاقة':'Add card','لا توجد نتائج':'No results','لا توجد حسابات في':'No accounts in','لا توجد التزامات في':'No recurring items in','التزاماتك المتكررة':'Your recurring items','اشتراكات، فواتير، راتب... التطبيق يفكرك قبل الموعد.':'Subscriptions, bills, salary... SANAD reminds you before the due date.',
+    'إضافة حساب':'Add account','أضف حساب':'Add account','أضف حسابًا':'Add account','أضف حساباً':'Add account','أضف بطاقة':'Add card','لا توجد نتائج':'No results','لا توجد حسابات في':'No accounts in','لا توجد التزامات في':'No recurring items in','التزاماتك المتكررة':'Your recurring items','اشتراكات، فواتير، راتب... التطبيق يفكرك قبل الموعد.':'Subscriptions, bills, salary... SANAD reminds you before the due date.',
     'وضع التجربة — البيانات مؤقتة وستُحذف عند إعادة تحميل الصفحة':'Preview mode — data is temporary and will be deleted when the page reloads','لا توجد حسابات':'No accounts','الحساب الأساسي في':'Primary account in','ملخص':'Summary','المزيد':'More',
     'نسخة احتياطية كاملة':'Full backup','تصدير كامل مع الفواتير':'Export full backup with receipts','استيراد نسخة كاملة':'Import full backup','وضع الحماية':'Protection mode','وضع القراءة فقط':'Read-only mode',
     'جاري إعادة المحاولة...':'Retrying…','تعذر الحفظ':'Could not save','تم الحفظ':'Saved','تم التعديل':'Updated','تمت الإضافة':'Added','تم تسجيل الدخل':'Income recorded','تم التصدير':'Exported','تم الاستيراد':'Imported','تم الحذف':'Deleted',
@@ -9078,7 +9090,7 @@ const SanadI18n = {
     'فلترة':'Filters','الكل':'All','تحويل بين حساباتي':'Between my accounts','كل الفئات':'All categories','تفريغ':'Clear','تطبيق':'Apply','بطاقة مدفوعة':'Prepaid card','رصيد مسبق':'Prepaid balance','ابحث...':'Search…','بحث':'Search',
     'إضافة جديدة — الإمارات':'Add new — UAE','بطاقة جديدة':'New card','اختر الحساب البنكي المرتبط':'Choose the linked bank account','الحساب البنكي المرتبط':'Linked bank account','— اختر حساب بنكي —':'— Choose bank account —','البطاقة تسحب من هذا الحساب مباشرة.':'Card purchases are deducted directly from this account.','البلد':'Country','أو اكتب اسم جديد':'Or enter a new name','العملة مقفلة (توجد معاملات).':'Currency is locked because transactions exist.','مقفل (توجد معاملات).':'Locked because transactions exist.','الرصيد الحالي في البطاقة.':'Current card balance.','المبلغ عند الإضافة':'Amount at setup',
     'مصدر الرصيد الأول':'Initial balance source','الرصيد موجود بالفعل على البطاقة':'Balance already exists on the card','شحن من حساب موجود':'Fund from an existing account','اختيار التحويل يخصم المبلغ من الحساب ويضيفه للبطاقة كتحويل، وليس كمصروف.':'Funding deducts the amount from the selected account and adds it to the prepaid card as a transfer, not an expense.','حساب التمويل':'Funding account','— اختر حساب التمويل —':'— Choose funding account —','اكتب الرصيد الموجود حاليًا أو مبلغ الشحن الأول.':'Enter the existing card balance or the first top-up amount.','➕ شحن البطاقة من حساب':'➕ Top up card from an account','شحن بطاقة':'Card top-up','📷 تصوير / اختيار فاتورة':'📷 Capture / choose receipt',
-    'حساب جديد':'New account','تعديل':'Edit','حساب مؤرشف':'Archived account','اسم الحساب':'Account name','البنك / المؤسسة':'Bank / institution','— بدون —':'— None —','اتركه فاضي إذا لا تريد ربطه بجهة معينة.':'Leave blank if you do not want to link an institution.','الرصيد الافتتاحي':'Opening balance','رصيد الحساب عند تاريخ البداية.':'Account balance on the start date.','الأيقونة':'Icon','اللون':'Color','نوع الحساب مقفل — مرتبط ببطاقة ديبت.':'Account type is locked because a debit card is linked.','مقفل — استخدم "تعديل الرصيد الحقيقي".':'Locked — use “Adjust actual balance”.','قيمة الدين عند البداية':'Opening debt amount','الجهة الدائنة (اختياري)':'Creditor (optional)','تاريخ الاستحقاق (اختياري)':'Due date (optional)',
+    'حساب جديد':'New account','تعديل':'Edit','حساب مؤرشف':'Archived account','اسم الحساب':'Account name','البنك / المؤسسة':'Bank / institution','بدون':'None','— بدون —':'— None —','اتركه فاضي إذا لا تريد ربطه بجهة معينة.':'Leave blank if you do not want to link an institution.','الرصيد الافتتاحي':'Opening balance','رصيد الحساب عند تاريخ البداية.':'Account balance on the start date.','الأيقونة':'Icon','اللون':'Color','نوع الحساب مقفل — مرتبط ببطاقة ديبت.':'Account type is locked because a debit card is linked.','مقفل — استخدم "تعديل الرصيد الحقيقي".':'Locked — use “Adjust actual balance”.','قيمة الدين عند البداية':'Opening debt amount','الجهة الدائنة (اختياري)':'Creditor (optional)','تاريخ الاستحقاق (اختياري)':'Due date (optional)',
     '⭐ اجعله الحساب الافتراضي للمصروفات في الإمارات':'⭐ Make it the default spending account in UAE','يُستخدم في تسجيل المصروفات والدخل والتحويلات':'Used when recording expenses, income, and transfers','🏠 اجعله الحساب الأساسي في الرئيسية':'🏠 Make it the primary Home account','يظهر كبطاقة في الشاشة الرئيسية':'Shown as a card on Home',
     'نوع البطاقة':'Card type','تسحب مباشرة من حساب بنكي':'Uses a bank account balance','المشتريات تصبح مديونية وتسددها لاحقًا':'Purchases become debt and are repaid later','تشحن البطاقة أولًا ثم تصرف منها':'Top up the card before spending from it',
     'تذكير قبلها بـ (أيام) — 0 = نفس اليوم':'Reminder (days before) — 0 = same day','📷 تصوير / اختيار صورة':'📷 Capture / choose image',
@@ -9094,7 +9106,7 @@ const SanadI18n = {
     'حركة الأموال':'Money movement','تحويلات داخلة (نفس البلد)':'Incoming transfers (same country)','تحويلات خارجة (نفس البلد)':'Outgoing transfers (same country)','تحويلات واردة (خارج البلد)':'Incoming transfers (cross-country)','تحويلات صادرة (خارج البلد)':'Outgoing transfers (cross-country)','تحويلات داخل البلد':'Domestic transfers','تحويلات خارج البلد':'Outbound transfers','تحويلات واردة':'Incoming transfers','لا توجد':'None',
     'ملخص البطاقة':'Card summary','المديونية الحالية':'Current debt','الحد الائتماني':'Credit limit','مشتريات الفترة':'Purchases in period','سداد الفترة (أصل)':'Repayments in period (principal)','بدون حد':'No limit','الإجمالي':'Total','المصروف':'Expenses','معاملة':'transaction','التوزيع':'Distribution',
     'الديون':'Debts','المؤرشفة':'Archived','استرجاع':'Restore','بطاقة مؤرشفة':'Archived card','أضف كاش':'Add cash','مصدر الكاش الأول':'Initial cash source','الكاش موجود عندي بالفعل':'Cash already on hand','سحب / نقل من حساب موجود':'Transfer from an existing account','لو اخترت حسابًا، SANAD يسجلها كتحويل حتى لا تتضاعف أموالك.':'If you choose an account, SANAD records a transfer so your money is not double-counted.','تمويل كاش':'Cash funding','أدخل مبلغ الكاش':'Enter cash amount','تمويل الكاش الأول يجب أن يكون من حساب بنفس العملة':'Initial cash funding must use an account with the same currency',
-    'لا يوجد مديونية':'No debt','لا توجد مديونيات':'No liabilities','لا يوجد أشخاص بعد':'No people yet','إضافة شخص':'Add person','لا يوجد فرق':'No difference','أضف حساباً أولاً للسداد':'Add an account first for repayment','أضف حسابًا يمكن الشحن منه أولاً':'Add an account that can fund the top-up first','غير محدد':'Not set','الحد':'Limit','لا يوجد':'None','بطاقة':'Card','افتراضية':'Default','رسوم':'Fees','سداد':'Repay',
+    'لا يوجد مديونية':'No debt','لا توجد مديونية':'No debt','لا توجد مديونيات':'No liabilities','لا يوجد أشخاص بعد':'No people yet','إضافة شخص':'Add person','لا يوجد فرق':'No difference','أضف حساباً أولاً للسداد':'Add an account first for repayment','أضف حسابًا يمكن الشحن منه أولاً':'Add an account that can fund the top-up first','غير محدد':'Not set','الحد':'Limit','لا يوجد':'None','بطاقة':'Card','افتراضية':'Default','رسوم':'Fees','سداد':'Repay',
     'أرشفة':'Archive','أرشفة الحساب':'Archive account','أرشفة البطاقة':'Archive card','استرجاع الحساب':'Restore account','حذف الحساب':'Delete account','حذف البطاقة':'Delete card','تعديل الرصيد الحقيقي':'Adjust actual balance',
     'لا يظهر في الإدخال الجديد.':'It does not appear in new entries.','هذا هو':'This is','للمصروفات.':'for expenses.','في الرئيسية.':'on Home.',
     'اختر الحساب البنكي المرتبط. البلد والعملة والبنك يُشتقّون تلقائيًا.':'Choose the linked bank account. Country, currency, and institution are set automatically.','مقفل لأن بالبطاقة معاملات.':'Locked because the card has transactions.',
