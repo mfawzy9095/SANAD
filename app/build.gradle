@@ -11,8 +11,8 @@ android {
         applicationId 'com.sanad.v9test'
         minSdk 26
         targetSdk 35
-        versionCode 90800
-        versionName '9.0.8-device-rc'
+        versionCode 90900
+        versionName '9.0.9-stability-rc'
     }
 
     buildTypes {
@@ -38,6 +38,7 @@ android {
 }
 
 dependencies {
+    testImplementation 'junit:junit:4.13.2'
     implementation 'androidx.webkit:webkit:1.14.0'
     implementation 'androidx.core:core:1.15.0'
 }
