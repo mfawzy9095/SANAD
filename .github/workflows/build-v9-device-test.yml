@@ -1,10 +1,10 @@
-name: SANAD V9.0.8 Device RC Android Build
-# quick-gate-refresh: v9.0.8-native
+name: SANAD V9.0.9 Stability RC Android Build
+# stability-gate: v9.0.9
 
 on:
   push:
     branches:
-      - android-v9.0.8-device-features
+      - fix-v9.0.9-stability
   pull_request:
     branches:
       - main
@@ -51,7 +51,7 @@ jobs:
           grep -q 'android:icon="@mipmap/ic_launcher"' app/src/main/AndroidManifest.xml
           grep -q 'android:roundIcon="@mipmap/ic_launcher_round"' app/src/main/AndroidManifest.xml
 
-      - name: Verify web source and V9.0.8 regressions
+      - name: Verify web source and V9.0.9 stability regressions
         shell: bash
         run: |
           set -euo pipefail
@@ -60,7 +60,22 @@ jobs:
           SOURCE_SHA="$(sha256sum "$HTML" | awk '{print $1}')"
           echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
 
-          grep -q "const SANAD_V9_VERSION = '9.0.8'" "$HTML"
+          grep -q "const SANAD_V9_VERSION = '9.0.9'" "$HTML"
+          grep -q "_criticalMutationInFlight" "$HTML"
+          grep -q "reason:'busy'" "$HTML"
+          grep -q "relockAfterMs:30000" "$HTML"
+          grep -q "window.sanadAppBackgrounded" "$HTML"
+          grep -q "window.sanadAppForegrounded" "$HTML"
+          grep -q "async function secureWipeAll()" "$HTML"
+          grep -q "Storage.secureWipe()" "$HTML"
+          grep -q "SanadExtStorage.secureWipe()" "$HTML"
+          grep -q "إعادة ضبط البيانات المالية" "$HTML"
+          grep -q "حذف SANAD بالكامل من الجهاز" "$HTML"
+          grep -q "syncNativeNotifications();applyTheme();render();return true;" "$HTML"
+          test -s app/src/main/java/com/sanad/v9test/NotificationTimeCalculator.java
+          test -s app/src/test/java/com/sanad/v9test/NotificationTimeCalculatorTest.java
+          grep -q "NotificationTimeCalculator.nextTrigger" app/src/main/java/com/sanad/v9test/NotificationScheduler.java
+          grep -q "ACTION_TIMEZONE_CHANGED" app/src/main/java/com/sanad/v9test/BootReceiver.java
           grep -q "const SANAD_CLOUD_FAMILY_BETA_ENABLED = false" "$HTML"
           grep -q "async replaceReceipts(records)" "$HTML"
           grep -q "async pruneReceiptOrphans(validIds)" "$HTML"
@@ -140,10 +155,13 @@ jobs:
           html=pathlib.Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
           scripts=re.findall(r"<script[^>]*>(.*?)</script>",html,re.S)
           assert scripts
-          pathlib.Path("/tmp/sanad-v908.js").write_text("\n".join(scripts),encoding="utf-8")
+          pathlib.Path("/tmp/sanad-v909.js").write_text("\n".join(scripts),encoding="utf-8")
           PY
-          for i in $(seq 1 10); do node --check /tmp/sanad-v908.js >/dev/null; done
-          echo "V9.0.8 source gates passed 10x"
+          for i in $(seq 1 10); do node --check /tmp/sanad-v909.js >/dev/null; done
+          echo "V9.0.9 source gates passed 10x"
+
+      - name: JVM regression tests
+        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
 
       - name: Android lint
         run: gradle --no-daemon --stacktrace :app:lintDebug
@@ -157,16 +175,17 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.8-DEVICE-RC.apk"
+          cp "$APK" "SANAD-V9.0.9-STABILITY-RC.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
           grep -q "package: name='com.sanad.v9test'" apk-badging.txt
-          grep -q "versionCode='90800'" apk-badging.txt
-          grep -q "versionName='9.0.8-device-rc'" apk-badging.txt
+          grep -q "versionCode='90900'" apk-badging.txt
+          grep -q "versionName='9.0.9-stability-rc'" apk-badging.txt
           grep -q "application-label:'SANAD — سند'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
           grep -q "android.permission.POST_NOTIFICATIONS" apk-permissions.txt
+          grep -q "android.permission.USE_BIOMETRIC" apk-permissions.txt
           grep -q "android.permission.RECEIVE_BOOT_COMPLETED" apk-permissions.txt
           ! grep -q "android.permission.READ_SMS" apk-permissions.txt
           ! grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
@@ -178,14 +197,14 @@ jobs:
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          sha256sum "SANAD-V9.0.8-DEVICE-RC.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.0.9-STABILITY-RC.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.8-DEVICE-RC
+          name: SANAD-V9.0.9-STABILITY-RC
           path: |
-            SANAD-V9.0.8-DEVICE-RC.apk
+            SANAD-V9.0.9-STABILITY-RC.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
