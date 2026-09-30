@@ -6448,7 +6448,7 @@ async function saveAccount(id){
       });
       if(type==='cash'&&cashFundingMode==='transfer'&&cashFundingSourceId&&openingBalance>0){
         const src=Finance.getAccount(cashFundingSourceId);
-        S.transactions.push({id:uid('t'),type:'transfer',fromAccountId:src.id,fromAmount:openingBalance,fromCurrency:src.currency,fromCountry:src.country,toAccountId:savedId,toAmount:openingBalance,toCurrency:cur,toCountry:country,fxRate:1,fee:0,note:'تمويل كاش',tags:['كاش'],date:isoToday(),created:Date.now()});
+        S.transactions.push({id:uid('t'),type:'transfer',fromAccountId:src.id,fromAmount:openingBalance,fromCurrency:src.currency,fromCountry:src.country,toAccountId:savedId,toAmount:openingBalance,toCurrency:cur,toCountry:country,fxRate:1,fee:0,note:'',tags:[],date:isoToday(),created:Date.now()});
       }
     }
     /* V8.8.4.3 FIX 12: Default and Primary managed independently */
@@ -7328,7 +7328,7 @@ function openPrepaidTopup(instId){
   if(!candidates.length){ toast('أضف حسابًا يمكن الشحن منه أولاً'); return; }
   const preferred=inst.defaultTopupAccountId&&candidates.find(a=>a.id===inst.defaultTopupAccountId);
   const fromAcc=preferred||candidates[0];
-  S.form={_sheet:'transfer',id:null,_sourceCountry:fromAcc.country,_destType:'own',_destCountry:target.country,fromAccountId:fromAcc.id,toAccountId:target.id,beneficiaryId:null,fromAmount:'',toAmount:'',receivedAmount:'',receivedCurrency:'',fee:'',fxRate:Finance.suggestRate(fromAcc.currency,target.currency),_transferMode:'received',note:'شحن '+inst.name,tags:['شحن بطاقة'],date:isoToday(),showAdvanced:false};
+  S.form={_sheet:'transfer',id:null,_sourceCountry:fromAcc.country,_destType:'own',_destCountry:target.country,fromAccountId:fromAcc.id,toAccountId:target.id,beneficiaryId:null,fromAmount:'',toAmount:'',receivedAmount:'',receivedCurrency:'',fee:'',fxRate:Finance.suggestRate(fromAcc.currency,target.currency),_transferMode:'received',note:'',tags:[],date:isoToday(),showAdvanced:false};
   renderTransferSheet();
 }
 async function saveCard(id, presetType){
@@ -7505,7 +7505,7 @@ async function saveCard(id, presetType){
         if(prepaidFundingMode==='transfer'&&prepaidFundingSourceId&&bal>0){
           const sourceAcc=Finance.getAccount(prepaidFundingSourceId);
           if(!sourceAcc||sourceAcc.currency!==finalAcc.currency) return false;
-          S.transactions.push({id:uid('t'),type:'transfer',fromAccountId:sourceAcc.id,fromAmount:bal,fromCurrency:sourceAcc.currency,fromCountry:sourceAcc.country,toAccountId:finalAcc.id,toAmount:bal,toCurrency:finalAcc.currency,toCountry:finalAcc.country,fxRate:1,fee:0,note:'شحن '+name,tags:['شحن بطاقة'],date:isoToday(),created:Date.now()});
+          S.transactions.push({id:uid('t'),type:'transfer',fromAccountId:sourceAcc.id,fromAmount:bal,fromCurrency:sourceAcc.currency,fromCountry:sourceAcc.country,toAccountId:finalAcc.id,toAmount:bal,toCurrency:finalAcc.currency,toCountry:finalAcc.country,fxRate:1,fee:0,note:'',tags:[],date:isoToday(),created:Date.now()});
         }
       }
     }
