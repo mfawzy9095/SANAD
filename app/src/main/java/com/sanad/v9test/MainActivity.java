@@ -427,18 +427,14 @@ public final class MainActivity extends Activity {
             return;
         }
         String subtitle = (reason == null || reason.trim().isEmpty()) ? "Verify to open SANAD" : reason;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 BiometricPrompt.Builder builder = new BiometricPrompt.Builder(this)
                         .setTitle("SANAD — سند")
                         .setSubtitle(subtitle);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    builder.setAllowedAuthenticators(
-                            android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_STRONG |
-                            android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL);
-                } else {
-                    builder.setDeviceCredentialAllowed(true);
-                }
+                builder.setAllowedAuthenticators(
+                        android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_STRONG |
+                        android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL);
                 BiometricPrompt prompt = builder.build();
                 CancellationSignal signal = new CancellationSignal();
                 prompt.authenticate(signal, getMainExecutor(), new BiometricPrompt.AuthenticationCallback() {
