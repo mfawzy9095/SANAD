@@ -3,7 +3,7 @@ name: SANAD Android Device Test Build
 on:
   push:
     branches:
-      - android-v9.0.4-device-test
+      - android-v9.0.5-device-test
   workflow_dispatch:
 
 permissions:
@@ -35,16 +35,33 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Verify web source and V9.0.4 regressions
+      - name: Verify web source and V9.0.5 regressions
         shell: bash
         run: |
           set -euo pipefail
           test -s app/src/main/assets/index.html
           SOURCE_SHA="$(sha256sum app/src/main/assets/index.html | awk '{print $1}')"
           echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
-          grep -q "const SANAD_V9_VERSION = '9.0.4'" app/src/main/assets/index.html
+          grep -q "const SANAD_V9_VERSION = '9.0.5'" app/src/main/assets/index.html
           grep -q "id=\"sanadBootSplash\"" app/src/main/assets/index.html
           grep -q "cashFundingMode" app/src/main/assets/index.html
+          grep -q "src=\"sanad_app_icon.webp\"" app/src/main/assets/index.html
+          grep -q "function hideSanadBootSplash" app/src/main/assets/index.html
+          grep -q "setTimeout(()=>hideSanadBootSplash(),4500)" app/src/main/assets/index.html
+          test -s app/src/main/assets/sanad_app_icon.webp
+          python3 - <<'PY'
+          from pathlib import Path
+          h=Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
+          tx=h[h.index("function renderTxSheet(){"):h.index("function dispAmount",h.index("function renderTxSheet(){"))]
+          expected=["sourceArea","cat-scroll","native-amount-input","sanadReceiptQuickMount","tx-main-date","adv-details"]
+          pos=[tx.index(x) for x in expected]
+          assert pos==sorted(pos), ("transaction order",list(zip(expected,pos)))
+          tr=h[h.index("function renderTransferSheet(){"):h.index("function setTransferMode",h.index("function renderTransferSheet(){"))]
+          expected2=["<label>من حساب</label>","<label>إلى</label>","amountSection","sanadReceiptQuickMount","tx-main-date","adv-details"]
+          pos2=[tr.index(x) for x in expected2]
+          assert pos2==sorted(pos2), ("transfer order",list(zip(expected2,pos2)))
+          assert "data:image/png;base64" not in h[h.index('id="sanadBootSplash"'):h.index('<input type="file"',h.index('id="sanadBootSplash"'))]
+          PY
           grep -q "'مدفوعات شهرية':'Monthly payments'" app/src/main/assets/index.html
           grep -q "'اشتراكات':'Subscriptions'" app/src/main/assets/index.html
           grep -q "'راتب':'Salary'" app/src/main/assets/index.html
@@ -68,13 +85,13 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.4-DEVICE-TEST-4.apk"
+          cp "$APK" "SANAD-V9.0.5-DEVICE-TEST-5.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
           grep -q "package: name='com.sanad.v9test'" apk-badging.txt
-          grep -q "versionCode='90404'" apk-badging.txt
-          grep -q "versionName='9.0.4-device-test-4'" apk-badging.txt
+          grep -q "versionCode='90505'" apk-badging.txt
+          grep -q "versionName='9.0.5-device-test-5'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
           ! grep -q "android.permission.READ_SMS" apk-permissions.txt
           ! grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
@@ -84,14 +101,15 @@ jobs:
           EMBEDDED_SHA="$(unzip -p "$APK" assets/index.html | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_SHA" = "$SOURCE_SHA"
           unzip -l "$APK" | grep -q "sanad_app_icon.webp"
-          sha256sum "SANAD-V9.0.4-DEVICE-TEST-4.apk" | tee apk-sha256.txt
+          unzip -l "$APK" | grep -q "assets/sanad_app_icon.webp"
+          sha256sum "SANAD-V9.0.5-DEVICE-TEST-5.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.4-DEVICE-TEST-4
+          name: SANAD-V9.0.5-DEVICE-TEST-5
           path: |
-            SANAD-V9.0.4-DEVICE-TEST-4.apk
+            SANAD-V9.0.5-DEVICE-TEST-5.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
