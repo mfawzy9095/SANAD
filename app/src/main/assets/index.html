@@ -711,7 +711,7 @@ window.__sanadSplashBorn=performance.now();
 <div class="onboard" id="onboard" hidden>
   <div class="ob-slides">
     <div class="ob-slide on"><span class="em">🌍</span><h2>حساباتك في كل بلد</h2><p>نظّم حساباتك حسب البلد — الإمارات، مصر، المغرب.</p></div>
-    <div class="ob-slide"><span class="em">💳</span><h2>بطاقاتك وحساباتك</h2><p>ديبت تسحب من حسابها. الكريدت دين. الكاش والمحفظة أرصدة حقيقية.</p></div>
+    <div class="ob-slide"><span class="em">💳</span><h2>بطاقاتك وحساباتك</h2><p>ديبت تسحب من حسابها. الكريدت دين. والمحفظة والأرصدة المدفوعة مقدمًا أرصدة حقيقية.</p></div>
     <div class="ob-slide"><span class="em">📊</span><h2>حدود إنفاق ذكية</h2><p>حدد ميزانية لكل فئة، وسننبهك قبل أن تتجاوزها.</p></div>
   </div>
   <div class="ob-bottom">
@@ -787,7 +787,7 @@ const ACCOUNT_TYPES = [
   {id:'debt',name:'دين / قرض',icon:'📋',asset:false,primaryEligible:false},
   {id:'other',name:'أخرى',icon:'💰',asset:true,primaryEligible:true}
 ];
-const REGULAR_ACCOUNT_TYPES = ['bank','cash','ewallet','prepaid','other','debt'];
+const REGULAR_ACCOUNT_TYPES = ['bank','ewallet','prepaid','other','debt'];
 const INSTRUMENT_TYPES = [
   {id:'debit_card',name:'بطاقة ديبت',icon:'💳',short:'تسحب من الحساب البنكي'},
   {id:'credit_card',name:'بطاقة ائتمان',icon:'💠',short:'مشتريات تصبح مديونية'},
@@ -3706,10 +3706,10 @@ function viewAccounts(){
     (canWrite() ? '<button type="button" class="more" data-act="account-add-menu">+ إضافة</button>' : '') + '</div>';
   if (assetAccounts.length){
     html += '<div class="hscroll">' + assetAccounts.map(a => accountTileHtml(a)).join('') +
-      (canWrite() ? '<div class="tile-add" data-act="account-add-account"><div class="plus">+</div><div class="lbl">حساب</div></div><div class="tile-add" data-pick-type="cash"><div class="plus">💵</div><div class="lbl">كاش</div></div>' : '') + '</div>';
+      (canWrite() ? '<div class="tile-add" data-act="account-add-account"><div class="plus">+</div><div class="lbl">حساب</div></div>' : '') + '</div>';
   } else {
     html += '<div class="hscroll">' +
-      (canWrite() ? '<div class="tile-add" data-act="account-add-account"><div class="plus">+</div><div class="lbl">أضف حساب</div></div><div class="tile-add" data-pick-type="cash"><div class="plus">💵</div><div class="lbl">أضف كاش</div></div>' :
+      (canWrite() ? '<div class="tile-add" data-act="account-add-account"><div class="plus">+</div><div class="lbl">أضف حساب</div></div>' :
         '<div class="card" style="width:100%;text-align:center;color:var(--text-3);font-size:13px;padding:24px">لا توجد حسابات</div>') + '</div>';
   }
   if (debtAccounts.length){
@@ -4084,7 +4084,7 @@ function viewSet(){
         '<div class="switch ' + (S.settings.theme === 'light' ? 'on' : '') + '" data-act="toggle-theme"></div></div>' +
       '<div class="list-item"><div class="li-ico">👁️</div><div class="li-body"><b>إخفاء المبالغ</b></div>' +
         '<div class="switch ' + (S.settings.hideAmounts ? 'on' : '') + '" data-act="toggle-mask"></div></div>' +
-      '<div class="list-item"><div class="li-ico">🔔</div><div class="li-body"><b>الإشعارات</b><span>تعمل أثناء فتح التطبيق فقط</span></div>' +
+      '<div class="list-item"><div class="li-ico">🔔</div><div class="li-body"><b>الإشعارات</b><span>تنبيهات الالتزامات حتى عند إغلاق التطبيق</span></div>' +
         '<div class="switch ' + (S.settings.notificationsEnabled ? 'on' : '') + '" data-act="toggle-notif"></div></div>' +
     '</div>' +
     '<div class="sec"><h2>البلد الافتراضية</h2></div>' +
@@ -4403,6 +4403,7 @@ async function saveRec(id){
   S.form = null;
   closeSheet();
   await recomputePendingRecurring();
+  syncNativeNotifications();
   render();
   toast(isEdit ? 'تم التعديل' : 'تمت الإضافة');
 }
@@ -4418,6 +4419,7 @@ async function delRec(id){
   S.form = null;
   closeSheet();
   await recomputePendingRecurring();
+  syncNativeNotifications();
   render();
   toast('تم الحذف');
 }
@@ -6119,7 +6121,6 @@ function openAccountTypePicker(){
       '<h2>إضافة جديدة</h2><div style="width:36px"></div></div>' +
     '<div class="sheet-body"><div class="type-picker">' +
       '<div class="type-card" data-pick-type="bank"><div class="tc-ico">🏦</div><div class="tc-name">حساب بنكي</div></div>' +
-      '<div class="type-card" data-pick-type="cash"><div class="tc-ico">💵</div><div class="tc-name">كاش</div></div>' +
       '<div class="type-card" data-pick-type="ewallet"><div class="tc-ico">📱</div><div class="tc-name">محفظة إلكترونية</div></div>' +
       '<div class="type-card" data-pick-type="credit_card"><div class="tc-ico">💠</div><div class="tc-name">بطاقة ائتمان</div></div>' +
       '<div class="type-card" data-pick-type="debit_card"><div class="tc-ico">💳</div><div class="tc-name">بطاقة ديبت</div></div>' +
@@ -6154,6 +6155,7 @@ function openAccountSheet(id, presetType, preserve){
   const isEdit = !!id;
   const a = isEdit ? Finance.getAccount(id) : null;
   const type = presetType || (a ? a.type : 'bank');
+  if (!isEdit && type === 'cash'){ toast('الكاش غير متاح حالياً'); return; }
   if (type === 'credit'){ toast('بطاقات الائتمان تُنشأ من قسم البطاقات'); return; }
   const typeDef = accountTypeInfo(type);
   const country = preserve && preserve.country ? preserve.country : (a ? a.country : S.activeCountry);
@@ -6235,6 +6237,7 @@ function openAccountSheet(id, presetType, preserve){
   S.form._sheet = 'account';
   S.form._editingAccountId = id || null;
   const allowedTypes = REGULAR_ACCOUNT_TYPES.map(t => ACCOUNT_TYPES.find(x => x.id === t)).filter(Boolean);
+  if (isEdit && type === 'cash') allowedTypes.splice(1,0,accountTypeInfo('cash'));
   const countryName = countryInfo(data.country).name;
   const defaultToggleHtml = canBeDefault ? (
     '<div class="default-toggle">' +
@@ -7905,18 +7908,49 @@ async function loadSnapshots(){
   S.snapshots = (all || []).filter(s => s && s.name && !String(s.name).startsWith('pre-crit'));
 }
 
+let _sanadNotifPermissionResolve=null;
+window.sanadNotificationPermissionResult=function(allowed){if(_sanadNotifPermissionResolve){const r=_sanadNotifPermissionResolve;_sanadNotifPermissionResolve=null;r(!!allowed);}};
+function androidNotificationBridge(){try{return window.AndroidBridge&&typeof AndroidBridge.syncNotifications==='function';}catch(_){return false;}}
 async function requestNotifications(){
+  if(androidNotificationBridge()){
+    try{
+      if(typeof AndroidBridge.notificationsGranted==='function'&&AndroidBridge.notificationsGranted())return true;
+      return await new Promise(resolve=>{
+        _sanadNotifPermissionResolve=resolve;
+        AndroidBridge.requestNotificationPermission();
+        setTimeout(()=>{if(_sanadNotifPermissionResolve===resolve){_sanadNotifPermissionResolve=null;resolve(false);}},30000);
+      });
+    }catch(e){console.warn('native notification permission failed',e);return false;}
+  }
   if (!('Notification' in window)){ toast('غير مدعومة'); return false; }
   if (Notification.permission === 'granted') return true;
   if (Notification.permission === 'denied'){ toast('محظورة'); return false; }
   try { const p = await Notification.requestPermission(); return p === 'granted'; } catch(e){ return false; }
 }
+function nativeReminderSpecs(){
+  return S.recurring.filter(r=>r&&r.active&&isRecurringSourceValid(r)).map(r=>{
+    const cur=r.currency||'EGP';
+    const body=S.settings.hideAmounts?'المبلغ مخفي':(fmt(r.amount)+' '+Finance.curSymbol(cur));
+    return {id:String(r.id),title:String(r.name||'SANAD'),body,frequency:r.frequency==='yearly'?'yearly':'monthly',day:Math.min(28,Math.max(1,Number(r.day)||1)),month:Math.min(11,Math.max(0,Number(r.month)||0)),reminderDays:Math.min(30,Math.max(0,remDaysOf(r)))};
+  });
+}
+function syncNativeNotifications(){
+  if(!androidNotificationBridge())return;
+  try{
+    if(!S.settings.notificationsEnabled){AndroidBridge.cancelNotifications();return;}
+    AndroidBridge.syncNotifications(JSON.stringify(nativeReminderSpecs()));
+  }catch(e){console.warn('native notification sync failed',e);}
+}
 function showNotification(id, title, body){
+  if(androidNotificationBridge()){
+    try{AndroidBridge.showNotification(String(id||'sanad'),String(title||'SANAD'),String(body||''));return;}catch(e){console.warn(e);}
+  }
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   try { new Notification(title, {body, icon: getIconUrl(), tag:'masareef-' + id}); } catch(e){}
 }
-/* V8.8.4.3 FIX 15: respect hideAmounts in notifications */
+/* Respect hideAmounts in notifications */
 function checkReminders(){
+  syncNativeNotifications();
   for (const r of S.recurring){
     if (!r.active) continue;
     if (!isRecurringSourceValid(r)) continue;
@@ -7990,6 +8024,7 @@ async function toggleMask(){
   S.settings.hideAmounts = !S.settings.hideAmounts;
   const ok = await persist();
   if (!ok){ S.settings.hideAmounts = !S.settings.hideAmounts; toast('تعذر الحفظ'); return; }
+  syncNativeNotifications();
   render();
 }
 async function toggleTheme(){
@@ -8006,14 +8041,14 @@ async function toggleNotif(){
     S.settings.notificationsEnabled = false;
     const ok = await persist();
     if (!ok){ S.settings.notificationsEnabled = true; toast('تعذر الحفظ'); return; }
-    render(); toast('تم الإيقاف');
+    syncNativeNotifications(); render(); toast('تم الإيقاف');
   } else {
     const ok = await requestNotifications();
     if (ok){
       S.settings.notificationsEnabled = true;
       const saved = await persist();
       if (!saved){ S.settings.notificationsEnabled = false; toast('تعذر الحفظ'); return; }
-      render(); toast('تم التفعيل');
+      syncNativeNotifications(); render(); toast('تم التفعيل');
       checkReminders();
     } else toast('لم يتم السماح');
   }
@@ -8942,7 +8977,7 @@ async function boot(){
    Local-first features: i18n, theme modes, app privacy lock,
    receipt attachments, Firebase cloud adapter, family sharing.
    ========================================================= */
-const SANAD_V9_VERSION = '9.0.7';
+const SANAD_V9_VERSION = '9.0.8';
 const SANAD_FIREBASE_SDK = '10.14.1';
 /* Local Stable policy: cloud/family remain disabled until V9.1 per-record sync + rules ship. */
 const SANAD_CLOUD_FAMILY_BETA_ENABLED = false;
@@ -9252,7 +9287,7 @@ const SanadReceipts = {
 };
 
 const SanadSecurity = {
-  cfg:{enabled:false,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false}, unlocked:true, pendingStart:false, markerKey:'sanad_security_enabled_v1',
+  cfg:{enabled:false,authMode:null,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false}, unlocked:true, pendingStart:false, markerKey:'sanad_security_enabled_v1',
   b64(bytes){return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');},
   unb64(s){s=String(s||'').replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const bin=atob(s);return Uint8Array.from(bin,c=>c.charCodeAt(0));},
   random(n=32){const a=new Uint8Array(n);crypto.getRandomValues(a);return a;},
@@ -9261,29 +9296,55 @@ const SanadSecurity = {
   setMarker(on){try{localStorage.setItem(this.markerKey,on?'1':'0');return true;}catch(_){return false;}},
   async hash(s){const b=new TextEncoder().encode(String(s));return this.b64(await crypto.subtle.digest('SHA-256',b));},
   async recoveryDigest(code,saltB64,iterations){const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(this.normalizeRecovery(code)),{name:'PBKDF2'},false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:this.unb64(saltB64),iterations:Number(iterations)||210000,hash:'SHA-256'},key,256);return this.b64(bits);},
-  supported(){return !!(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials&&crypto.subtle&&SanadExtStorage.mode==='idb');},
-  async init(){const marker=this.markerEnabled(),stored=await SanadExtStorage.get('security',null),base={enabled:false,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(stored&&typeof stored==='object'){this.cfg=Object.assign(base,stored);this.setMarker(!!this.cfg.enabled);}else if(marker){this.cfg=Object.assign(base,{enabled:true,storageUnavailable:true});}else this.cfg=base;this.unlocked=!this.cfg.enabled;this.pendingStart=false;},
+  nativeAvailable(){try{return !!(window.AndroidBridge&&typeof AndroidBridge.supportsDeviceAuth==='function'&&AndroidBridge.supportsDeviceAuth());}catch(_){return false;}},
+  supported(){return !!(this.nativeAvailable()||(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials&&crypto.subtle&&SanadExtStorage.mode==='idb'));},
+  _nativeResolve:null,
+  nativeResult(ok){if(this._nativeResolve){const r=this._nativeResolve;this._nativeResolve=null;r(!!ok);}},
+  async nativeAuth(reason){if(!this.nativeAvailable())return false;return await new Promise(resolve=>{this._nativeResolve=resolve;try{AndroidBridge.authenticateDevice(String(reason||'Verify SANAD'));}catch(e){this._nativeResolve=null;resolve(false);return;}setTimeout(()=>{if(this._nativeResolve===resolve){this._nativeResolve=null;resolve(false);}},60000);});},
+  async init(){const marker=this.markerEnabled(),stored=await SanadExtStorage.get('security',null),base={enabled:false,authMode:null,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(stored&&typeof stored==='object'){this.cfg=Object.assign(base,stored);this.setMarker(!!this.cfg.enabled);}else if(marker){this.cfg=Object.assign(base,{enabled:true,storageUnavailable:true});}else this.cfg=base;this.unlocked=!this.cfg.enabled;this.pendingStart=false;},
   ensureOverlay(){let el=document.getElementById('sanadLock');if(el)return el;el=document.createElement('div');el.id='sanadLock';el.className='sanad-lock';el.hidden=true;el.innerHTML='<div class="lock-card"><div class="lock-logo">س</div><h2>SANAD · سند</h2><p>التطبيق مقفول لحماية خصوصيتك.</p><button type="button" class="btn primary" data-sanad-act="unlock">🔐 فتح بالبصمة / قفل الجهاز</button><button type="button" class="btn text" data-sanad-act="recovery-unlock">استخدام رمز الاسترداد</button><div class="lock-note">لا يتم حفظ أو إرسال بيانات بصمتك إلى SANAD.</div></div>';document.body.appendChild(el);return el;},
   show(){if(!this.cfg.enabled)return;this.unlocked=false;const app=document.getElementById('app'),ob=document.getElementById('onboard');if(app)app.hidden=true;if(ob)ob.hidden=true;const el=this.ensureOverlay();const p=el.querySelector('.lock-card>p'),unlockBtn=el.querySelector('[data-sanad-act="unlock"]'),recoveryBtn=el.querySelector('[data-sanad-act="recovery-unlock"]');if(this.cfg.storageUnavailable){if(p)p.textContent='بيانات القفل غير متاحة. أعد فتح SANAD عندما يعود التخزين الآمن.';if(unlockBtn)unlockBtn.hidden=true;if(recoveryBtn)recoveryBtn.hidden=true;}else{if(p)p.textContent='التطبيق مقفول لحماية خصوصيتك.';if(unlockBtn)unlockBtn.hidden=false;if(recoveryBtn)recoveryBtn.hidden=false;}el.hidden=false;SanadI18n.apply(el);hideSanadBootSplash();},
   finishUnlock(){this.unlocked=true;const el=this.ensureOverlay();el.hidden=true;if(this.pendingStart){this.pendingStart=false;_sanadCoreStartApp();SanadV9.afterStart(true);}else{const app=document.getElementById('app');if(app)app.hidden=false;}},
   hide(){this.finishUnlock();},
   async enable(){
-    if(!this.supported()){await dialog({emoji:'🔐',title:'القفل غير متاح',msg:'يحتاج القفل إلى HTTPS ومتصفح يدعم WebAuthn/Passkeys وتخزين محلي دائم.',okText:'حسناً',hideCancel:true});return;}
+    if(!this.supported()){await dialog({emoji:'🔐',title:'القفل غير متاح',msg:'فعّل قفل شاشة آمن على الجهاز أولاً.',okText:'حسناً',hideCancel:true});return;}
     try{
-      const cred=await navigator.credentials.create({publicKey:{challenge:this.random(),rp:{name:'SANAD'},user:{id:this.random(),name:'sanad-local-user',displayName:'SANAD local lock'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],timeout:60000,attestation:'none',authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'preferred'}}});
-      if(!cred)throw new Error('No credential');
+      let authMode='webauthn',credentialId=null;
+      if(this.nativeAvailable()){
+        const verified=await this.nativeAuth('تفعيل قفل SANAD');
+        if(!verified){toast('لم يتم التحقق من قفل الجهاز');return;}
+        authMode='android-device';
+      }else{
+        if(!(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials&&crypto.subtle&&SanadExtStorage.mode==='idb'))throw new Error('WebAuthn unavailable');
+        const cred=await navigator.credentials.create({publicKey:{challenge:this.random(),rp:{name:'SANAD'},user:{id:this.random(),name:'sanad-local-user',displayName:'SANAD local lock'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],timeout:60000,attestation:'none',authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'preferred'}}});
+        if(!cred)throw new Error('No credential');
+        credentialId=this.b64(cred.rawId);
+      }
       const digits=Array.from(this.random(16)).map(x=>(x%10)).join(''),recovery=digits.replace(/(\d{4})(?=\d)/g,'$1-');
       const salt=this.b64(this.random(16)),iterations=210000,recoveryHash=await this.recoveryDigest(digits,salt,iterations);
-      this.cfg={enabled:true,credentialId:this.b64(cred.rawId),recoveryHash,recoverySalt:salt,recoveryKdf:'PBKDF2-SHA256',recoveryIterations:iterations};
+      this.cfg={enabled:true,authMode,credentialId,recoveryHash,recoverySalt:salt,recoveryKdf:'PBKDF2-SHA256',recoveryIterations:iterations,storageUnavailable:false};
       if(!await SanadExtStorage.set('security',this.cfg))throw new Error('security settings write failed');
       this.setMarker(true);this.unlocked=true;render();
       await dialog({emoji:'🛡️',title:'تم تفعيل القفل',msg:'احتفظ برمز الاسترداد في مكان آمن:\n\n'+recovery+'\n\nسيُطلب فقط إذا تعذر استخدام بصمة/قفل الجهاز.',okText:'حفظته',hideCancel:true});
     }catch(e){console.error(e);toast('لم يتم تفعيل القفل');}
   },
-  async disable(){const ok=await dialog({emoji:'🔓',title:'إيقاف قفل التطبيق',msg:'سيتم إيقاف طلب البصمة/قفل الجهاز عند فتح SANAD.',okText:'إيقاف'});if(!ok)return;const next={enabled:false,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(!await SanadExtStorage.set('security',next)){toast('تعذر حفظ إعدادات القفل');return;}this.cfg=next;this.setMarker(false);this.finishUnlock();render();},
-  async unlock(){if(!this.cfg.enabled){this.finishUnlock();return true;}if(!this.supported()){toast('القفل غير متاح في هذه البيئة — استخدم رمز الاسترداد');return false;}try{const cred=await navigator.credentials.get({publicKey:{challenge:this.random(),allowCredentials:[{type:'public-key',id:this.unb64(this.cfg.credentialId)}],timeout:60000,userVerification:'required'}});if(cred){this.finishUnlock();return true;}}catch(e){console.warn('unlock failed',e);}toast('تعذر التحقق');return false;},
-  async recovery(){const code=prompt(SanadI18n.lang==='en'?'Enter recovery code':'أدخل رمز الاسترداد');if(!code)return;let got='';try{got=(this.cfg.recoveryKdf==='PBKDF2-SHA256'&&this.cfg.recoverySalt)?await this.recoveryDigest(code,this.cfg.recoverySalt,this.cfg.recoveryIterations):await this.hash(this.normalizeRecovery(code));}catch(e){console.warn('recovery verify failed',e);}if(got&&got===this.cfg.recoveryHash){const next={enabled:false,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(!await SanadExtStorage.set('security',next)){toast('تعذر حفظ إعدادات القفل');return;}this.cfg=next;this.setMarker(false);this.finishUnlock();render();toast('تم فتح التطبيق وإيقاف القفل');}else toast('رمز غير صحيح');}
+  async disable(){const ok=await dialog({emoji:'🔓',title:'إيقاف قفل التطبيق',msg:'سيتم إيقاف طلب البصمة/قفل الجهاز عند فتح SANAD.',okText:'إيقاف'});if(!ok)return;const next={enabled:false,authMode:null,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(!await SanadExtStorage.set('security',next)){toast('تعذر حفظ إعدادات القفل');return;}this.cfg=next;this.setMarker(false);this.finishUnlock();render();},
+  async unlock(){
+    if(!this.cfg.enabled){this.finishUnlock();return true;}
+    if(this.cfg.authMode==='android-device'||(!this.cfg.credentialId&&this.nativeAvailable())){
+      if(!this.nativeAvailable()){toast('قفل الجهاز غير متاح — استخدم رمز الاسترداد');return false;}
+      const ok=await this.nativeAuth('فتح SANAD');
+      if(ok){this.finishUnlock();return true;}
+      toast('تعذر التحقق');return false;
+    }
+    if(!(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials&&crypto.subtle)){toast('القفل غير متاح في هذه البيئة — استخدم رمز الاسترداد');return false;}
+    try{const cred=await navigator.credentials.get({publicKey:{challenge:this.random(),allowCredentials:[{type:'public-key',id:this.unb64(this.cfg.credentialId)}],timeout:60000,userVerification:'required'}});if(cred){this.finishUnlock();return true;}}catch(e){console.warn('unlock failed',e);}
+    toast('تعذر التحقق');return false;
+  },
+  async recovery(){const code=prompt(SanadI18n.lang==='en'?'Enter recovery code':'أدخل رمز الاسترداد');if(!code)return;let got='';try{got=(this.cfg.recoveryKdf==='PBKDF2-SHA256'&&this.cfg.recoverySalt)?await this.recoveryDigest(code,this.cfg.recoverySalt,this.cfg.recoveryIterations):await this.hash(this.normalizeRecovery(code));}catch(e){console.warn('recovery verify failed',e);}if(got&&got===this.cfg.recoveryHash){const next={enabled:false,authMode:null,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(!await SanadExtStorage.set('security',next)){toast('تعذر حفظ إعدادات القفل');return;}this.cfg=next;this.setMarker(false);this.finishUnlock();render();toast('تم فتح التطبيق وإيقاف القفل');}else toast('رمز غير صحيح');}
 };
+
+window.sanadDeviceAuthResult=function(ok){try{SanadSecurity.nativeResult(!!ok);}catch(_){}};
 
 const SanadCloud = {
   config:null,sdk:null,app:null,auth:null,db:null,storage:null,user:null,status:'not-configured',error:null,meta:{dirty:false,revision:0,lastRemoteRevision:0,lastSync:null,deviceId:null,receiptDirty:{}},applyingRemote:false,
