@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -222,3 +222,24 @@ jobs:
             apk-permissions.txt
           if-no-files-found: error
           retention-days: 30
+
+      - name: Record build metadata
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build_meta
+          APK_SHA="$(awk '{print $1}' apk-sha256.txt)"
+          cat > build_meta/v9.0.7-local-stable.txt <<EOF
+          run_id=${GITHUB_RUN_ID}
+          commit=${GITHUB_SHA}
+          branch=${GITHUB_REF_NAME}
+          artifact=SANAD-V9.0.7-LOCAL-STABLE
+          apk_sha256=$APK_SHA
+          source_sha256=$SOURCE_SHA
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add build_meta/v9.0.7-local-stable.txt
+          git commit -m "Record V9.0.7 build metadata [skip ci]"
+          git push origin HEAD:${GITHUB_REF_NAME}
