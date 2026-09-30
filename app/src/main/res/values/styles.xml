@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Sanad" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/sanad_background</item>
+        <item name="android:colorAccent">@color/sanad_primary</item>
+        <item name="android:statusBarColor">@color/sanad_background</item>
+        <item name="android:navigationBarColor">@color/sanad_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>
