@@ -87,7 +87,7 @@ jobs:
           assert 'sanad_splash.webp' in splash_block
           # Validate actual WebP binaries, not arbitrary large file sizes.
           for asset,min_size in [
-              ("app/src/main/assets/sanad_splash.webp",15000),
+              ("app/src/main/assets/sanad_splash.webp",8000),
               ("app/src/main/assets/sanad_logo.webp",8000),
               ("app/src/main/assets/sanad_app_icon.webp",8000),
               ("app/src/main/res/drawable-nodpi/sanad_app_icon.webp",8000),
@@ -123,6 +123,8 @@ jobs:
           pathlib.Path("/tmp/sanad-v906.js").write_text("\n".join(scripts),encoding="utf-8")
           PY
           for i in $(seq 1 10); do node --check /tmp/sanad-v906.js >/dev/null; done
+          file app/src/main/assets/sanad_splash.webp | grep -qi 'Web/P'
+          file app/src/main/assets/sanad_logo.webp | grep -qi 'Web/P'
           echo "V9.0.6 source gates passed 10x"
 
       - name: Android lint
