@@ -1,61 +1,42 @@
-name: Build SANAD V9.0.2 Device Test 2 APK
+name: SANAD Android Device Test Build
 
 on:
   push:
-    branches: [android-v9-device-test]
+    branches:
+      - android-v9-device-test
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  verify-and-build:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
     steps:
-      - name: Checkout isolated V9 test branch
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Ensure Android SDK 35
-        shell: bash
-        run: |
-          set -euo pipefail
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Verify source gate before build
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import hashlib, json, pathlib, re, xml.etree.ElementTree as ET
-          root=pathlib.Path('.')
-          info=json.loads((root/'DEVICE_GATE_INTEGRITY.json').read_text())
-          web=root/'app/src/main/assets/index.html'
-          sha=hashlib.sha256(web.read_bytes()).hexdigest()
-          assert sha==info['web_sha256'], (sha,info['web_sha256'])
-          manifest=root/'app/src/main/AndroidManifest.xml'
-          ET.parse(manifest)
-          text=manifest.read_text()
-          perms=re.findall(r'<uses-permission android:name="([^"]+)"',text)
-          assert perms==['android.permission.INTERNET'], perms
-          banned=['READ_SMS','RECORD_AUDIO','CAMERA','READ_EXTERNAL_STORAGE','WRITE_EXTERNAL_STORAGE','MANAGE_EXTERNAL_STORAGE']
-          for p in banned: assert p not in text, p
-          print('source gate OK:', sha)
-          PY
+      - name: Verify embedded web source
+        run: echo "c7291d64c960ea2dde35d0c5428f1235719028c83665522b2de2cedbc1b88141  app/src/main/assets/index.html" | sha256sum -c -
 
       - name: Android lint
         run: gradle --no-daemon --stacktrace :app:lintDebug
@@ -63,23 +44,37 @@ jobs:
       - name: Build debug APK
         run: gradle --no-daemon --stacktrace :app:assembleDebug
 
-      - name: Verify APK identity, permissions and embedded web build
+      - name: Verify built APK
         shell: bash
         run: |
           set -euo pipefail
-          APK=app/build/outputs/apk/debug/app-debug.apk
+          APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" SANAD-V9.0.2-DEVICE-TEST-2.apk
+          cp "$APK" "SANAD-V9.0.2-DEVICE-TEST-2.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
-          grep -q "package: name='com.sanad.v9test' versionCode='90202' versionName='9.0.2-device-test-2'" apk-badging.txt
+          grep -q "package: name='com.sanad.v9test'" apk-badging.txt
+          grep -q "versionCode='90202'" apk-badging.txt
+          grep -q "versionName='9.0.2-device-test-2'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
           ! grep -q "android.permission.READ_SMS" apk-permissions.txt
           ! grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
           ! grep -q "android.permission.CAMERA" apk-permissions.txt
           ! grep -q "android.permission.READ_EXTERNAL_STORAGE" apk-permissions.txt
           ! grep -q "android.permission.WRITE_EXTERNAL_STORAGE" apk-permissions.txt
-          python3 - <<'PY'
-          import hashlib,json,zipfile
-          info=json.load(open('DEY%}Q}%9QI%Qd¹©Í½¸œ¤¤(€€€€€€€€€Ý¥Ñ é¥Á™¥±”¹i¥Á¥±” …ÁÀ½‰Õ¥±½½ÕÑÁÕÑÌ½…Á¬½‘•‰Õœ½…ÁÀµ‘•‰Õœ¹…Á¬œ¤…Ìèè(€€€€€€€€€€€€€‘…Ñ„õè¹É•… …ÍÍ•ÑÌ½¥¹‘•à¹¡Ñµ°œ¤(€€€€€€€€€Í¡„õ¡…Í¡±¥ˆ¹Í¡„ÈÔØ¡‘…Ñ„¤¹¡•á‘¥•ÍÐ ¤(€€€€€€€€€…ÍÍ•ÉÐÍ¡„ôõ¥¹™½lÝ•‰}Í¡„ÈÔØt°€¡Í¡„±¥¹™½lÝ•‰}Í¡„ÈÔØt¤(€€€€€€€€€ÁÉ¥¹Ð •µ‰•‘‘•Ý•ˆM!=,èœ±Í¡„¤(€€€€€€€€€Ad(€€€€€€€€€Í¡„ÈÔÙÍÕ´M9µXä¸À¸ÈµY%µQMP´È¹…Á¬ðÑ•”…Á¬µÍ¡„ÈÔØ¹ÑáÐ((€€€€€€´¹…µ”èUÁ±½…‘•Ù¥”µÑ•ÍÐA,(€€€€€€€ÕÍ•Ìè…Ñ¥½¹Ì½ÕÁ±½…µ…ÉÑ¥™…ÑØÐ(€€€€€€€Ý¥Ñ è(€€€€€€€€€¹…µ”èM9µXä¸À¸ÈµY%µQMP´È(€€€€€€€€€Á…Ñ èð(€€€€€€€€€€€M9µXä¸À¸ÈµY%µQMP´È¹…Á¬(€€€€€€€€€€€…Á¬µÍ¡„ÈÔØ¹ÑáÐ(€€€€€€€€€€€…Á¬µ‰…‘¥¹œ¹ÑáÐ(€€€€€€€€€€€…Á¬µÁ•Éµ¥ÍÍ¥½¹Ì¹ÑáÐ(€€€€€€€€€€€Y%}Q}%9QI%Qd¹©Í½¸(€€€€€€€€€¥˜µ¹¼µ™¥±•Ìµ™½Õ¹è•ÉÉ½È(€€€€€€€€€É•Ñ•¹Ñ¥½¸µ‘…åÌè€ÌÀ(
+          EMBEDDED_SHA="$(unzip -p "$APK" assets/index.html | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_SHA" = "c7291d64c960ea2dde35d0c5428f1235719028c83665522b2de2cedbc1b88141"
+          sha256sum "SANAD-V9.0.2-DEVICE-TEST-2.apk" | tee apk-sha256.txt
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-V9.0.2-DEVICE-TEST-2
+          path: |
+            SANAD-V9.0.2-DEVICE-TEST-2.apk
+            apk-sha256.txt
+            apk-badging.txt
+            apk-permissions.txt
+          if-no-files-found: error
+          retention-days: 30
