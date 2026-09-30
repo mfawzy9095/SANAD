@@ -1,0 +1,191 @@
+name: SANAD V9.0.7 Local Stable Android Build
+# quick-gate-refresh: v9.0.7
+
+on:
+  push:
+    branches:
+      - android-v9.0.7-local-stable
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: Verify stable branding resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s app/src/main/res/drawable/ic_launcher_foreground.xml
+          test -s app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          test -s app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+          grep -q '@color/sanad_primary' app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          grep -q '@drawable/ic_launcher_foreground' app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          grep -q 'android:icon="@mipmap/ic_launcher"' app/src/main/AndroidManifest.xml
+          grep -q 'android:roundIcon="@mipmap/ic_launcher_round"' app/src/main/AndroidManifest.xml
+
+      - name: Verify web source and V9.0.7 regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          HTML="app/src/main/assets/index.html"
+          test -s "$HTML"
+          SOURCE_SHA="$(sha256sum "$HTML" | awk '{print $1}')"
+          echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
+
+          grep -q "const SANAD_V9_VERSION = '9.0.7'" "$HTML"
+          grep -q "const SANAD_CLOUD_FAMILY_BETA_ENABLED = false" "$HTML"
+          grep -q "async replaceReceipts(records)" "$HTML"
+          grep -q "async pruneReceiptOrphans(validIds)" "$HTML"
+          grep -q "PBKDF2" "$HTML"
+          grep -q "SanadSecurity.pendingStart=true" "$HTML"
+          grep -q "beforeFinance=snapshotState()" "$HTML"
+          grep -q "async pruneMissingTransactions()" "$HTML"
+          ! grep -Eq "keyNum[[:space:]]*\(|#keypad|\.keypad|custom.?keypad" "$HTML"
+          ! grep -Eq "sanad_(splash|logo|app_icon)\.webp" "$HTML"
+          grep -q 'id="sanadSplashMark"' "$HTML"
+          grep -q "function hideSanadBootSplash" "$HTML"
+          grep -q "window.__sanadSplashBorn" "$HTML"
+          grep -q "SanadI18n.watch()" "$HTML"
+          grep -q "'أضف حساب':'Add account'" "$HTML"
+          grep -q "'أضف حسابًا':'Add account'" "$HTML"
+          grep -q "'أضف حساباً':'Add account'" "$HTML"
+          grep -q "'بدون':'None'" "$HTML"
+          grep -q "'— بدون —':'— None —'" "$HTML"
+          grep -q "'لا يوجد مديونية':'No debt'" "$HTML"
+          grep -q "'لا توجد مديونية':'No debt'" "$HTML"
+          grep -q "يمكنك ترك المبلغ 0 لربط حساب التمويل بدون تسجيل شحن أولي" "$HTML"
+          grep -q "if(bal>0&&fundingAcc.currency!==cardCur)" "$HTML"
+          grep -q "prepaidFundingMode==='transfer'&&prepaidFundingSourceId&&bal>0" "$HTML"
+          ! grep -q "if(bal<=0){ toast('أدخل مبلغ الشحن')" "$HTML"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          h=Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
+          tx=h[h.index("function renderTxSheet(){"):h.index("function dispAmount",h.index("function renderTxSheet(){"))]
+          expected=["sourceArea","cat-scroll","native-amount-input","sanadReceiptQuickMount","tx-main-date","adv-details"]
+          pos=[tx.index(x) for x in expected]
+          assert all(x >= 0 for x in pos)
+          assert pos==sorted(pos), ("transaction order",list(zip(expected,pos)))
+
+          tr=h[h.index("function renderTransferSheet(){"):h.index("function setTransferMode",h.index("function renderTransferSheet(){"))]
+          ui=tr[tr.index("  openSheet("):]
+          expected2=["<label>من حساب</label>","<label>إلى</label>","amountSection","sanadReceiptQuickMount","tx-main-date","adv-details"]
+          pos2=[ui.index(x) for x in expected2]
+          assert all(x >= 0 for x in pos2)
+          assert pos2==sorted(pos2), ("transfer order",list(zip(expected2,pos2)))
+
+          splash=h[h.index('id="sanadBootSplash"'):h.index('<input type="file"',h.index('id="sanadBootSplash"'))]
+          assert 'data:image/' not in splash
+          assert 'id="sanadSplashMark"' in splash
+          assert 'SANAD' in splash
+          assert '.webp' not in splash
+
+          card=h[h.index("async function saveCard"):h.index("async function archiveInstrument",h.index("async function saveCard"))]
+          assert "defaultTopupAccountId: isPrepaid ? prepaidFundingSourceId : null" in card
+          assert "prepaidFundingMode==='transfer'&&prepaidFundingSourceId&&bal>0" in card
+          assert "if(bal<=0)" not in card
+
+          required={
+            "أضف حساب":"Add account",
+            "أضف حسابًا":"Add account",
+            "أضف حساباً":"Add account",
+            "بدون":"None",
+            "— بدون —":"— None —",
+            "لا يوجد مديونية":"No debt",
+            "لا توجد مديونية":"No debt",
+            "يمكنك ترك المبلغ 0 لربط حساب التمويل بدون تسجيل شحن أولي.":"You can leave the amount at 0 to link the funding account without recording an initial top-up.",
+            "حساباتك في كل بلد":"Your accounts in every country",
+            "التالي":"Next",
+            "تخطي":"Skip",
+            "لا يوجد أشخاص بعد":"No people yet",
+            "إضافة شخص":"Add person",
+            "لا يوجد فرق":"No difference",
+            "أضف حساباً أولاً للسداد":"Add an account first for repayment",
+            "أضف حسابًا يمكن الشحن منه أولاً":"Add an account that can fund the top-up first",
+          }
+          for ar,en in required.items():
+              assert repr(ar)+":"+repr(en) in h, (ar,en)
+          PY
+
+          python3 - <<'PY'
+          import pathlib,re
+          html=pathlib.Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
+          scripts=re.findall(r"<script[^>]*>(.*?)</script>",html,re.S)
+          assert scripts
+          pathlib.Path("/tmp/sanad-v907.js").write_text("\n".join(scripts),encoding="utf-8")
+          PY
+          for i in $(seq 1 10); do node --check /tmp/sanad-v907.js >/dev/null; done
+          echo "V9.0.7 source gates passed 10x"
+
+      - name: Android lint
+        run: gradle --no-daemon --stacktrace :app:lintDebug
+
+      - name: Build debug APK
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify built APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          cp "$APK" "SANAD-V9.0.7-LOCAL-STABLE.apk"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging "$APK" | tee apk-badging.txt
+          "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
+          grep -q "package: name='com.sanad.v9test'" apk-badging.txt
+          grep -q "versionCode='90707'" apk-badging.txt
+          grep -q "versionName='9.0.7-local-stable'" apk-badging.txt
+          grep -q "application-label:'SANAD — سند'" apk-badging.txt
+          grep -q "android.permission.INTERNET" apk-permissions.txt
+          ! grep -q "android.permission.READ_SMS" apk-permissions.txt
+          ! grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
+          ! grep -q "android.permission.CAMERA" apk-permissions.txt
+          ! grep -q "android.permission.READ_EXTERNAL_STORAGE" apk-permissions.txt
+          ! grep -q "android.permission.WRITE_EXTERNAL_STORAGE" apk-permissions.txt
+          EMBEDDED_SHA="$(unzip -p "$APK" assets/index.html | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_SHA" = "$SOURCE_SHA"
+          ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
+          for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
+          echo "APK archive integrity passed 5x"
+          sha256sum "SANAD-V9.0.7-LOCAL-STABLE.apk" | tee apk-sha256.txt
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-V9.0.7-LOCAL-STABLE
+          path: |
+            SANAD-V9.0.7-LOCAL-STABLE.apk
+            apk-sha256.txt
+            apk-badging.txt
+            apk-permissions.txt
+          if-no-files-found: error
+          retention-days: 30

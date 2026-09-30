@@ -1,1 +1,1 @@
-# No custom ProGuard rules yet.
+# Device-test build: no minification. Keep file intentionally minimal.
