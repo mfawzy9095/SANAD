@@ -830,8 +830,8 @@ const ACCOUNT_ICONS = ['🏦','💵','💰','🪙','🏛️','📱','💼','🏧
 const CARD_ICONS = ['💳','🪪','💠','🎴','🏦','📱','💎'];
 const DEBT_ICONS = ['📋','🧾','📉','💸','📝','🏷️'];
 
-const APP_VERSION = '9.0.1';
-const APP_CHANNEL = 'full-rc';
+const APP_VERSION = '9.0.9';
+const APP_CHANNEL = 'stability-rc';
 const SCHEMA_VERSION = 16;
 const DB_NAME = 'masareef_v8';
 const SUPPORTED_TX_TYPES = ['expense','income','transfer','external_transfer','adjustment'];
@@ -1104,7 +1104,22 @@ const Storage = {
   async writeSnapshot(n,s){ if (!this._impl) return false; return this._impl.writeSnapshot(n,s); },
   async readSnapshot(n){ if (!this._impl) return null; return this._impl.readSnapshot(n); },
   async listSnapshots(){ if (!this._impl) return []; return this._impl.listSnapshots(); },
-  async rotateSnapshot(s){ if (!this._impl) return false; return this._impl.rotateSnapshot(s); }
+  async rotateSnapshot(s){ if (!this._impl) return false; return this._impl.rotateSnapshot(s); },
+  async secureWipe(){
+    if (this._backend === 'memory'){ MemoryStorage._reset(); this._backend = null; this._impl = null; return true; }
+    try {
+      if (IDBStorage._db){ try { IDBStorage._db.close(); } catch(_){} IDBStorage._db = null; }
+      const ok = await new Promise(resolve => {
+        let req;
+        try { req = indexedDB.deleteDatabase(DB_NAME); } catch(_){ resolve(false); return; }
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => resolve(false);
+        req.onblocked = () => resolve(false);
+      });
+      if (ok){ this._backend = null; this._impl = null; }
+      return ok;
+    } catch(_){ return false; }
+  }
 };
 
 /* ---------- SCHEMA ---------- */
@@ -2235,7 +2250,7 @@ function checkPrepaidInvariant(prepaidBefore){
   return null;
 }
 
-async function commitCriticalMutation(mutateFn){
+async function _commitCriticalMutationImpl(mutateFn){
   if (!canWrite()) return {ok:false, reason:'read-only'};
   _lastMutationError = null;
   const before = snapshotState();
@@ -2305,6 +2320,17 @@ async function commitCriticalMutation(mutateFn){
     } catch(_){}
     return {ok:false, reason:'exception', error:e};
   }
+}
+
+let _criticalMutationInFlight = false;
+async function commitCriticalMutation(mutateFn){
+  if (_criticalMutationInFlight){
+    _lastMutationError = 'busy';
+    return {ok:false, reason:'busy', restored:true};
+  }
+  _criticalMutationInFlight = true;
+  try { return await _commitCriticalMutationImpl(mutateFn); }
+  finally { _criticalMutationInFlight = false; }
 }
 
 /* ---------- FINANCE ENGINE ---------- */
@@ -4118,7 +4144,8 @@ function viewSet(){
     '<div class="sec"><h2>البيانات</h2></div>' +
     '<button type="button" class="btn" data-act="export">⬇️ تصدير نسخة احتياطية</button>' +
     '<button type="button" class="btn" data-act="import">⬆️ استيراد نسخة احتياطية</button>' +
-    '<button type="button" class="btn danger" data-act="clear">🗑 حذف كل البيانات</button>' +
+    '<button type="button" class="btn" data-act="clear">♻️ إعادة ضبط البيانات المالية</button>' +
+    '<button type="button" class="btn danger" data-act="secure-wipe">🗑 حذف SANAD بالكامل من الجهاز</button>' +
     '<div style="text-align:center;color:var(--text-3);font-size:12px;padding:24px 0 10px">' +
       'SANAD · سند · الإصدار 8.9.1</div>';
 }
@@ -7654,6 +7681,7 @@ async function retryStorage(){
     S.storageStatus = 'ok'; S.storageError = null; S.previewMode = false;
     await loadSnapshots();
     await recomputePendingRecurring();
+    syncNativeNotifications();
     applyTheme(); render();
     toast('تم استرجاع التخزين');
     return;
@@ -7783,6 +7811,7 @@ async function importData(file){
       if (!S.previewMode){ S.storageStatus = 'ok'; S.storageError = null; }
       await loadSnapshots();
       await recomputePendingRecurring();
+      syncNativeNotifications();
       applyTheme(); render();
       toast('تم الاستيراد');
       return;
@@ -7797,7 +7826,7 @@ async function importData(file){
 }
 async function clearAll(){
   if (!canWrite()){ toast('وضع القراءة فقط'); return; }
-  const ok = await dialog({emoji:'⚠️', title:'حذف كل البيانات', msg:'سيتم حذف كل المعاملات والحسابات نهائياً.', okText:'حذف الكل'});
+  const ok = await dialog({emoji:'♻️', title:'إعادة ضبط البيانات المالية', msg:'سيتم تصفير الحسابات والمعاملات مع الاحتفاظ بنسخة استرجاع مؤقتة.', okText:'إعادة الضبط'});
   if (!ok) return;
 
   /* V8.8.4.5: verified destructive commit */
@@ -7830,8 +7859,9 @@ async function clearAll(){
     loadStateInto(def);
     S.pendingRecurring = [];
     await loadSnapshots();
+    syncNativeNotifications();
     render();
-    toast('تم الحذف');
+    toast('تمت إعادة ضبط البيانات المالية');
     return;
   }
   if (vres.restored){
@@ -7844,6 +7874,38 @@ async function clearAll(){
     toast('فشل الحذف — وضع الحماية');
   }
 }
+async function secureWipeAll(){
+  const ok = await dialog({
+    emoji:'⚠️',
+    title:'حذف SANAD بالكامل من الجهاز',
+    msg:'سيتم حذف البيانات المالية ونسخ الاسترجاع والفواتير وإعدادات القفل والتنبيهات المحلية. لا يمكن التراجع عن هذه العملية.',
+    okText:'متابعة الحذف'
+  });
+  if (!ok) return;
+
+  let authorized = false;
+  try { authorized = await SanadSecurity.authorize(SanadI18n.lang==='en'?'Confirm secure wipe':'تأكيد حذف SANAD بالكامل'); }
+  catch(e){ console.warn('secure wipe authorization failed', e); }
+  if (!authorized){ toast('لم يتم التحقق — لم يبدأ الحذف'); return; }
+
+  try { if (androidNotificationBridge()) AndroidBridge.cancelNotifications(); } catch(_){}
+  const featureOk = await SanadExtStorage.secureWipe();
+  const financeOk = await Storage.secureWipe();
+  try { localStorage.removeItem(SanadSecurity.markerKey); } catch(_){}
+
+  if (featureOk && financeOk){
+    try { location.reload(); } catch(_){}
+    return;
+  }
+  await dialog({
+    emoji:'❌',
+    title:'تعذر إكمال الحذف الآمن',
+    msg:'تعذر التحقق من حذف كل مخازن SANAD. لا تعتبر البيانات ممسوحة بالكامل وأعد المحاولة.',
+    okText:'حسناً',
+    hideCancel:true
+  });
+}
+
 async function restoreSnapshot(name){
   if (!canWrite()){ return; }
   const snap = await Storage.readSnapshot(name);
@@ -7888,6 +7950,7 @@ async function restoreSnapshot(name){
   if (vres.ok){
     await loadSnapshots();
     await recomputePendingRecurring();
+    syncNativeNotifications();
     applyTheme(); render();
     toast('تم الاسترجاع');
     return;
@@ -8132,6 +8195,7 @@ function handleViewAction(act, dataset){
     case 'export': return exportData();
     case 'import': return document.getElementById('importFile').click();
     case 'clear': return clearAll();
+    case 'secure-wipe': return secureWipeAll();
     case 'retry-storage': return retryStorage();
     case 'apply-recurring': return applyPendingRecurring();
     case 'dismiss-recurring': return dismissPendingRecurring();
@@ -8977,7 +9041,7 @@ async function boot(){
    Local-first features: i18n, theme modes, app privacy lock,
    receipt attachments, Firebase cloud adapter, family sharing.
    ========================================================= */
-const SANAD_V9_VERSION = '9.0.8';
+const SANAD_V9_VERSION = '9.0.9';
 const SANAD_FIREBASE_SDK = '10.14.1';
 /* Local Stable policy: cloud/family remain disabled until V9.1 per-record sync + rules ship. */
 const SANAD_CLOUD_FAMILY_BETA_ENABLED = false;
@@ -9020,7 +9084,21 @@ const SanadExtStorage = {
     if(this.mode!=='idb'||!this.db){const next=new Map();for(const rec of records){if(!rec||!rec.txId||!rec.blob)return false;next.set(rec.txId,rec);}this.memReceipts=next;return true;}
     try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readwrite'),store=tx.objectStore('receipts');store.clear();for(const rec of records){if(!rec||!rec.txId||!rec.blob){tx.abort();return;}store.put(rec);}tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('receipt replace aborted'));});}catch(_){return false;}
   },
-  async pruneReceiptOrphans(validIds){const valid=validIds instanceof Set?validIds:new Set(validIds||[]),all=await this.listReceipts();let removed=0;for(const rec of all){if(rec&&rec.txId&&!valid.has(rec.txId)){if(await this.delReceipt(rec.txId))removed++;}}return removed;}
+  async pruneReceiptOrphans(validIds){const valid=validIds instanceof Set?validIds:new Set(validIds||[]),all=await this.listReceipts();let removed=0;for(const rec of all){if(rec&&rec.txId&&!valid.has(rec.txId)){if(await this.delReceipt(rec.txId))removed++;}}return removed;},
+  async secureWipe(){
+    this.memKV.clear(); this.memReceipts.clear();
+    if(this.mode!=='idb'||!this.db){this.db=null;this.mode='memory';return true;}
+    try{
+      try{this.db.close();}catch(_){}
+      this.db=null;
+      const ok=await new Promise(resolve=>{
+        let req;try{req=indexedDB.deleteDatabase('sanad_features_v1');}catch(_){resolve(false);return;}
+        req.onsuccess=()=>resolve(true);req.onerror=()=>resolve(false);req.onblocked=()=>resolve(false);
+      });
+      if(ok)this.mode='memory';
+      return ok;
+    }catch(_){return false;}
+  }
 };
 
 const SanadI18n = {
@@ -9030,7 +9108,7 @@ const SanadI18n = {
     'عام':'General','الوضع الفاتح':'Appearance','إخفاء المبالغ':'Hide amounts','الإشعارات':'Notifications','تعمل أثناء فتح التطبيق فقط':'Works while the app is open','تنبيهات الالتزامات حتى عند إغلاق التطبيق':'Recurring reminders even when the app is closed',
     'البلد الافتراضية':'Default country','يبدأ التطبيق بهذه البلد عند فتحه.':'The app opens with this country.','الالتزامات والاشتراكات':'Recurring & subscriptions','إدارة الالتزامات':'Manage recurring items',
     'الادخار':'Savings','هدف الادخار':'Savings goal','لم يُحدد':'Not set','التصنيفات والأشخاص':'Categories & people','فئات المصاريف':'Expense categories','فئات الدخل':'Income categories','الأشخاص':'People','الوسوم':'Tags',
-    'نسخ احتياطية تلقائية':'Automatic snapshots','البيانات':'Data','تصدير نسخة احتياطية':'Export financial backup','استيراد نسخة احتياطية':'Import financial backup','حذف كل البيانات':'Delete all data',
+    'نسخ احتياطية تلقائية':'Automatic snapshots','البيانات':'Data','تصدير نسخة احتياطية':'Export financial backup','استيراد نسخة احتياطية':'Import financial backup','حذف كل البيانات':'Delete all data','إعادة ضبط البيانات المالية':'Reset financial data','حذف SANAD بالكامل من الجهاز':'Securely erase SANAD from this device','إعادة الضبط':'Reset','متابعة الحذف':'Continue erase','لم يتم التحقق — لم يبدأ الحذف':'Verification failed — erase did not start','تعذر إكمال الحذف الآمن':'Secure erase could not be completed',
     'المصروفات':'Expenses','الدخل':'Income','مصروف':'Expense','دخل':'Income','تحويل':'Transfer','متكرر':'Recurring','مصروف جديد':'New expense','دخل جديد':'New income','تعديل مصروف':'Edit expense','تعديل دخل':'Edit income',
     'إضافة جديدة':'Add new','فلوس خرجت مني':'Money I spent','فلوس دخلت عندي':'Money I received','بين حساباتي أو لشخص':'Between my accounts or to a person','شهري أو سنوي':'Monthly or yearly',
     'المبلغ':'Amount','المبلغ الأساسي':'Principal amount','العملة':'Currency','الفئة':'Category','مصدر الدخل':'Income source','ملاحظة':'Note','اختياري':'Optional','التاريخ':'Date','اليوم':'Today','أمس':'Yesterday','تاريخ آخر':'Other date',
@@ -9287,7 +9365,7 @@ const SanadReceipts = {
 };
 
 const SanadSecurity = {
-  cfg:{enabled:false,authMode:null,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false}, unlocked:true, pendingStart:false, markerKey:'sanad_security_enabled_v1',
+  cfg:{enabled:false,authMode:null,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false}, unlocked:true, pendingStart:false, markerKey:'sanad_security_enabled_v1', backgroundAt:0, relockAfterMs:30000,
   b64(bytes){return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');},
   unb64(s){s=String(s||'').replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const bin=atob(s);return Uint8Array.from(bin,c=>c.charCodeAt(0));},
   random(n=32){const a=new Uint8Array(n);crypto.getRandomValues(a);return a;},
@@ -9301,6 +9379,18 @@ const SanadSecurity = {
   _nativeResolve:null,
   nativeResult(ok){if(this._nativeResolve){const r=this._nativeResolve;this._nativeResolve=null;r(!!ok);}},
   async nativeAuth(reason){if(!this.nativeAvailable())return false;return await new Promise(resolve=>{this._nativeResolve=resolve;try{AndroidBridge.authenticateDevice(String(reason||'Verify SANAD'));}catch(e){this._nativeResolve=null;resolve(false);return;}setTimeout(()=>{if(this._nativeResolve===resolve){this._nativeResolve=null;resolve(false);}},60000);});},
+  onBackground(ts){if(this.cfg.enabled&&this.unlocked)this.backgroundAt=Number(ts)||Date.now();},
+  onForeground(ts){
+    if(!this.cfg.enabled||!this.unlocked||!this.backgroundAt){this.backgroundAt=0;return;}
+    const elapsed=Math.max(0,(Number(ts)||Date.now())-this.backgroundAt);this.backgroundAt=0;
+    if(elapsed>=this.relockAfterMs)this.show();
+  },
+  async authorize(reason){
+    if(this.nativeAvailable())return this.nativeAuth(reason||'Verify SANAD');
+    if(!this.cfg.enabled)return true;
+    if(!(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials&&crypto.subtle&&this.cfg.credentialId))return false;
+    try{const cred=await navigator.credentials.get({publicKey:{challenge:this.random(),allowCredentials:[{type:'public-key',id:this.unb64(this.cfg.credentialId)}],timeout:60000,userVerification:'required'}});return !!cred;}catch(_){return false;}
+  },
   async init(){const marker=this.markerEnabled(),stored=await SanadExtStorage.get('security',null),base={enabled:false,authMode:null,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(stored&&typeof stored==='object'){this.cfg=Object.assign(base,stored);this.setMarker(!!this.cfg.enabled);}else if(marker){this.cfg=Object.assign(base,{enabled:true,storageUnavailable:true});}else this.cfg=base;this.unlocked=!this.cfg.enabled;this.pendingStart=false;},
   ensureOverlay(){let el=document.getElementById('sanadLock');if(el)return el;el=document.createElement('div');el.id='sanadLock';el.className='sanad-lock';el.hidden=true;el.innerHTML='<div class="lock-card"><div class="lock-logo">س</div><h2>SANAD · سند</h2><p>التطبيق مقفول لحماية خصوصيتك.</p><button type="button" class="btn primary" data-sanad-act="unlock">🔐 فتح بالبصمة / قفل الجهاز</button><button type="button" class="btn text" data-sanad-act="recovery-unlock">استخدام رمز الاسترداد</button><div class="lock-note">لا يتم حفظ أو إرسال بيانات بصمتك إلى SANAD.</div></div>';document.body.appendChild(el);return el;},
   show(){if(!this.cfg.enabled)return;this.unlocked=false;const app=document.getElementById('app'),ob=document.getElementById('onboard');if(app)app.hidden=true;if(ob)ob.hidden=true;const el=this.ensureOverlay();const p=el.querySelector('.lock-card>p'),unlockBtn=el.querySelector('[data-sanad-act="unlock"]'),recoveryBtn=el.querySelector('[data-sanad-act="recovery-unlock"]');if(this.cfg.storageUnavailable){if(p)p.textContent='بيانات القفل غير متاحة. أعد فتح SANAD عندما يعود التخزين الآمن.';if(unlockBtn)unlockBtn.hidden=true;if(recoveryBtn)recoveryBtn.hidden=true;}else{if(p)p.textContent='التطبيق مقفول لحماية خصوصيتك.';if(unlockBtn)unlockBtn.hidden=false;if(recoveryBtn)recoveryBtn.hidden=false;}el.hidden=false;SanadI18n.apply(el);hideSanadBootSplash();},
@@ -9345,6 +9435,8 @@ const SanadSecurity = {
 };
 
 window.sanadDeviceAuthResult=function(ok){try{SanadSecurity.nativeResult(!!ok);}catch(_){}};
+window.sanadAppBackgrounded=function(ts){try{SanadSecurity.onBackground(ts);}catch(_){}};
+window.sanadAppForegrounded=function(ts){try{SanadSecurity.onForeground(ts);}catch(_){}};
 
 const SanadCloud = {
   config:null,sdk:null,app:null,auth:null,db:null,storage:null,user:null,status:'not-configured',error:null,meta:{dirty:false,revision:0,lastRemoteRevision:0,lastSync:null,deviceId:null,receiptDirty:{}},applyingRemote:false,
@@ -9399,7 +9491,7 @@ const SanadCloud = {
     let migrated;try{migrated=Schema.migrate(state);}catch(e){throw new Error('Remote migration failed');}const errs=Schema.validateStateStrict(migrated);if(errs.length)throw new Error('Remote integrity failed: '+errs.slice(0,3).join(' | '));
     const before=snapshotState();if(!S.previewMode){const snap=await writeRotatedPreCritSnapshot(before);if(!snap.ok)throw new Error('Safety snapshot failed');}
     this.applyingRemote=true;try{loadStateInto(migrated);Finance.ensureAllPrimaries();const v=await verifiedWriteState(snapshotState(),before);if(!v.ok){loadStateInto(before);throw new Error('Verified remote write failed');}}finally{this.applyingRemote=false;}
-    await loadSnapshots();await recomputePendingRecurring();applyTheme();render();return true;
+    await loadSnapshots();await recomputePendingRecurring();syncNativeNotifications();applyTheme();render();return true;
   },
   async pullRemote(force=false){
     if(!this.user||!this.db){toast('سجّل الدخول أولاً');return false;}const snap=await this.sdk.fs.getDoc(this.stateDoc());if(!snap.exists()){toast('لا توجد نسخة سحابية');return false;}const remote=snap.data();
@@ -9464,7 +9556,7 @@ const SanadFullBackup = {
       if(!await SanadExtStorage.replaceReceipts(prepared.receipts))throw new Error('receipt replace failed');
       if(!await SanadExtStorage.set('family',incomingFamily))throw new Error('family restore failed');
       if(incomingFirebase){if(!await SanadExtStorage.set('firebaseConfig',incomingFirebase))throw new Error('firebase config restore failed');}else if(!await SanadExtStorage.del('firebaseConfig'))throw new Error('firebase config clear failed');
-      SanadFamily.state=incomingFamily;SanadCloud.config=incomingFirebase;SanadCloud.meta=Object.assign({},beforeMeta,{dirty:true,receiptDirty:{},lastSync:null});if(!await SanadExtStorage.set('syncMeta',SanadCloud.meta))throw new Error('sync meta restore failed');render();toast('تم الاستيراد');return true;
+      SanadFamily.state=incomingFamily;SanadCloud.config=incomingFirebase;SanadCloud.meta=Object.assign({},beforeMeta,{dirty:true,receiptDirty:{},lastSync:null});if(!await SanadExtStorage.set('syncMeta',SanadCloud.meta))throw new Error('sync meta restore failed');syncNativeNotifications();render();toast('تم الاستيراد');return true;
     }catch(e){console.error(e);try{await SanadCloud.safeApplyRemote(beforeFinance);}catch(_){}try{await SanadExtStorage.replaceReceipts(beforeReceipts);}catch(_){}try{await SanadExtStorage.set('family',beforeFamily);SanadFamily.state=beforeFamily;}catch(_){}try{if(beforeFirebase)await SanadExtStorage.set('firebaseConfig',beforeFirebase);else await SanadExtStorage.del('firebaseConfig');SanadCloud.config=beforeFirebase;}catch(_){}try{SanadCloud.meta=beforeMeta;await SanadExtStorage.set('syncMeta',beforeMeta);}catch(_){}try{render();}catch(_){}toast('تعذر الاستيراد');return false;}
   },
   async importFile(file){if(!file)return false;let data;try{data=JSON.parse(await file.text());}catch(_){toast('الملف ليس JSON صالح');return false;}return this.importData(data,true);}
@@ -9491,7 +9583,7 @@ const _sanadCoreRenderTransferSheet=renderTransferSheet; renderTransferSheet=fun
 const _sanadCoreOpenTxDetails=openTxDetails; openTxDetails=function(id){_sanadCoreOpenTxDetails(id);requestAnimationFrame(()=>SanadReceipts.injectDetails(id));};
 const _sanadCoreSaveTx=saveTx; saveTx=async function(){const ids=new Set(S.transactions.map(t=>t.id));const edit=S.form&&S.form.id;const pending=SanadReceipts.pending;const shareToggle=document.querySelector('[data-family-share-toggle]');const shareWanted=shareToggle?shareToggle.classList.contains('on'):null;await _sanadCoreSaveTx();const added=S.transactions.find(t=>!ids.has(t.id));const targetId=edit||(added&&added.id);if(targetId&&pending)await SanadReceipts.attachAfterSave(ids,edit,pending);if(targetId&&shareWanted!==null)await SanadFamily.setShared(targetId,shareWanted);};
 const _sanadCoreSaveTransfer=saveTransfer; saveTransfer=async function(){const ids=new Set(S.transactions.map(t=>t.id));const edit=S.form&&S.form.id;const pending=SanadReceipts.pending;await _sanadCoreSaveTransfer();const added=S.transactions.find(t=>!ids.has(t.id));const targetId=edit||(added&&added.id);if(targetId&&pending)await SanadReceipts.attachAfterSave(ids,edit,pending);};
-const _sanadCoreCommit=commitCriticalMutation; commitCriticalMutation=async function(fn){const r=await _sanadCoreCommit(fn);if(r&&r.ok&&!r.noop)await SanadCloud.markDirty();return r;};
+const _sanadCoreCommit=commitCriticalMutation; commitCriticalMutation=async function(fn){const r=await _sanadCoreCommit(fn);if(r&&r.ok&&!r.noop){await SanadCloud.markDirty();syncNativeNotifications();}return r;};
 const _sanadCorePersist=persist; persist=async function(){const r=await _sanadCorePersist();if(r)await SanadCloud.markDirty();return r;};
 const _sanadCoreStartApp=startApp; startApp=function(){if(SanadSecurity.cfg.enabled&&!SanadSecurity.unlocked){SanadSecurity.pendingStart=true;const app=document.getElementById('app'),ob=document.getElementById('onboard');if(app)app.hidden=true;if(ob)ob.hidden=true;SanadTheme.apply();SanadI18n.apply();SanadSecurity.show();return;}_sanadCoreStartApp();setTimeout(()=>SanadV9.afterStart(),0);};
 const _sanadCoreToast=toast; toast=function(msg,ms){return _sanadCoreToast(SanadI18n.text(msg),ms);};
