@@ -3497,7 +3497,7 @@ function recurringCardHtml(r, days){
   return '<div class="sub-card ' + (urgent ? 'urgent' : '') + ' ' + (paused || invalid ? 'paused' : '') + '" data-rec-open="' + r.id + '">' +
     '<div class="si" style="background:' + c.c + '22;color:' + c.c + '">' + (r.icon || '🔁') + '</div>' +
     '<div class="s-info"><b>' + esc(r.name) + badge + '</b>' +
-      '<span>' + c.i + ' ' + esc(c.n) + ' · ' + esc(srcName) + ' · ' + (r.frequency === 'yearly' ? 'سنوي' : 'شهري') + ' ' + typeIcon + '</span></div>' +
+      '<span><span data-no-i18n>' + c.i + '</span> <span>' + esc(c.n) + '</span> · <span data-no-i18n>' + esc(srcName) + '</span> · <span>' + (r.frequency === 'yearly' ? 'سنوي' : 'شهري') + '</span> ' + typeIcon + '</span></div>' +
     '<div class="s-amt"><b class="amt-val">' + (r.type === 'income' ? '+' : '−') + amtFull(r.amount, origCur) + '</b>' +
       '<span>' + (paused ? '—' : 'يوم ' + r.day) + '</span></div></div>';
 }
@@ -9085,7 +9085,7 @@ const SanadI18n = {
     'مخصصة':'Custom','تعديل فئة':'Edit category','يعني إيه وسوم؟':'What are tags?','زي الهاشتاج — تجمّع تحتها معاملات مرتبطة.':'Like hashtags — group related transactions together.','وسم جديد':'New tag','اسم الوسم':'Tag name',
     'المبلغ المستهدف':'Target amount','المدخر حالياً (يدوي)':'Saved so far (manual)','هذا الرقم لا يُحسب تلقائياً.':'This number is not calculated automatically.','تاريخ مستهدف (اختياري)':'Target date (optional)','إضافة للادخار':'Add to savings',
     'عليك الآن':'Current debt','تسجيل السداد':'Record repayment','تعديل بطاقة':'Edit card','اسم البطاقة':'Card name','المديونية عند البداية':'Opening debt','قيمة الدين عند البداية.':'Debt amount at the start date.','حد البطاقة':'Card limit','حساب السداد الافتراضي (اختياري)':'Default repayment account (optional)','— اختياري —':'— Optional —','يُحفظ على حساب البطاقة (وليس على البطاقة نفسها).':'Stored on the card account, not on the physical card.','آخر 4 أرقام (اختياري)':'Last 4 digits (optional)','⭐ اجعلها البطاقة الافتراضية للمصروفات':'⭐ Make it the default spending card','تُستخدم تلقائياً عند تسجيل مصروف في الإمارات':'Used automatically when recording an expense in UAE','💸 سداد البطاقة':'💸 Repay card','⚖️ تسوية المديونية':'⚖️ Reconcile debt',
-    'مدفوعات شهرية':'Monthly payments','دخل شهري':'Monthly income','مدفوعات متكررة':'Recurring payments','دخل متكرر':'Recurring income','متوقف':'Paused','وسيلة غير متاحة':'Payment source unavailable','غداً':'Tomorrow',
+    'من':'of','مدفوعات شهرية':'Monthly payments','دخل شهري':'Monthly income','مدفوعات متكررة':'Recurring payments','دخل متكرر':'Recurring income','متوقف':'Paused','وسيلة غير متاحة':'Payment source unavailable','غداً':'Tomorrow',
     'حركة الأموال':'Money movement','تحويلات داخلة (نفس البلد)':'Incoming transfers (same country)','تحويلات خارجة (نفس البلد)':'Outgoing transfers (same country)','تحويلات واردة (خارج البلد)':'Incoming transfers (cross-country)','تحويلات صادرة (خارج البلد)':'Outgoing transfers (cross-country)','تحويلات داخل البلد':'Domestic transfers','تحويلات خارج البلد':'Outbound transfers','تحويلات واردة':'Incoming transfers','لا توجد':'None',
     'ملخص البطاقة':'Card summary','المديونية الحالية':'Current debt','الحد الائتماني':'Credit limit','مشتريات الفترة':'Purchases in period','سداد الفترة (أصل)':'Repayments in period (principal)','بدون حد':'No limit','الإجمالي':'Total','المصروف':'Expenses','معاملة':'transaction','التوزيع':'Distribution',
     'الديون':'Debts','المؤرشفة':'Archived','استرجاع':'Restore','بطاقة مؤرشفة':'Archived card','أضف كاش':'Add cash','مصدر الكاش الأول':'Initial cash source','الكاش موجود عندي بالفعل':'Cash already on hand','سحب / نقل من حساب موجود':'Transfer from an existing account','لو اخترت حسابًا، SANAD يسجلها كتحويل حتى لا تتضاعف أموالك.':'If you choose an account, SANAD records a transfer so your money is not double-counted.','تمويل كاش':'Cash funding','أدخل مبلغ الكاش':'Enter cash amount','تمويل الكاش الأول يجب أن يكون من حساب بنفس العملة':'Initial cash funding must use an account with the same currency',
@@ -9131,6 +9131,7 @@ const SanadI18n = {
       else if((m=out.match(/^⭐ اجعله الحساب الافتراضي للمصروفات في\s+(.+)$/))) out='⭐ Make it the default spending account in '+atom(m[1]);
       else if((m=out.match(/^🏠 اجعله الحساب الأساسي في الرئيسية$/))) out='🏠 Make it the primary Home account';
       else if((m=out.match(/^تُستخدم تلقائياً عند تسجيل مصروف في\s+(.+)$/))) out='Used automatically when recording an expense in '+atom(m[1]);
+      else if((m=out.match(/^حدود الفئات\s*—\s*(.+)$/))) out='Category limits — '+m[1];
       else if((m=out.match(/^بعد\s+(\d+)\s+أيام$/))) out='In '+m[1]+' days';
       else if((m=out.match(/^يوم\s+(\d+)$/))) out='Day '+m[1];
       else if((m=out.match(/^تجاوزت الحد بـ\s+(.+)$/))) out='Over limit by '+m[1];
