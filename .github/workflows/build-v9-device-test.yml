@@ -1,4 +1,5 @@
 name: SANAD V9.0.7 Local Stable Android Build
+# quick-gate-refresh: v9.0.7
 
 on:
   push:
