@@ -3,32 +3,6 @@ plugins {
 }
 
 
-/* V9.0.7: reconstruct exact SANAD artwork from small text chunks before every build. */
-tasks.register('materializeSanadBranding') {
-    doLast {
-        def brandDir = new File(rootProject.projectDir, 'branding/v906')
-        def decodeParts = { String prefix ->
-            def parts = brandDir.listFiles().findAll { it.name.startsWith(prefix + '.b64.') }.sort { a, b -> a.name <=> b.name }
-            if (!parts) throw new GradleException("Missing SANAD branding parts for " + prefix)
-            def b64 = parts.collect { it.getText('UTF-8').trim() }.join('')
-            return java.util.Base64.decoder.decode(b64)
-        }
-        def splash = decodeParts('splash')
-        def logo = decodeParts('logo')
-        def targets = [
-            [new File(projectDir, 'src/main/assets/sanad_splash.webp'), splash],
-            [new File(projectDir, 'src/main/assets/sanad_logo.webp'), logo],
-            [new File(projectDir, 'src/main/assets/sanad_app_icon.webp'), logo],
-            [new File(projectDir, 'src/main/res/drawable-nodpi/sanad_app_icon.webp'), logo],
-        ]
-        targets.each { pair ->
-            pair[0].parentFile.mkdirs()
-            pair[0].bytes = pair[1]
-        }
-        println "SANAD branding materialized: splash=" + splash.length + " bytes, logo=" + logo.length + " bytes"
-    }
-}
-
 android {
     namespace 'com.sanad.v9test'
     compileSdk 35
@@ -68,5 +42,3 @@ dependencies {
     implementation 'androidx.core:core:1.15.0'
 }
 
-/* Ensure Android Studio/CLI builds also use reconstructed verified artwork. */
-tasks.named('preBuild').configure { dependsOn tasks.named('materializeSanadBranding') }
