@@ -1,6 +1,13 @@
 package com.sanad.v9test;
 
 import android.app.Activity;
+import android.app.KeyguardManager;
+import android.app.NotificationManager;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
+import android.os.CancellationSignal;
+import android.hardware.biometrics.BiometricPrompt;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Intent;
@@ -38,6 +45,8 @@ import java.util.List;
 public final class MainActivity extends Activity {
     private static final int REQ_FILE_CHOOSER = 7001;
     private static final int REQ_CREATE_DOCUMENT = 7002;
+    private static final int REQ_NOTIFICATION_PERMISSION = 7003;
+    private static final int REQ_DEVICE_AUTH = 7004;
     private static final String APP_URL = "https://appassets.androidplatform.net/assets/index.html";
 
     private WebView webView;
@@ -50,6 +59,7 @@ public final class MainActivity extends Activity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         cleanupOldCameraFiles();
+        NotificationScheduler.ensureChannel(this);
 
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(244, 255, 253));
@@ -264,6 +274,10 @@ public final class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_DEVICE_AUTH) {
+            notifyJsDeviceAuthResult(resultCode == RESULT_OK);
+            return;
+        }
         if (requestCode == REQ_FILE_CHOOSER) {
             if (fileCallback == null) return;
             Uri[] result = null;
@@ -343,6 +357,48 @@ public final class MainActivity extends Activity {
 
     public final class AndroidBridge {
         @JavascriptInterface
+        public boolean notificationsGranted() {
+            return Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+        }
+
+        @JavascriptInterface
+        public void requestNotificationPermission() {
+            runOnUiThread(() -> {
+                if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                    notifyJsPermissionResult(true);
+                    return;
+                }
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATION_PERMISSION);
+            });
+        }
+
+        @JavascriptInterface
+        public void syncNotifications(String json) {
+            runOnUiThread(() -> NotificationScheduler.scheduleAll(MainActivity.this, json));
+        }
+
+        @JavascriptInterface
+        public void cancelNotifications() {
+            runOnUiThread(() -> NotificationScheduler.cancelAll(MainActivity.this));
+        }
+
+        @JavascriptInterface
+        public void showNotification(String id, String title, String body) {
+            runOnUiThread(() -> NotificationScheduler.showNow(MainActivity.this, id, title, body));
+        }
+
+        @JavascriptInterface
+        public boolean supportsDeviceAuth() {
+            KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+            return km != null && km.isDeviceSecure();
+        }
+
+        @JavascriptInterface
+        public void authenticateDevice(String reason) {
+            runOnUiThread(() -> startDeviceAuthentication(reason));
+        }
+
+        @JavascriptInterface
         public void saveDataUrl(String fileName, String dataUrl) {
             byte[] bytes = decodeDataUrl(dataUrl);
             runOnUiThread(() -> startSaveDocument(fileName, bytes));
@@ -351,6 +407,72 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public void toast(String message) {
             runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
+        }
+    }
+
+    private void notifyJsPermissionResult(boolean allowed) {
+        if (webView == null) return;
+        webView.evaluateJavascript("window.sanadNotificationPermissionResult&&window.sanadNotificationPermissionResult(" + (allowed ? "true" : "false") + ");", null);
+    }
+
+    private void notifyJsDeviceAuthResult(boolean allowed) {
+        if (webView == null) return;
+        webView.evaluateJavascript("window.sanadDeviceAuthResult&&window.sanadDeviceAuthResult(" + (allowed ? "true" : "false") + ");", null);
+    }
+
+    private void startDeviceAuthentication(String reason) {
+        KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+        if (km == null || !km.isDeviceSecure()) {
+            notifyJsDeviceAuthResult(false);
+            return;
+        }
+        String subtitle = (reason == null || reason.trim().isEmpty()) ? "Verify to open SANAD" : reason;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                BiometricPrompt.Builder builder = new BiometricPrompt.Builder(this)
+                        .setTitle("SANAD — سند")
+                        .setSubtitle(subtitle);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    builder.setAllowedAuthenticators(
+                            android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_STRONG |
+                            android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL);
+                } else {
+                    builder.setDeviceCredentialAllowed(true);
+                }
+                BiometricPrompt prompt = builder.build();
+                CancellationSignal signal = new CancellationSignal();
+                prompt.authenticate(signal, getMainExecutor(), new BiometricPrompt.AuthenticationCallback() {
+                    @Override
+                    public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                        notifyJsDeviceAuthResult(true);
+                    }
+
+                    @Override
+                    public void onAuthenticationError(int errorCode, CharSequence errString) {
+                        notifyJsDeviceAuthResult(false);
+                    }
+                });
+                return;
+            } catch (Exception ignored) {}
+        }
+        Intent confirm = km.createConfirmDeviceCredentialIntent("SANAD — سند", subtitle);
+        if (confirm == null) {
+            notifyJsDeviceAuthResult(false);
+            return;
+        }
+        try {
+            startActivityForResult(confirm, REQ_DEVICE_AUTH);
+        } catch (ActivityNotFoundException e) {
+            notifyJsDeviceAuthResult(false);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_NOTIFICATION_PERMISSION) {
+            boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            notifyJsPermissionResult(granted);
         }
     }
 
