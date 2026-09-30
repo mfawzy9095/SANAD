@@ -57,8 +57,9 @@ jobs:
           pos=[tx.index(x) for x in expected]
           assert pos==sorted(pos), ("transaction order",list(zip(expected,pos)))
           tr=h[h.index("function renderTransferSheet(){"):h.index("function setTransferMode",h.index("function renderTransferSheet(){"))]
+          ui=tr[tr.index("  openSheet("):]
           expected2=["<label>من حساب</label>","<label>إلى</label>","amountSection","sanadReceiptQuickMount","tx-main-date","adv-details"]
-          pos2=[tr.index(x) for x in expected2]
+          pos2=[ui.index(x) for x in expected2]
           assert pos2==sorted(pos2), ("transfer order",list(zip(expected2,pos2)))
           assert "data:image/png;base64" not in h[h.index('id="sanadBootSplash"'):h.index('<input type="file"',h.index('id="sanadBootSplash"'))]
           PY
@@ -69,9 +70,9 @@ jobs:
           import pathlib, re
           html=pathlib.Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
           scripts=re.findall(r"<script[^>]*>(.*?)</script>",html,re.S)
-          pathlib.Path("/tmp/sanad-v904.js").write_text("\n".join(scripts),encoding="utf-8")
+          pathlib.Path("/tmp/sanad-v905.js").write_text("\n".join(scripts),encoding="utf-8")
           PY
-          node --check /tmp/sanad-v904.js
+          node --check /tmp/sanad-v905.js
 
       - name: Android lint
         run: gradle --no-daemon --stacktrace :app:lintDebug
