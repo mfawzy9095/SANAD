@@ -1,10 +1,10 @@
-name: SANAD V9.0.8 Local Stable Android Build
+name: SANAD V9.0.8 Device RC Android Build
 # quick-gate-refresh: v9.0.8-native
 
 on:
   push:
     branches:
-      - android-v9.0.8-local-stable
+      - android-v9.0.8-device-features
   pull_request:
     branches:
       - main
