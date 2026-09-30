@@ -3,7 +3,7 @@ name: SANAD Android Device Test Build
 on:
   push:
     branches:
-      - android-v9.0.3-device-test
+      - android-v9.0.4-device-test
   workflow_dispatch:
 
 permissions:
@@ -35,8 +35,26 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Verify embedded web source
-        run: echo "2c0f8dce471f05b93ca0104c8ea0c0a3786d7d0d4ec025726e3796818a8b0074  app/src/main/assets/index.html" | sha256sum -c -
+      - name: Verify web source and V9.0.4 regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s app/src/main/assets/index.html
+          SOURCE_SHA="$(sha256sum app/src/main/assets/index.html | awk '{print $1}')"
+          echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
+          grep -q "const SANAD_V9_VERSION = '9.0.4'" app/src/main/assets/index.html
+          grep -q "id=\"sanadBootSplash\"" app/src/main/assets/index.html
+          grep -q "cashFundingMode" app/src/main/assets/index.html
+          grep -q "'مدفوعات شهرية':'Monthly payments'" app/src/main/assets/index.html
+          grep -q "'اشتراكات':'Subscriptions'" app/src/main/assets/index.html
+          grep -q "'راتب':'Salary'" app/src/main/assets/index.html
+          python3 - <<'PY'
+          import pathlib, re
+          html=pathlib.Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
+          scripts=re.findall(r"<script[^>]*>(.*?)</script>",html,re.S)
+          pathlib.Path("/tmp/sanad-v904.js").write_text("\n".join(scripts),encoding="utf-8")
+          PY
+          node --check /tmp/sanad-v904.js
 
       - name: Android lint
         run: gradle --no-daemon --stacktrace :app:lintDebug
@@ -50,13 +68,13 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.3-DEVICE-TEST-3.apk"
+          cp "$APK" "SANAD-V9.0.4-DEVICE-TEST-4.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
           grep -q "package: name='com.sanad.v9test'" apk-badging.txt
-          grep -q "versionCode='90303'" apk-badging.txt
-          grep -q "versionName='9.0.3-device-test-3'" apk-badging.txt
+          grep -q "versionCode='90404'" apk-badging.txt
+          grep -q "versionName='9.0.4-device-test-4'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
           ! grep -q "android.permission.READ_SMS" apk-permissions.txt
           ! grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
@@ -65,14 +83,14 @@ jobs:
           ! grep -q "android.permission.WRITE_EXTERNAL_STORAGE" apk-permissions.txt
           EMBEDDED_SHA="$(unzip -p "$APK" assets/index.html | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_SHA" = "2c0f8dce471f05b93ca0104c8ea0c0a3786d7d0d4ec025726e3796818a8b0074"
-          sha256sum "SANAD-V9.0.3-DEVICE-TEST-3.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.0.4-DEVICE-TEST-4.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.3-DEVICE-TEST-3
+          name: SANAD-V9.0.4-DEVICE-TEST-4
           path: |
-            SANAD-V9.0.3-DEVICE-TEST-3.apk
+            SANAD-V9.0.4-DEVICE-TEST-4.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
