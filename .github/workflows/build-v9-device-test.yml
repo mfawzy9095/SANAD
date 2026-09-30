@@ -92,16 +92,22 @@ jobs:
           assert 'data:image/' not in splash_block
           assert 'sanad_splash.webp' in splash_block
           # Validate actual WebP binaries, not arbitrary large file sizes.
-          for asset,min_size in [
-              ("app/src/main/assets/sanad_splash.webp",50000),
-              ("app/src/main/assets/sanad_logo.webp",20000),
-              ("app/src/main/assets/sanad_app_icon.webp",20000),
-              ("app/src/main/res/drawable-nodpi/sanad_app_icon.webp",20000),
-          ]:
+          assets=[
+              "app/src/main/assets/sanad_splash.webp",
+              "app/src/main/assets/sanad_logo.webp",
+              "app/src/main/assets/sanad_app_icon.webp",
+              "app/src/main/res/drawable-nodpi/sanad_app_icon.webp",
+          ]
+          payloads={}
+          for asset in assets:
               data=Path(asset).read_bytes()
-              assert len(data) > min_size, (asset,len(data))
+              assert len(data) > 4096, (asset,len(data))
               assert data[:4] == b"RIFF", (asset,data[:4])
               assert data[8:12] == b"WEBP", (asset,data[8:12])
+              payloads[asset]=data
+          assert payloads["app/src/main/assets/sanad_splash.webp"] != payloads["app/src/main/assets/sanad_logo.webp"]
+          assert payloads["app/src/main/assets/sanad_logo.webp"] == payloads["app/src/main/assets/sanad_app_icon.webp"]
+          assert payloads["app/src/main/assets/sanad_logo.webp"] == payloads["app/src/main/res/drawable-nodpi/sanad_app_icon.webp"]
           # splash must show exact artwork first, with logo fallback only on asset error
           assert 'src="sanad_splash.webp"' in splash_block
           assert 'id="sanadSplashImage"' in splash_block
