@@ -4892,7 +4892,7 @@ async function saveTx(){
     fxRate = (!isNaN(uiRate) && uiRate > 0) ? uiRate : (Number(f.fxRate) || Finance.suggestRate(txCur, accCur));
     if (!fxRate || fxRate <= 0){ toast('أدخل سعر تحويل صحيح'); return; }
     walletAmount = Math.round(amt * fxRate * 100) / 100;
-    Finance.rememberRate(txCur, accCur, fxRate);
+    // FX memory is persisted inside the critical mutation.
   }
   const wasEdit = !!f.id;
   const isExpense = f.kind === 'expense';
@@ -4920,6 +4920,7 @@ async function saveTx(){
   }
   const newId = wasEdit ? f.id : uid('t');
   const result = await commitCriticalMutation(async () => {
+    if (txCur !== accCur) Finance.rememberRate(txCur, accCur, fxRate);
     const data = {
       id: newId,
       type: f.kind, amount: amt, currency: txCur,
@@ -5416,7 +5417,7 @@ async function saveTransfer(){
       if (!fxRate || fxRate <= 0){ toast('أدخل سعر تحويل صحيح'); return; }
       toAmount = Math.round(fromAmt * fxRate * 100) / 100;
     }
-    Finance.rememberRate(fromCur, toCur, fxRate);
+    // FX memory is persisted inside the critical mutation.
   }
   const isRepayment = !isExternal && targetAcc && isLiabilityAccount(targetAcc);
   if (isRepayment){
@@ -5446,6 +5447,7 @@ async function saveTransfer(){
   const newId = wasEdit ? f.id : uid('t');
   const origCreated = f._originalCreated || Date.now();
   const result = await commitCriticalMutation(async () => {
+    if (!sameCur) Finance.rememberRate(fromCur, toCur, fxRate);
     if (isExternal){
       const data = {
         id: newId, type: 'external_transfer',
@@ -6847,7 +6849,7 @@ async function savePayLiability(){
     rate = rateEl ? parseFloat(rateEl.value) : 0;
     if (!rate || rate <= 0){ toast('أدخل سعر تحويل صحيح'); return; }
     toAmount = Math.round(fromAmt * rate * 100) / 100;
-    Finance.rememberRate(fromCur, targetCur, rate);
+    // FX memory is persisted inside the critical mutation.
   }
   const debt = Finance.accountDebt(target.id);
   if (toAmount > debt + 0.01){
@@ -6863,6 +6865,7 @@ async function savePayLiability(){
   const newTransferId = uid('t');
   const today = isoToday();
   const result = await commitCriticalMutation(async () => {
+    if (!sameCur) Finance.rememberRate(fromCur, targetCur, rate);
     S.transactions.push({
       id: newTransferId, type:'transfer',
       fromAccountId: fromW.id, fromAmount: fromAmt, fromCurrency: fromCur, fromCountry: fromW.country,
