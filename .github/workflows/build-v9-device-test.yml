@@ -60,7 +60,7 @@ jobs:
           SOURCE_SHA="$(sha256sum "$HTML" | awk '{print $1}')"
           echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
 
-          grep -q "const SANAD_V9_VERSION = '9.0.7'" "$HTML"
+          grep -q "const SANAD_V9_VERSION = '9.0.8'" "$HTML"
           grep -q "const SANAD_CLOUD_FAMILY_BETA_ENABLED = false" "$HTML"
           grep -q "async replaceReceipts(records)" "$HTML"
           grep -q "async pruneReceiptOrphans(validIds)" "$HTML"
@@ -157,7 +157,7 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.8-LOCAL-STABLE.apk"
+          cp "$APK" "SANAD-V9.0.8-DEVICE-RC.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
@@ -178,14 +178,14 @@ jobs:
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          sha256sum "SANAD-V9.0.8-LOCAL-STABLE.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.0.8-DEVICE-RC.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.8-LOCAL-STABLE
+          name: SANAD-V9.0.8-DEVICE-RC
           path: |
-            SANAD-V9.0.8-LOCAL-STABLE.apk
+            SANAD-V9.0.8-DEVICE-RC.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
