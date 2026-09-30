@@ -35,6 +35,15 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Materialize SANAD artwork
+        shell: bash
+        run: |
+          gradle --no-daemon :app:materializeSanadBranding
+          test "$(sha256sum app/src/main/assets/sanad_splash.webp | awk '{print $1}')" = "19682a53a442707093db9098906e92bcab0ecc9d58c0219c05d075f96d18f7cc"
+          test "$(sha256sum app/src/main/assets/sanad_logo.webp | awk '{print $1}')" = "10f186340486e056db1ad2fd90ba6ba37b168de44f8413860e333a2d5602e742"
+          test "$(sha256sum app/src/main/assets/sanad_app_icon.webp | awk '{print $1}')" = "10f186340486e056db1ad2fd90ba6ba37b168de44f8413860e333a2d5602e742"
+          test "$(sha256sum app/src/main/res/drawable-nodpi/sanad_app_icon.webp | awk '{print $1}')" = "10f186340486e056db1ad2fd90ba6ba37b168de44f8413860e333a2d5602e742"
+
       - name: Install WebP decoder
         shell: bash
         run: |
