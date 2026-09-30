@@ -6,8 +6,8 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:label="@string/app_name"
-        android:icon="@drawable/sanad_app_icon"
-        android:roundIcon="@drawable/sanad_app_icon"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="false"
         android:theme="@style/Theme.Sanad">
