@@ -693,7 +693,7 @@ body{font-family:"Cairo",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,T
 .family-member{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--outline)}.family-member:last-child{border-bottom:0}.fm-avatar{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--primary-soft);color:var(--primary);font-weight:800}.family-member>div{display:flex;flex-direction:column;min-width:0}.family-member b{font-size:13.5px}.family-member span{font-size:11.5px;color:var(--text-2);direction:ltr;text-align:start;overflow:hidden;text-overflow:ellipsis}
 .inline-field{display:flex;gap:8px}.inline-field input{flex:1;min-width:0}.inline-field .btn{width:auto;flex-shrink:0}
 .family-share-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;background:linear-gradient(135deg,var(--primary-soft),var(--surface-2));border-radius:13px;margin-top:10px}.family-share-row>div:first-child{display:flex;flex-direction:column}.family-share-row b{font-size:13px}.family-share-row span{font-size:11px;color:var(--text-2)}
-.sanad-receipt-box{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px dashed color-mix(in srgb,var(--primary) 45%,var(--outline));background:color-mix(in srgb,var(--primary-soft) 35%,var(--surface));border-radius:14px}.receipt-btn{margin:0}.receipt-state{font-size:11.5px;color:var(--text-2);text-align:center}.receipt-preview{width:100%;height:145px;object-fit:cover;border-radius:11px;border:1px solid var(--outline)}.receipt-full{width:100%;height:auto;max-height:70dvh;object-fit:contain;border-radius:14px;background:#fff}.receipt-detail-card{margin-top:12px!important}.receipt-detail-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.receipt-detail-img{width:100%;height:170px;object-fit:cover;border-radius:11px;margin-top:10px}
+.tx-pay-block{margin-top:12px;padding:12px;border-radius:18px;background:var(--surface-2);border:1px solid var(--outline)}.tx-pay-block .amount-display{margin-bottom:10px}.tx-pay-block .source-mode{background:var(--surface)}.sanad-receipt-field.quick{margin:10px 0 0}.sanad-receipt-field.quick .sanad-receipt-box{background:var(--surface);padding:8px}.sanad-receipt-field.quick .receipt-btn{height:44px}.sanad-receipt-box{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px dashed color-mix(in srgb,var(--primary) 45%,var(--outline));background:color-mix(in srgb,var(--primary-soft) 35%,var(--surface));border-radius:14px}.receipt-btn{margin:0}.receipt-state{font-size:11.5px;color:var(--text-2);text-align:center}.receipt-preview{width:100%;height:145px;object-fit:cover;border-radius:11px;border:1px solid var(--outline)}.receipt-full{width:100%;height:auto;max-height:70dvh;object-fit:contain;border-radius:14px;background:#fff}.receipt-detail-card{margin-top:12px!important}.receipt-detail-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.receipt-detail-img{width:100%;height:170px;object-fit:cover;border-radius:11px;margin-top:10px}
 .sanad-lock{position:fixed;inset:0;background:linear-gradient(160deg,#071b18,#0e332e);z-index:99999;display:grid;place-items:center;padding:22px;color:white}.sanad-lock[hidden]{display:none!important}.lock-card{width:min(100%,390px);text-align:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(20px);border-radius:26px;padding:28px 20px;box-shadow:0 24px 80px rgba(0,0,0,.35)}.lock-logo{width:66px;height:66px;margin:0 auto 14px;border-radius:20px;display:grid;place-items:center;background:linear-gradient(135deg,#48b9a9,#146f64);font-size:32px;font-weight:800}.lock-card h2{font-size:22px;margin-bottom:6px}.lock-card p{font-size:13px;opacity:.78;margin-bottom:20px}.lock-card .btn{margin-top:8px}.lock-card .btn.primary{background:#fff;color:#07584f}.lock-card .btn.text{color:#fff}.lock-note{font-size:10.5px;opacity:.58;margin-top:14px}
 .lang-en body{letter-spacing:0}.lang-en .amount-display,.lang-en .amt-val,.lang-en [dir="ltr"]{font-family:"Cairo","Segoe UI",sans-serif}.lang-en .sheet-head .close:first-child{transform:scaleX(-1)}
 .empty.mini{padding:20px 10px}.empty.mini .em{font-size:32px}
@@ -4736,14 +4736,17 @@ function renderTxSheet(){
     '<div class="sheet-head"><button type="button" class="close" data-act="close-sheet">✕</button>' +
       '<h2>' + (f.id ? 'تعديل ' + (isIncome ? 'دخل' : 'مصروف') : (isIncome ? 'دخل جديد' : 'مصروف جديد')) + '</h2>' +
       (f.id ? '<button type="button" class="danger" data-act="del-tx">🗑</button>' : '<div style="width:36px"></div>') + '</div>' +
-    '<div class="sheet-body">' +
-      '<div class="amount-display native-amount-wrap">' +
-        '<div class="amount-entry-row"><span class="amount-symbol">' + Finance.curSymbol(f.currency) + '</span>' +
-          '<input class="native-amount-input" id="amountIn" type="text" inputmode="decimal" enterkeyhint="done" autocomplete="off" autocapitalize="off" spellcheck="false" dir="ltr" aria-label="المبلغ" placeholder="0" value="' + esc(String(f.amount || '')) + '"></div>' +
-        '<div class="cur">' + Finance.curInfo(f.currency).name + ' · ' + f.currency + '</div></div>' +
-      sourceArea +
+    '<div class="sheet-body tx-sheet-body">' +
       '<div style="font-size:12.5px;color:var(--text-2);margin:0 2px 6px">' + (isIncome ? 'مصدر الدخل' : 'الفئة') + '</div>' +
-      '<div class="cat-scroll">' + catChips + '</div>' + fxHtml +
+      '<div class="cat-scroll">' + catChips + '</div>' +
+      '<div class="tx-pay-block">' +
+        '<div class="amount-display native-amount-wrap">' +
+          '<div class="amount-entry-row"><span class="amount-symbol">' + Finance.curSymbol(f.currency) + '</span>' +
+            '<input class="native-amount-input" id="amountIn" type="text" inputmode="decimal" enterkeyhint="done" autocomplete="off" autocapitalize="off" spellcheck="false" dir="ltr" aria-label="المبلغ" placeholder="0" value="' + esc(String(f.amount || '')) + '"></div>' +
+          '<div class="cur">' + Finance.curInfo(f.currency).name + ' · ' + f.currency + '</div></div>' +
+        sourceArea +
+        '<div id="sanadReceiptQuickMount"></div>' +
+      '</div>' + fxHtml +
       '<details class="adv-details" ' + (f.showAdvanced || needsFx ? 'open' : '') + ' data-adv>' +
         '<summary>تفاصيل إضافية</summary>' +
         '<div class="adv-body">' +
@@ -7162,6 +7165,10 @@ function openInstrumentSheet(id, presetType, preserve){
   const effectiveRepayId = linkedCreditAccForRepay ? (linkedCreditAccForRepay.defaultRepaymentAccountId || null) : null;
   const repaymentOptions = '<option value="">— اختياري —</option>' + assetAccounts.map(a =>
     '<option value="' + a.id + '"' + (effectiveRepayId === a.id ? ' selected' : '') + '>' + a.icon + ' ' + esc(a.name) + '</option>').join('');
+  const prepaidFundingAccounts = assetAccounts.filter(a => a.type !== 'prepaid' && a.type !== 'credit');
+  const existingTopupId = inst && inst.defaultTopupAccountId ? inst.defaultTopupAccountId : '';
+  const prepaidFundingOptions = '<option value="">— اختر حساب التمويل —</option>' + prepaidFundingAccounts.map(a =>
+    '<option value="' + a.id + '"' + (existingTopupId === a.id ? ' selected' : '') + '>' + a.icon + ' ' + esc(a.name) + ' · ' + Finance.curSymbol(a.currency) + '</option>').join('');
   const icons = CARD_ICONS.map(ic =>
     '<div class="icon-opt ' + (data.icon === ic ? 'on' : '') + '" data-wallet-ic="' + ic + '">' + ic + '</div>').join('');
   const colors = PALETTE.map(p =>
@@ -7196,9 +7203,11 @@ function openInstrumentSheet(id, presetType, preserve){
         Object.values(CURRENCIES).map(c =>
           '<option value="' + c.code + '"' + ((linkedPrepaid ? linkedPrepaid.currency : 'AED') === c.code ? ' selected' : '') + '>' + c.flag + ' ' + c.name + '</option>').join('') +
       '</select>' + (hasTx ? '<div class="field-hint" style="color:var(--warn)">🔒 العملة مقفلة (توجد معاملات).</div>' : '') + '</div>' +
-      '<div class="field"><label>الرصيد الافتتاحي</label>' +
+      (!isEdit ? '<div class="field"><label>مصدر الرصيد الأول</label><select id="cardPrepaidFundingMode"><option value="existing">الرصيد موجود بالفعل على البطاقة</option><option value="transfer">شحن من حساب موجود</option></select><div class="field-hint">اختيار التحويل يخصم المبلغ من الحساب ويضيفه للبطاقة كتحويل، وليس كمصروف.</div></div>' : '') +
+      (!isEdit ? '<div class="field" id="cardPrepaidSourceWrap" hidden><label>حساب التمويل</label><select id="cardPrepaidSource">' + prepaidFundingOptions + '</select></div>' : '') +
+      '<div class="field"><label>' + (isEdit ? 'الرصيد الافتتاحي' : 'المبلغ عند الإضافة') + '</label>' +
         '<input type="number" inputmode="decimal" id="cardBal" value="' + (linkedPrepaid ? linkedPrepaid.openingBalance : 0) + '" ' + (hasTx ? 'disabled' : '') + '>' +
-        '<div class="field-hint">' + (hasTx ? 'مقفل (توجد معاملات).' : 'الرصيد الحالي في البطاقة.') + '</div></div>';
+        '<div class="field-hint">' + (hasTx ? 'مقفل (توجد معاملات).' : (isEdit ? 'الرصيد الحالي في البطاقة.' : 'اكتب الرصيد الموجود حاليًا أو مبلغ الشحن الأول.')) + '</div></div>';
   }
   let linkedField = '';
   if (isDebit){
@@ -7221,6 +7230,9 @@ function openInstrumentSheet(id, presetType, preserve){
       '<div class="switch ' + (isDefaultCard ? 'on' : '') + '" data-card-default-toggle></div>' +
     '</div>';
   let creditActionsHtml = '';
+  if (isEdit && isPrepaid && !data.archived && data.accountId){
+    creditActionsHtml = '<button type="button" class="btn" data-act="topup-prepaid" data-id="' + id + '" style="margin-top:8px">➕ شحن البطاقة من حساب</button>';
+  }
   if (isEdit && isCredit && !data.archived && data.accountId){
     const acc = Finance.getAccount(data.accountId);
     if (acc){
@@ -7254,6 +7266,24 @@ function openInstrumentSheet(id, presetType, preserve){
     '</div>',
     'card'
   );
+  if(isPrepaid && !isEdit) setTimeout(refreshPrepaidFundingUI,0);
+}
+function refreshPrepaidFundingUI(){
+  const mode=document.getElementById('cardPrepaidFundingMode');
+  const wrap=document.getElementById('cardPrepaidSourceWrap');
+  if(wrap) wrap.hidden=!mode||mode.value!=='transfer';
+}
+function openPrepaidTopup(instId){
+  const inst=Finance.getInstrument(instId);
+  if(!inst||inst.type!=='prepaid_card') return;
+  const target=Finance.getAccount(inst.accountId);
+  if(!target) return;
+  const candidates=getCountryMoneyAccounts(target.country).filter(a=>a.id!==target.id&&!isLiabilityAccount(a)&&a.type!=='prepaid');
+  if(!candidates.length){ toast('أضف حسابًا يمكن الشحن منه أولاً'); return; }
+  const preferred=inst.defaultTopupAccountId&&candidates.find(a=>a.id===inst.defaultTopupAccountId);
+  const fromAcc=preferred||candidates[0];
+  S.form={_sheet:'transfer',id:null,_sourceCountry:fromAcc.country,_destType:'own',_destCountry:target.country,fromAccountId:fromAcc.id,toAccountId:target.id,beneficiaryId:null,fromAmount:'',toAmount:'',receivedAmount:'',receivedCurrency:'',fee:'',fxRate:Finance.suggestRate(fromAcc.currency,target.currency),_transferMode:'received',note:'شحن '+inst.name,tags:['شحن بطاقة'],date:isoToday(),showAdvanced:false};
+  renderTransferSheet();
 }
 async function saveCard(id, presetType){
   if (!canWrite()){ toast('وضع القراءة فقط'); return; }
@@ -7267,7 +7297,7 @@ async function saveCard(id, presetType){
   let institutionId = null;
   let accountId = null;
   let cardCur = 'AED';
-  let debt = 0, limit = 0, bal = 0, repayId = null;
+  let debt = 0, limit = 0, bal = 0, repayId = null, prepaidFundingMode = 'existing', prepaidFundingSourceId = null;
   if (isDebit){
     const linkedEl = document.getElementById('cardLinked');
     const linked = linkedEl ? linkedEl.value : '';
@@ -7293,6 +7323,17 @@ async function saveCard(id, presetType){
     } else if (isPrepaid){
       const balEl = document.getElementById('cardBal');
       bal = balEl ? (parseFloat(balEl.value) || 0) : 0;
+      const fundingModeEl=document.getElementById('cardPrepaidFundingMode');
+      prepaidFundingMode=fundingModeEl?fundingModeEl.value:'existing';
+      const fundingSourceEl=document.getElementById('cardPrepaidSource');
+      prepaidFundingSourceId=fundingSourceEl?(fundingSourceEl.value||null):null;
+      if(!id&&prepaidFundingMode==='transfer'){
+        const fundingAcc=Finance.getAccount(prepaidFundingSourceId);
+        if(!fundingAcc||fundingAcc.archived||isLiabilityAccount(fundingAcc)){ toast('اختر حساب تمويل صالح'); return; }
+        if(fundingAcc.currency!==cardCur){ toast('الشحن الأول يجب أن يكون من حساب بنفس عملة البطاقة'); return; }
+        if(bal<=0){ toast('أدخل مبلغ الشحن'); return; }
+        if(Finance.accountBalance(fundingAcc.id)+0.001<bal){ toast('رصيد حساب التمويل غير كافٍ'); return; }
+      }
     }
     const instEl = document.getElementById('cardInst');
     institutionId = instEl ? (instEl.value || null) : null;
@@ -7383,7 +7424,7 @@ async function saveCard(id, presetType){
         accountId = uid('a');
         S.accounts.push({
           id: accountId, institutionId, country, name, type:'prepaid', currency: cardCur,
-          openingBalance: bal, openingDebt: 0, creditLimit: 0,
+          openingBalance: prepaidFundingMode==='transfer' ? 0 : bal, openingDebt: 0, creditLimit: 0,
           defaultRepaymentAccountId: null, icon, color, archived: false, created: isoToday(),
           ownedByInstrumentId: null
         });
@@ -7399,7 +7440,7 @@ async function saveCard(id, presetType){
         const finalAcc = Finance.getAccount(accountId);
         inst.country = finalAcc ? finalAcc.country : country;
         inst.icon = icon; inst.color = color;
-        if (isPrepaid && finalAcc) finalAcc.ownedByInstrumentId = inst.id;
+        if (isPrepaid){ if(prepaidFundingSourceId) inst.defaultTopupAccountId=prepaidFundingSourceId; if(finalAcc) finalAcc.ownedByInstrumentId = inst.id; }
       }
     } else {
       const finalAcc = Finance.getAccount(accountId);
@@ -7410,9 +7451,17 @@ async function saveCard(id, presetType){
         id: savedInstId, accountId,
         institutionId: isDebit ? (linkedAccount ? linkedAccount.institutionId : null) : institutionId,
         name, type: presetType, last4, country: finalAcc.country,
-        icon, color, archived: false, created: isoToday()
+        icon, color, archived: false, created: isoToday(),
+        defaultTopupAccountId: isPrepaid ? prepaidFundingSourceId : null
       });
-      if (isPrepaid) finalAcc.ownedByInstrumentId = savedInstId;
+      if (isPrepaid){
+        finalAcc.ownedByInstrumentId = savedInstId;
+        if(prepaidFundingMode==='transfer'&&prepaidFundingSourceId&&bal>0){
+          const sourceAcc=Finance.getAccount(prepaidFundingSourceId);
+          if(!sourceAcc||sourceAcc.currency!==finalAcc.currency) return false;
+          S.transactions.push({id:uid('t'),type:'transfer',fromAccountId:sourceAcc.id,fromAmount:bal,fromCurrency:sourceAcc.currency,fromCountry:sourceAcc.country,toAccountId:finalAcc.id,toAmount:bal,toCurrency:finalAcc.currency,toCountry:finalAcc.country,fxRate:1,fee:0,note:'شحن '+name,tags:['شحن بطاقة'],date:isoToday(),created:Date.now()});
+        }
+      }
     }
     if (shouldBeDefault){
       S.settings.defaultInstrumentByCountry[country] = savedInstId;
@@ -7901,12 +7950,32 @@ function setupPWA(){
   } catch(e){}
 }
 
+const SANAD_NAV_STACK = [];
+let SANAD_NAV_BACK = false;
 function go(tab){
+  if (!tab) return;
+  if (!SANAD_NAV_BACK && S.tab && S.tab !== tab) SANAD_NAV_STACK.push(S.tab);
   S.tab = tab;
   document.querySelectorAll('.bottom-nav [data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   const v = document.getElementById('view');
   if (v) v.scrollTop = 0;
   render();
+}
+function sanadHandleBack(){
+  const dlg=document.getElementById('dlg');
+  if(dlg&&dlg.classList.contains('on')){
+    const cancel=document.getElementById('dlgCancel');
+    if(cancel&&cancel.style.display!=='none') cancel.click();
+    else if(dlg) dlg.click();
+    return true;
+  }
+  const sheet=document.getElementById('sheet');
+  if(sheet&&sheet.classList.contains('on')){ if(typeof closeSheet==='function') closeSheet(); return true; }
+  if(SANAD_NAV_STACK.length){
+    const prev=SANAD_NAV_STACK.pop(); SANAD_NAV_BACK=true; try{go(prev);}finally{SANAD_NAV_BACK=false;} return true;
+  }
+  if(S.tab&&S.tab!=='home'){ SANAD_NAV_BACK=true; try{go('home');}finally{SANAD_NAV_BACK=false;} return true; }
+  return false;
 }
 function shiftMonth(step){
   const [y,m] = S.month.split('-').map(Number);
@@ -8032,6 +8101,7 @@ function handleViewAction(act, dataset){
     case 'save-pay-liability': return savePayLiability();
     case 'save-repayment-edit': return saveRepaymentEdit();
     case 'reconcile-liability': return openReconcileLiability(dataset.id);
+    case 'topup-prepaid': return openPrepaidTopup(dataset.id);
     case 'save-reconcile-liability': return saveReconcileLiability(dataset.id);
     case 'set-primary-account': return setPrimaryAccount(dataset.id);
     case 'edit-from-details': closeSheet(); setTimeout(() => openEditTx(dataset.id), 250); return;
@@ -8049,6 +8119,8 @@ function openInstrumentSheetForCreditAccount(accountId){
   if (inst){ openInstrumentSheet(inst.id); return; }
   toast('لا توجد بطاقة ائتمان مرتبطة');
 }
+
+document.addEventListener('change',e=>{ if(e.target&&e.target.id==='cardPrepaidFundingMode') refreshPrepaidFundingUI(); });
 
 document.addEventListener('click', e => {
   const t = e.target;
@@ -8853,7 +8925,7 @@ async function boot(){
    Local-first features: i18n, theme modes, app privacy lock,
    receipt attachments, Firebase cloud adapter, family sharing.
    ========================================================= */
-const SANAD_V9_VERSION = '9.0.2';
+const SANAD_V9_VERSION = '9.0.3';
 const SANAD_FIREBASE_SDK = '10.14.1';
 
 const SanadExtStorage = {
@@ -8952,8 +9024,10 @@ const SanadI18n = {
     'أساسي':'Primary','افتراضي':'Default','حساب':'Account','اللغة والمظهر':'Language & appearance','فاتح، داكن أو حسب الجهاز':'Light, dark, or system','يحتاج HTTPS':'requires HTTPS','لم تتم المزامنة بعد':'Not synced yet','مطلوب لتفعيل السحابة':'Required to enable cloud sync','الإصدار':'version',
     'أنشئ مساحة مشتركة للعائلة. معاملاتك الخاصة تظل خاصة ما لم تفعّل المشاركة للمعاملة.':'Create a shared family space. Your private transactions stay private unless you explicitly share them.','اسم العائلة':'Family name','إنشاء عائلة':'Create family','قبول دعوة برقم هاتفي':'Accept invite using my phone number','المعاملات المشتركة':'Shared transactions','الأعضاء':'Members','دعوة برقم الهاتف (E.164)':'Invite by phone (E.164)','دعوة':'Invite',
     'ألصق Firebase Web config من Project settings. لا يتم إرسال الإعداد لأي جهة أخرى.':'Paste the Firebase Web config from Project settings. The configuration is stored locally and is not sent elsewhere.','حفظ والاتصال':'Save & connect','تم إدخال الإعداد':'Configuration saved','رقم الهاتف':'Phone number','غير موثق':'Not verified',
-    'فلترة':'Filters','الكل':'All','تحويل بين حساباتي':'Between my accounts','كل الفئات':'All categories','تفريغ':'Clear','تطبيق':'Apply','بطاقة مدفوعة':'Prepaid card','رصيد مسبق':'Prepaid balance',
-    'حساب جديد':'New account','اسم الحساب':'Account name','البنك / المؤسسة':'Bank / institution','— بدون —':'— None —','اتركه فاضي إذا لا تريد ربطه بجهة معينة.':'Leave blank if you do not want to link an institution.','الرصيد الافتتاحي':'Opening balance','رصيد الحساب عند تاريخ البداية.':'Account balance on the start date.','الأيقونة':'Icon','اللون':'Color',
+    'فلترة':'Filters','الكل':'All','تحويل بين حساباتي':'Between my accounts','كل الفئات':'All categories','تفريغ':'Clear','تطبيق':'Apply','بطاقة مدفوعة':'Prepaid card','رصيد مسبق':'Prepaid balance','ابحث...':'Search…','بحث':'Search',
+    'إضافة جديدة — الإمارات':'Add new — UAE','بطاقة جديدة':'New card','اختر الحساب البنكي المرتبط':'Choose the linked bank account','الحساب البنكي المرتبط':'Linked bank account','— اختر حساب بنكي —':'— Choose bank account —','البطاقة تسحب من هذا الحساب مباشرة.':'Card purchases are deducted directly from this account.','البلد':'Country','أو اكتب اسم جديد':'Or enter a new name','العملة مقفلة (توجد معاملات).':'Currency is locked because transactions exist.','مقفل (توجد معاملات).':'Locked because transactions exist.','الرصيد الحالي في البطاقة.':'Current card balance.','المبلغ عند الإضافة':'Amount at setup',
+    'مصدر الرصيد الأول':'Initial balance source','الرصيد موجود بالفعل على البطاقة':'Balance already exists on the card','شحن من حساب موجود':'Fund from an existing account','اختيار التحويل يخصم المبلغ من الحساب ويضيفه للبطاقة كتحويل، وليس كمصروف.':'Funding deducts the amount from the selected account and adds it to the prepaid card as a transfer, not an expense.','حساب التمويل':'Funding account','— اختر حساب التمويل —':'— Choose funding account —','اكتب الرصيد الموجود حاليًا أو مبلغ الشحن الأول.':'Enter the existing card balance or the first top-up amount.','➕ شحن البطاقة من حساب':'➕ Top up card from an account','شحن بطاقة':'Card top-up','📷 تصوير / اختيار فاتورة':'📷 Capture / choose receipt',
+    'حساب جديد':'New account','تعديل':'Edit','حساب مؤرشف':'Archived account','اسم الحساب':'Account name','البنك / المؤسسة':'Bank / institution','— بدون —':'— None —','اتركه فاضي إذا لا تريد ربطه بجهة معينة.':'Leave blank if you do not want to link an institution.','الرصيد الافتتاحي':'Opening balance','رصيد الحساب عند تاريخ البداية.':'Account balance on the start date.','الأيقونة':'Icon','اللون':'Color','نوع الحساب مقفل — مرتبط ببطاقة ديبت.':'Account type is locked because a debit card is linked.','مقفل — استخدم "تعديل الرصيد الحقيقي".':'Locked — use “Adjust actual balance”.','قيمة الدين عند البداية':'Opening debt amount','الجهة الدائنة (اختياري)':'Creditor (optional)','تاريخ الاستحقاق (اختياري)':'Due date (optional)',
     '⭐ اجعله الحساب الافتراضي للمصروفات في الإمارات':'⭐ Make it the default spending account in UAE','يُستخدم في تسجيل المصروفات والدخل والتحويلات':'Used when recording expenses, income, and transfers','🏠 اجعله الحساب الأساسي في الرئيسية':'🏠 Make it the primary Home account','يظهر كبطاقة في الشاشة الرئيسية':'Shown as a card on Home',
     'نوع البطاقة':'Card type','تسحب مباشرة من حساب بنكي':'Uses a bank account balance','المشتريات تصبح مديونية وتسددها لاحقًا':'Purchases become debt and are repaid later','تشحن البطاقة أولًا ثم تصرف منها':'Top up the card before spending from it',
     'تذكير قبلها بـ (أيام) — 0 = نفس اليوم':'Reminder (days before) — 0 = same day','📷 تصوير / اختيار صورة':'📷 Capture / choose image',
@@ -9004,6 +9078,9 @@ const SanadI18n = {
       else if((m=out.match(/^(.+?)\s+دين$/))) out=m[1]+' debt';
       else if((m=out.match(/^Credit card\s*·\s*المتاح\s+(.+)$/))) out='Credit card · available '+m[1];
       else if((m=out.match(/^ستُخصم من\s+(.+?)\s+وسيُسدّد\s+(.+)$/))) out='Will be deducted from '+m[1]+' and '+m[2]+' will be repaid';
+      else if((m=out.match(/^⭐ اجعله الحساب الافتراضي للمصروفات في\s+(.+)$/))) out='⭐ Make it the default spending account in '+atom(m[1]);
+      else if((m=out.match(/^🏠 اجعله الحساب الأساسي في الرئيسية$/))) out='🏠 Make it the primary Home account';
+      else if((m=out.match(/^تُستخدم تلقائياً عند تسجيل مصروف في\s+(.+)$/))) out='Used automatically when recording an expense in '+atom(m[1]);
       else if((m=out.match(/^SANAD\s*·\s*سند\s*·\s*الإصدار\s*(.+)$/))) out='SANAD · سند · version '+m[1];
     }
     return s.replace(trim,out);
@@ -9069,10 +9146,10 @@ const SanadReceipts = {
   },
   async currentRecord(){const id=S.form&&S.form._sheet==='tx'&&S.form.id;return id?SanadExtStorage.getReceipt(id):null;},
   injectTxControls(){
-    if(!S.form||S.form._sheet!=='tx')return; const adv=document.querySelector('#sheet .adv-body');if(!adv||adv.querySelector('[data-sanad-receipt]'))return;
-    const wrap=document.createElement('div');wrap.className='field sanad-receipt-field';wrap.setAttribute('data-sanad-receipt','1');
-    wrap.innerHTML='<label>🧾 إرفاق فاتورة</label><div class="sanad-receipt-box" id="sanadReceiptBox"><button type="button" class="btn receipt-btn" data-sanad-act="pick-receipt">📷 تصوير / اختيار صورة</button><div class="receipt-state" id="sanadReceiptState">لا توجد فاتورة</div></div>';
-    adv.appendChild(wrap); this.refreshControls();
+    if(!S.form||S.form._sheet!=='tx')return; const mount=document.getElementById('sanadReceiptQuickMount')||document.querySelector('#sheet .adv-body');if(!mount||mount.querySelector('[data-sanad-receipt]'))return;
+    const wrap=document.createElement('div');wrap.className='field sanad-receipt-field quick';wrap.setAttribute('data-sanad-receipt','1');
+    wrap.innerHTML='<div class="sanad-receipt-box" id="sanadReceiptBox"><button type="button" class="btn receipt-btn" data-sanad-act="pick-receipt">📷 تصوير / اختيار فاتورة</button><div class="receipt-state" id="sanadReceiptState">لا توجد فاتورة</div></div>';
+    mount.appendChild(wrap); this.refreshControls();
   },
   async refreshControls(){
     const box=document.getElementById('sanadReceiptBox'),state=document.getElementById('sanadReceiptState');if(!box||!state)return;
@@ -9289,7 +9366,7 @@ const _sanadCoreCommit=commitCriticalMutation; commitCriticalMutation=async func
 const _sanadCorePersist=persist; persist=async function(){const r=await _sanadCorePersist();if(r)await SanadCloud.markDirty();return r;};
 const _sanadCoreStartApp=startApp; startApp=function(){_sanadCoreStartApp();setTimeout(()=>SanadV9.afterStart(),0);};
 const _sanadCoreToast=toast; toast=function(msg,ms){return _sanadCoreToast(SanadI18n.text(msg),ms);};
-const _sanadCoreDialog=dialog; dialog=function(opts){opts=Object.assign({},opts||{});if(opts.title)opts.title=SanadI18n.text(opts.title);if(opts.msg)opts.msg=SanadI18n.text(opts.msg);if(opts.okText)opts.okText=SanadI18n.text(opts.okText);return _sanadCoreDialog(opts);};
+const _sanadCoreDialog=dialog; dialog=function(opts){opts=Object.assign({},opts||{});if(opts.title)opts.title=SanadI18n.text(opts.title);if(opts.msg)opts.msg=SanadI18n.text(opts.msg);if(opts.okText)opts.okText=SanadI18n.text(opts.okText);if(opts.cancelText)opts.cancelText=SanadI18n.text(opts.cancelText);if(SanadI18n.lang==='en'){if(!opts.okText)opts.okText='Confirm';if(!opts.cancelText)opts.cancelText='Cancel';}return _sanadCoreDialog(opts);};
 const _sanadCoreMonthLabel=monthLabel; monthLabel=function(key){const [y,m]=key.split('-').map(Number);const loc=(S.settings&&S.settings.language==='en')?'en-US':'ar-EG-u-nu-latn';return new Date(y,m-1,1).toLocaleDateString(loc,{month:'long',year:'numeric'});};
 const _sanadCoreExportData=exportData; exportData=async function(){const oldCreate=document.createElement.bind(document);try{return await _sanadCoreExportData();}finally{}};
 
