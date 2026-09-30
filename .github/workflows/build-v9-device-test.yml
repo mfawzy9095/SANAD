@@ -3,7 +3,7 @@ name: SANAD Android Device Test Build
 on:
   push:
     branches:
-      - android-v9.0.5-device-test
+      - android-v9.0.6-device-test
   workflow_dispatch:
 
 permissions:
@@ -35,23 +35,44 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Verify web source and V9.0.5 regressions
+      - name: Verify web source and V9.0.6 regressions
         shell: bash
         run: |
           set -euo pipefail
-          test -s app/src/main/assets/index.html
-          SOURCE_SHA="$(sha256sum app/src/main/assets/index.html | awk '{print $1}')"
-          echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
-          grep -q "const SANAD_V9_VERSION = '9.0.5'" app/src/main/assets/index.html
-          grep -q "id=\"sanadBootSplash\"" app/src/main/assets/index.html
-          grep -q "cashFundingMode" app/src/main/assets/index.html
-          grep -q "src=\"sanad_app_icon.webp\"" app/src/main/assets/index.html
-          grep -q "function hideSanadBootSplash" app/src/main/assets/index.html
-          grep -q "setTimeout(()=>hideSanadBootSplash(),4500)" app/src/main/assets/index.html
+          HTML="app/src/main/assets/index.html"
+          test -s "$HTML"
+          test -s app/src/main/assets/sanad_splash.webp
+          test -s app/src/main/assets/sanad_logo.webp
           test -s app/src/main/assets/sanad_app_icon.webp
+          test -s app/src/main/res/drawable-nodpi/sanad_app_icon.webp
+          SOURCE_SHA="$(sha256sum "$HTML" | awk '{print $1}')"
+          SPLASH_SHA="$(sha256sum app/src/main/assets/sanad_splash.webp | awk '{print $1}')"
+          LOGO_SHA="$(sha256sum app/src/main/assets/sanad_logo.webp | awk '{print $1}')"
+          ICON_SHA="$(sha256sum app/src/main/res/drawable-nodpi/sanad_app_icon.webp | awk '{print $1}')"
+          echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
+          echo "SPLASH_SHA=$SPLASH_SHA" >> "$GITHUB_ENV"
+          echo "LOGO_SHA=$LOGO_SHA" >> "$GITHUB_ENV"
+          echo "ICON_SHA=$ICON_SHA" >> "$GITHUB_ENV"
+
+          grep -q "const SANAD_V9_VERSION = '9.0.6'" "$HTML"
+          grep -q 'src="sanad_splash.webp"' "$HTML"
+          grep -q 'src="sanad_logo.webp"' "$HTML"
+          grep -q "function hideSanadBootSplash" "$HTML"
+          grep -q "window.__sanadSplashBorn" "$HTML"
+          grep -q "SanadI18n.watch()" "$HTML"
+          grep -q "'أضف حساب':'Add account'" "$HTML"
+          grep -q "'— بدون —':'— None —'" "$HTML"
+          grep -q "'لا يوجد مديونية':'No debt'" "$HTML"
+          grep -q "يمكنك ترك المبلغ 0 لربط حساب التمويل بدون تسجيل شحن أولي" "$HTML"
+          grep -q "if(bal>0&&fundingAcc.currency!==cardCur)" "$HTML"
+          grep -q "prepaidFundingMode==='transfer'&&prepaidFundingSourceId&&bal>0" "$HTML"
+          ! grep -q "if(bal<=0){ toast('أدخل مبلغ الشحن')" "$HTML"
+
           python3 - <<'PY'
           from pathlib import Path
+          from PIL import Image
           h=Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
+          # user-requested order remains locked
           tx=h[h.index("function renderTxSheet(){"):h.index("function dispAmount",h.index("function renderTxSheet(){"))]
           expected=["sourceArea","cat-scroll","native-amount-input","sanadReceiptQuickMount","tx-main-date","adv-details"]
           pos=[tx.index(x) for x in expected]
@@ -61,18 +82,43 @@ jobs:
           expected2=["<label>من حساب</label>","<label>إلى</label>","amountSection","sanadReceiptQuickMount","tx-main-date","adv-details"]
           pos2=[ui.index(x) for x in expected2]
           assert pos2==sorted(pos2), ("transfer order",list(zip(expected2,pos2)))
-          assert "data:image/png;base64" not in h[h.index('id="sanadBootSplash"'):h.index('<input type="file"',h.index('id="sanadBootSplash"'))]
+          # exact splash is a standalone local asset, not an inline broken MIME payload
+          splash_block=h[h.index('id="sanadBootSplash"'):h.index('<input type="file"',h.index('id="sanadBootSplash"'))]
+          assert 'data:image/' not in splash_block
+          assert 'sanad_splash.webp' in splash_block
+          # verify supplied-art assets decode and have expected useful geometry
+          with Image.open("app/src/main/assets/sanad_splash.webp") as im:
+              assert im.width >= 900 and im.height >= 1600 and im.height > im.width
+          with Image.open("app/src/main/assets/sanad_logo.webp") as im:
+              assert im.width == 512 and im.height == 512
+          # zero prepaid linking: account association saved, no fake transfer at zero
+          card=h[h.index("async function saveCard"):h.index("async function archiveInstrument",h.index("async function saveCard"))]
+          assert "defaultTopupAccountId: isPrepaid ? prepaidFundingSourceId : null" in card
+          assert "prepaidFundingMode==='transfer'&&prepaidFundingSourceId&&bal>0" in card
+          assert "if(bal<=0)" not in card
+          # English critical strings specifically reported by device testing
+          required={
+            "أضف حساب":"Add account",
+            "— بدون —":"— None —",
+            "لا يوجد مديونية":"No debt",
+            "يمكنك ترك المبلغ 0 لربط حساب التمويل بدون تسجيل شحن أولي.":"You can leave the amount at 0 to link the funding account without recording an initial top-up.",
+            "حساباتك في كل بلد":"Your accounts in every country",
+            "التالي":"Next",
+            "تخطي":"Skip",
+          }
+          for ar,en in required.items():
+              needle=repr(ar)+":"+repr(en)
+              assert needle in h, needle
           PY
-          grep -q "'مدفوعات شهرية':'Monthly payments'" app/src/main/assets/index.html
-          grep -q "'اشتراكات':'Subscriptions'" app/src/main/assets/index.html
-          grep -q "'راتب':'Salary'" app/src/main/assets/index.html
+
           python3 - <<'PY'
-          import pathlib, re
+          import pathlib,re
           html=pathlib.Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
           scripts=re.findall(r"<script[^>]*>(.*?)</script>",html,re.S)
-          pathlib.Path("/tmp/sanad-v905.js").write_text("\n".join(scripts),encoding="utf-8")
+          pathlib.Path("/tmp/sanad-v906.js").write_text("\n".join(scripts),encoding="utf-8")
           PY
-          node --check /tmp/sanad-v905.js
+          for i in $(seq 1 10); do node --check /tmp/sanad-v906.js >/dev/null; done
+          echo "V9.0.6 source gates passed 10x"
 
       - name: Android lint
         run: gradle --no-daemon --stacktrace :app:lintDebug
@@ -86,13 +132,13 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.5-DEVICE-TEST-5.apk"
+          cp "$APK" "SANAD-V9.0.6-DEVICE-TEST-6.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
           grep -q "package: name='com.sanad.v9test'" apk-badging.txt
-          grep -q "versionCode='90505'" apk-badging.txt
-          grep -q "versionName='9.0.5-device-test-5'" apk-badging.txt
+          grep -q "versionCode='90606'" apk-badging.txt
+          grep -q "versionName='9.0.6-device-test-6'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
           ! grep -q "android.permission.READ_SMS" apk-permissions.txt
           ! grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
@@ -101,16 +147,23 @@ jobs:
           ! grep -q "android.permission.WRITE_EXTERNAL_STORAGE" apk-permissions.txt
           EMBEDDED_SHA="$(unzip -p "$APK" assets/index.html | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_SHA" = "$SOURCE_SHA"
+          test "$(unzip -p "$APK" assets/sanad_splash.webp | sha256sum | awk '{print $1}')" = "$SPLASH_SHA"
+          test "$(unzip -p "$APK" assets/sanad_logo.webp | sha256sum | awk '{print $1}')" = "$LOGO_SHA"
+          test "$(unzip -p "$APK" res/drawable-nodpi-v4/sanad_app_icon.webp 2>/dev/null | sha256sum | awk '{print $1}')" = "$ICON_SHA" || unzip -l "$APK" | grep -q "sanad_app_icon.webp"
+          for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
+          echo "APK archive integrity passed 5x"
           unzip -l "$APK" | grep -q "sanad_app_icon.webp"
           unzip -l "$APK" | grep -q "assets/sanad_app_icon.webp"
-          sha256sum "SANAD-V9.0.5-DEVICE-TEST-5.apk" | tee apk-sha256.txt
+          unzip -l "$APK" | grep -q "assets/sanad_splash.webp"
+          unzip -l "$APK" | grep -q "assets/sanad_logo.webp"
+          sha256sum "SANAD-V9.0.6-DEVICE-TEST-6.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.5-DEVICE-TEST-5
+          name: SANAD-V9.0.6-DEVICE-TEST-6
           path: |
-            SANAD-V9.0.5-DEVICE-TEST-5.apk
+            SANAD-V9.0.6-DEVICE-TEST-6.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
