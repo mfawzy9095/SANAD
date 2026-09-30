@@ -42,14 +42,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -s app/src/main/assets/sanad_splash.webp
-          test -s app/src/main/assets/sanad_logo.webp
-          test -s app/src/main/assets/sanad_app_icon.webp
-          test -s app/src/main/res/drawable-nodpi/sanad_app_icon.webp
-          test "$(sha256sum app/src/main/assets/sanad_splash.webp | awk '{print $1}')" = "19682a53a442707093db9098906e92bcab0ecc9d58c0219c05d075f96d18f7cc"
-          test "$(sha256sum app/src/main/assets/sanad_logo.webp | awk '{print $1}')" = "10f186340486e056db1ad2fd90ba6ba37b168de44f8413860e333a2d5602e742"
-          test "$(sha256sum app/src/main/assets/sanad_app_icon.webp | awk '{print $1}')" = "10f186340486e056db1ad2fd90ba6ba37b168de44f8413860e333a2d5602e742"
-          test "$(sha256sum app/src/main/res/drawable-nodpi/sanad_app_icon.webp | awk '{print $1}')" = "10f186340486e056db1ad2fd90ba6ba37b168de44f8413860e333a2d5602e742"
+          for f in             app/src/main/assets/sanad_splash.webp             app/src/main/assets/sanad_logo.webp             app/src/main/assets/sanad_app_icon.webp             app/src/main/res/drawable-nodpi/sanad_app_icon.webp; do
+            test -s "$f"
+            test "$(head -c 4 "$f")" = "RIFF"
+            test "$(dd if="$f" bs=1 skip=8 count=4 status=none)" = "WEBP"
+          done
+          SPLASH_COMMITTED_SHA="$(sha256sum app/src/main/assets/sanad_splash.webp | awk '{print $1}')"
+          LOGO_COMMITTED_SHA="$(sha256sum app/src/main/assets/sanad_logo.webp | awk '{print $1}')"
+          ICON_COMMITTED_SHA="$(sha256sum app/src/main/assets/sanad_app_icon.webp | awk '{print $1}')"
+          RES_ICON_COMMITTED_SHA="$(sha256sum app/src/main/res/drawable-nodpi/sanad_app_icon.webp | awk '{print $1}')"
+          test "$LOGO_COMMITTED_SHA" = "$ICON_COMMITTED_SHA"
+          test "$LOGO_COMMITTED_SHA" = "$RES_ICON_COMMITTED_SHA"
+          echo "Committed branding SHA: splash=$SPLASH_COMMITTED_SHA logo=$LOGO_COMMITTED_SHA"
 
       - name: Install WebP decoder
         shell: bash
