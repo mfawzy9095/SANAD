@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -36,30 +36,19 @@ jobs:
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: 8.9
 
-      - name: Verify committed SANAD artwork
+      - name: Verify stable branding resources
         shell: bash
         run: |
           set -euo pipefail
-          for f in             app/src/main/assets/sanad_splash.webp             app/src/main/assets/sanad_logo.webp             app/src/main/assets/sanad_app_icon.webp             app/src/main/res/drawable-nodpi/sanad_app_icon.webp; do
-            test -s "$f"
-            test "$(head -c 4 "$f")" = "RIFF"
-            test "$(dd if="$f" bs=1 skip=8 count=4 status=none)" = "WEBP"
-          done
-          SPLASH_COMMITTED_SHA="$(sha256sum app/src/main/assets/sanad_splash.webp | awk '{print $1}')"
-          LOGO_COMMITTED_SHA="$(sha256sum app/src/main/assets/sanad_logo.webp | awk '{print $1}')"
-          ICON_COMMITTED_SHA="$(sha256sum app/src/main/assets/sanad_app_icon.webp | awk '{print $1}')"
-          RES_ICON_COMMITTED_SHA="$(sha256sum app/src/main/res/drawable-nodpi/sanad_app_icon.webp | awk '{print $1}')"
-          test "$LOGO_COMMITTED_SHA" = "$ICON_COMMITTED_SHA"
-          test "$LOGO_COMMITTED_SHA" = "$RES_ICON_COMMITTED_SHA"
-          echo "Committed branding SHA: splash=$SPLASH_COMMITTED_SHA logo=$LOGO_COMMITTED_SHA"
-
-      - name: Install WebP decoder
-        shell: bash
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq webp
+          test -s app/src/main/res/drawable/ic_launcher_foreground.xml
+          test -s app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          test -s app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+          grep -q '@color/sanad_primary' app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          grep -q '@drawable/ic_launcher_foreground' app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          grep -q 'android:icon="@mipmap/ic_launcher"' app/src/main/AndroidManifest.xml
+          grep -q 'android:roundIcon="@mipmap/ic_launcher_round"' app/src/main/AndroidManifest.xml
 
       - name: Verify web source and V9.0.7 regressions
         shell: bash
@@ -67,18 +56,8 @@ jobs:
           set -euo pipefail
           HTML="app/src/main/assets/index.html"
           test -s "$HTML"
-          test -s app/src/main/assets/sanad_splash.webp
-          test -s app/src/main/assets/sanad_logo.webp
-          test -s app/src/main/assets/sanad_app_icon.webp
-          test -s app/src/main/res/drawable-nodpi/sanad_app_icon.webp
           SOURCE_SHA="$(sha256sum "$HTML" | awk '{print $1}')"
-          SPLASH_SHA="$(sha256sum app/src/main/assets/sanad_splash.webp | awk '{print $1}')"
-          LOGO_SHA="$(sha256sum app/src/main/assets/sanad_logo.webp | awk '{print $1}')"
-          ICON_SHA="$(sha256sum app/src/main/res/drawable-nodpi/sanad_app_icon.webp | awk '{print $1}')"
           echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
-          echo "SPLASH_SHA=$SPLASH_SHA" >> "$GITHUB_ENV"
-          echo "LOGO_SHA=$LOGO_SHA" >> "$GITHUB_ENV"
-          echo "ICON_SHA=$ICON_SHA" >> "$GITHUB_ENV"
 
           grep -q "const SANAD_V9_VERSION = '9.0.7'" "$HTML"
           grep -q "const SANAD_CLOUD_FAMILY_BETA_ENABLED = false" "$HTML"
@@ -89,7 +68,8 @@ jobs:
           grep -q "beforeFinance=snapshotState()" "$HTML"
           grep -q "async pruneMissingTransactions()" "$HTML"
           ! grep -Eq "keyNum[[:space:]]*\(|#keypad|\.keypad|custom.?keypad" "$HTML"
-          grep -q 'src="sanad_splash.webp"' "$HTML"
+          ! grep -Eq "sanad_(splash|logo|app_icon)\.webp" "$HTML"
+          grep -q 'id="sanadSplashMark"' "$HTML"
           grep -q "function hideSanadBootSplash" "$HTML"
           grep -q "window.__sanadSplashBorn" "$HTML"
           grep -q "SanadI18n.watch()" "$HTML"
@@ -100,8 +80,6 @@ jobs:
           grep -q "'— بدون —':'— None —'" "$HTML"
           grep -q "'لا يوجد مديونية':'No debt'" "$HTML"
           grep -q "'لا توجد مديونية':'No debt'" "$HTML"
-          grep -q "id=\"sanadSplashImage\"" "$HTML"
-          grep -q "im.src='sanad_logo.webp'" "$HTML"
           grep -q "يمكنك ترك المبلغ 0 لربط حساب التمويل بدون تسجيل شحن أولي" "$HTML"
           grep -q "if(bal>0&&fundingAcc.currency!==cardCur)" "$HTML"
           grep -q "prepaidFundingMode==='transfer'&&prepaidFundingSourceId&&bal>0" "$HTML"
@@ -110,47 +88,30 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           h=Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
-          # user-requested order remains locked
           tx=h[h.index("function renderTxSheet(){"):h.index("function dispAmount",h.index("function renderTxSheet(){"))]
           expected=["sourceArea","cat-scroll","native-amount-input","sanadReceiptQuickMount","tx-main-date","adv-details"]
           pos=[tx.index(x) for x in expected]
+          assert all(x >= 0 for x in pos)
           assert pos==sorted(pos), ("transaction order",list(zip(expected,pos)))
+
           tr=h[h.index("function renderTransferSheet(){"):h.index("function setTransferMode",h.index("function renderTransferSheet(){"))]
           ui=tr[tr.index("  openSheet("):]
           expected2=["<label>من حساب</label>","<label>إلى</label>","amountSection","sanadReceiptQuickMount","tx-main-date","adv-details"]
           pos2=[ui.index(x) for x in expected2]
+          assert all(x >= 0 for x in pos2)
           assert pos2==sorted(pos2), ("transfer order",list(zip(expected2,pos2)))
-          # exact splash is a standalone local asset, not an inline broken MIME payload
-          splash_block=h[h.index('id="sanadBootSplash"'):h.index('<input type="file"',h.index('id="sanadBootSplash"'))]
-          assert 'data:image/' not in splash_block
-          assert 'sanad_splash.webp' in splash_block
-          # Validate actual WebP binaries, not arbitrary large file sizes.
-          assets=[
-              "app/src/main/assets/sanad_splash.webp",
-              "app/src/main/assets/sanad_logo.webp",
-              "app/src/main/assets/sanad_app_icon.webp",
-              "app/src/main/res/drawable-nodpi/sanad_app_icon.webp",
-          ]
-          payloads={}
-          for asset in assets:
-              data=Path(asset).read_bytes()
-              assert len(data) > 4096, (asset,len(data))
-              assert data[:4] == b"RIFF", (asset,data[:4])
-              assert data[8:12] == b"WEBP", (asset,data[8:12])
-              payloads[asset]=data
-          assert payloads["app/src/main/assets/sanad_splash.webp"] != payloads["app/src/main/assets/sanad_logo.webp"]
-          assert payloads["app/src/main/assets/sanad_logo.webp"] == payloads["app/src/main/assets/sanad_app_icon.webp"]
-          assert payloads["app/src/main/assets/sanad_logo.webp"] == payloads["app/src/main/res/drawable-nodpi/sanad_app_icon.webp"]
-          # splash must show exact artwork first, with logo fallback only on asset error
-          assert 'src="sanad_splash.webp"' in splash_block
-          assert 'id="sanadSplashImage"' in splash_block
-          assert "im.src='sanad_logo.webp'" in splash_block
-          # zero prepaid linking: account association saved, no fake transfer at zero
+
+          splash=h[h.index('id="sanadBootSplash"'):h.index('<input type="file"',h.index('id="sanadBootSplash"'))]
+          assert 'data:image/' not in splash
+          assert 'id="sanadSplashMark"' in splash
+          assert 'SANAD' in splash
+          assert '.webp' not in splash
+
           card=h[h.index("async function saveCard"):h.index("async function archiveInstrument",h.index("async function saveCard"))]
           assert "defaultTopupAccountId: isPrepaid ? prepaidFundingSourceId : null" in card
           assert "prepaidFundingMode==='transfer'&&prepaidFundingSourceId&&bal>0" in card
           assert "if(bal<=0)" not in card
-          # English critical strings specifically reported by device testing
+
           required={
             "أضف حساب":"Add account",
             "أضف حسابًا":"Add account",
@@ -170,25 +131,17 @@ jobs:
             "أضف حسابًا يمكن الشحن منه أولاً":"Add an account that can fund the top-up first",
           }
           for ar,en in required.items():
-              needle=repr(ar)+":"+repr(en)
-              assert needle in h, needle
+              assert repr(ar)+":"+repr(en) in h, (ar,en)
           PY
-          dwebp app/src/main/assets/sanad_splash.webp -o /tmp/sanad-splash.png >/dev/null
-          dwebp app/src/main/assets/sanad_logo.webp -o /tmp/sanad-logo.png >/dev/null
-          dwebp app/src/main/assets/sanad_app_icon.webp -o /tmp/sanad-icon.png >/dev/null
-          test -s /tmp/sanad-splash.png
-          test -s /tmp/sanad-logo.png
-          test -s /tmp/sanad-icon.png
 
           python3 - <<'PY'
           import pathlib,re
           html=pathlib.Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
           scripts=re.findall(r"<script[^>]*>(.*?)</script>",html,re.S)
-          pathlib.Path("/tmp/sanad-v906.js").write_text("\n".join(scripts),encoding="utf-8")
+          assert scripts
+          pathlib.Path("/tmp/sanad-v907.js").write_text("\n".join(scripts),encoding="utf-8")
           PY
-          for i in $(seq 1 10); do node --check /tmp/sanad-v906.js >/dev/null; done
-          file app/src/main/assets/sanad_splash.webp | grep -qi 'Web/P'
-          file app/src/main/assets/sanad_logo.webp | grep -qi 'Web/P'
+          for i in $(seq 1 10); do node --check /tmp/sanad-v907.js >/dev/null; done
           echo "V9.0.7 source gates passed 10x"
 
       - name: Android lint
@@ -210,6 +163,7 @@ jobs:
           grep -q "package: name='com.sanad.v9test'" apk-badging.txt
           grep -q "versionCode='90707'" apk-badging.txt
           grep -q "versionName='9.0.7-local-stable'" apk-badging.txt
+          grep -q "application-label:'SANAD'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
           ! grep -q "android.permission.READ_SMS" apk-permissions.txt
           ! grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
@@ -218,15 +172,9 @@ jobs:
           ! grep -q "android.permission.WRITE_EXTERNAL_STORAGE" apk-permissions.txt
           EMBEDDED_SHA="$(unzip -p "$APK" assets/index.html | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_SHA" = "$SOURCE_SHA"
-          test "$(unzip -p "$APK" assets/sanad_splash.webp | sha256sum | awk '{print $1}')" = "$SPLASH_SHA"
-          test "$(unzip -p "$APK" assets/sanad_logo.webp | sha256sum | awk '{print $1}')" = "$LOGO_SHA"
-          test "$(unzip -p "$APK" res/drawable-nodpi-v4/sanad_app_icon.webp 2>/dev/null | sha256sum | awk '{print $1}')" = "$ICON_SHA" || unzip -l "$APK" | grep -q "sanad_app_icon.webp"
+          ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          unzip -l "$APK" | grep -q "sanad_app_icon.webp"
-          unzip -l "$APK" | grep -q "assets/sanad_app_icon.webp"
-          unzip -l "$APK" | grep -q "assets/sanad_splash.webp"
-          unzip -l "$APK" | grep -q "assets/sanad_logo.webp"
           sha256sum "SANAD-V9.0.7-LOCAL-STABLE.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
@@ -240,24 +188,3 @@ jobs:
             apk-permissions.txt
           if-no-files-found: error
           retention-days: 30
-
-      - name: Record build metadata
-        if: success()
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p build_meta
-          APK_SHA="$(awk '{print $1}' apk-sha256.txt)"
-          cat > build_meta/v9.0.7-local-stable.txt <<EOF
-          run_id=${GITHUB_RUN_ID}
-          commit=${GITHUB_SHA}
-          branch=${GITHUB_REF_NAME}
-          artifact=SANAD-V9.0.7-LOCAL-STABLE
-          apk_sha256=$APK_SHA
-          source_sha256=$SOURCE_SHA
-          EOF
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add build_meta/v9.0.7-local-stable.txt
-          git commit -m "Record V9.0.7 build metadata [skip ci]"
-          git push origin HEAD:${GITHUB_REF_NAME}
