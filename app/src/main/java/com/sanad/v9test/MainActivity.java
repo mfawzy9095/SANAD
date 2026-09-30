@@ -52,7 +52,7 @@ public final class MainActivity extends Activity {
         cleanupOldCameraFiles();
 
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(246, 249, 248));
+        webView.setBackgroundColor(Color.rgb(244, 255, 253));
         setContentView(webView);
 
         final WebSettings settings = webView.getSettings();
