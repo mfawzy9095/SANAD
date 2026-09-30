@@ -3,7 +3,7 @@ name: SANAD Android Device Test Build
 on:
   push:
     branches:
-      - android-v9-device-test
+      - android-v9.0.3-device-test
   workflow_dispatch:
 
 permissions:
@@ -36,7 +36,7 @@ jobs:
           gradle-version: '8.9'
 
       - name: Verify embedded web source
-        run: echo "c7291d64c960ea2dde35d0c5428f1235719028c83665522b2de2cedbc1b88141  app/src/main/assets/index.html" | sha256sum -c -
+        run: echo "2c0f8dce471f05b93ca0104c8ea0c0a3786d7d0d4ec025726e3796818a8b0074  app/src/main/assets/index.html" | sha256sum -c -
 
       - name: Android lint
         run: gradle --no-daemon --stacktrace :app:lintDebug
@@ -50,13 +50,13 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.2-DEVICE-TEST-2.apk"
+          cp "$APK" "SANAD-V9.0.3-DEVICE-TEST-3.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
           grep -q "package: name='com.sanad.v9test'" apk-badging.txt
-          grep -q "versionCode='90202'" apk-badging.txt
-          grep -q "versionName='9.0.2-device-test-2'" apk-badging.txt
+          grep -q "versionCode='90303'" apk-badging.txt
+          grep -q "versionName='9.0.3-device-test-3'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
           ! grep -q "android.permission.READ_SMS" apk-permissions.txt
           ! grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
@@ -64,15 +64,15 @@ jobs:
           ! grep -q "android.permission.READ_EXTERNAL_STORAGE" apk-permissions.txt
           ! grep -q "android.permission.WRITE_EXTERNAL_STORAGE" apk-permissions.txt
           EMBEDDED_SHA="$(unzip -p "$APK" assets/index.html | sha256sum | awk '{print $1}')"
-          test "$EMBEDDED_SHA" = "c7291d64c960ea2dde35d0c5428f1235719028c83665522b2de2cedbc1b88141"
-          sha256sum "SANAD-V9.0.2-DEVICE-TEST-2.apk" | tee apk-sha256.txt
+          test "$EMBEDDED_SHA" = "2c0f8dce471f05b93ca0104c8ea0c0a3786d7d0d4ec025726e3796818a8b0074"
+          sha256sum "SANAD-V9.0.3-DEVICE-TEST-3.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.2-DEVICE-TEST-2
+          name: SANAD-V9.0.3-DEVICE-TEST-3
           path: |
-            SANAD-V9.0.2-DEVICE-TEST-2.apk
+            SANAD-V9.0.3-DEVICE-TEST-3.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
