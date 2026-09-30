@@ -1,10 +1,10 @@
-name: SANAD V9.0.7 Local Stable Android Build
-# quick-gate-refresh: v9.0.7
+name: SANAD V9.0.8 Local Stable Android Build
+# quick-gate-refresh: v9.0.8
 
 on:
   push:
     branches:
-      - android-v9.0.7-local-stable
+      - android-v9.0.8-local-stable
   pull_request:
     branches:
       - main
@@ -51,7 +51,7 @@ jobs:
           grep -q 'android:icon="@mipmap/ic_launcher"' app/src/main/AndroidManifest.xml
           grep -q 'android:roundIcon="@mipmap/ic_launcher_round"' app/src/main/AndroidManifest.xml
 
-      - name: Verify web source and V9.0.7 regressions
+      - name: Verify web source and V9.0.8 regressions
         shell: bash
         run: |
           set -euo pipefail
@@ -140,10 +140,10 @@ jobs:
           html=pathlib.Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
           scripts=re.findall(r"<script[^>]*>(.*?)</script>",html,re.S)
           assert scripts
-          pathlib.Path("/tmp/sanad-v907.js").write_text("\n".join(scripts),encoding="utf-8")
+          pathlib.Path("/tmp/sanad-v908.js").write_text("\n".join(scripts),encoding="utf-8")
           PY
-          for i in $(seq 1 10); do node --check /tmp/sanad-v907.js >/dev/null; done
-          echo "V9.0.7 source gates passed 10x"
+          for i in $(seq 1 10); do node --check /tmp/sanad-v908.js >/dev/null; done
+          echo "V9.0.8 source gates passed 10x"
 
       - name: Android lint
         run: gradle --no-daemon --stacktrace :app:lintDebug
@@ -157,15 +157,17 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.7-LOCAL-STABLE.apk"
+          cp "$APK" "SANAD-V9.0.8-LOCAL-STABLE.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
           grep -q "package: name='com.sanad.v9test'" apk-badging.txt
-          grep -q "versionCode='90707'" apk-badging.txt
-          grep -q "versionName='9.0.7-local-stable'" apk-badging.txt
+          grep -q "versionCode='90800'" apk-badging.txt
+          grep -q "versionName='9.0.8-device-rc'" apk-badging.txt
           grep -q "application-label:'SANAD — سند'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
+          grep -q "android.permission.POST_NOTIFICATIONS" apk-permissions.txt
+          grep -q "android.permission.RECEIVE_BOOT_COMPLETED" apk-permissions.txt
           ! grep -q "android.permission.READ_SMS" apk-permissions.txt
           ! grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
           ! grep -q "android.permission.CAMERA" apk-permissions.txt
@@ -176,14 +178,14 @@ jobs:
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          sha256sum "SANAD-V9.0.7-LOCAL-STABLE.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.0.8-LOCAL-STABLE.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.7-LOCAL-STABLE
+          name: SANAD-V9.0.8-LOCAL-STABLE
           path: |
-            SANAD-V9.0.7-LOCAL-STABLE.apk
+            SANAD-V9.0.8-LOCAL-STABLE.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
