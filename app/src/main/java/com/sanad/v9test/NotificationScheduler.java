@@ -82,7 +82,17 @@ public final class NotificationScheduler {
     private static void scheduleSpec(Context context, JSONObject spec) {
         String id = spec.optString("id", "");
         if (id.isEmpty()) return;
-        long when = nextTrigger(spec);
+        int day = Math.max(1, Math.min(28, spec.optInt("day", 1)));
+        int reminderDays = Math.max(0, Math.min(30, spec.optInt("reminderDays", 3)));
+        int month = Math.max(0, Math.min(11, spec.optInt("month", 0)));
+        String frequency = spec.optString("frequency", "monthly");
+        long when = NotificationTimeCalculator.nextTrigger(
+                System.currentTimeMillis(),
+                day,
+                month,
+                reminderDays,
+                frequency
+        );
         if (when <= System.currentTimeMillis()) return;
 
         Intent intent = new Intent(context, NotificationReceiver.class);
@@ -98,46 +108,6 @@ public final class NotificationScheduler {
 
         AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         if (am != null) am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, when, pi);
-    }
-
-    private static long nextTrigger(JSONObject spec) {
-        Calendar now = Calendar.getInstance();
-        Calendar due = Calendar.getInstance();
-        due.set(Calendar.HOUR_OF_DAY, 9);
-        due.set(Calendar.MINUTE, 0);
-        due.set(Calendar.SECOND, 0);
-        due.set(Calendar.MILLISECOND, 0);
-
-        int day = Math.max(1, Math.min(28, spec.optInt("day", 1)));
-        int reminderDays = Math.max(0, Math.min(30, spec.optInt("reminderDays", 3)));
-        String frequency = spec.optString("frequency", "monthly");
-
-        if ("yearly".equals(frequency)) {
-            int month = Math.max(0, Math.min(11, spec.optInt("month", 0)));
-            due.set(Calendar.MONTH, month);
-            due.set(Calendar.DAY_OF_MONTH, day);
-            Calendar alert = (Calendar) due.clone();
-            alert.add(Calendar.DAY_OF_MONTH, -reminderDays);
-            if (!alert.after(now)) {
-                due.add(Calendar.YEAR, 1);
-                due.set(Calendar.MONTH, month);
-                due.set(Calendar.DAY_OF_MONTH, day);
-                alert = (Calendar) due.clone();
-                alert.add(Calendar.DAY_OF_MONTH, -reminderDays);
-            }
-            return alert.getTimeInMillis();
-        }
-
-        due.set(Calendar.DAY_OF_MONTH, day);
-        Calendar alert = (Calendar) due.clone();
-        alert.add(Calendar.DAY_OF_MONTH, -reminderDays);
-        if (!alert.after(now)) {
-            due.add(Calendar.MONTH, 1);
-            due.set(Calendar.DAY_OF_MONTH, day);
-            alert = (Calendar) due.clone();
-            alert.add(Calendar.DAY_OF_MONTH, -reminderDays);
-        }
-        return alert.getTimeInMillis();
     }
 
     public static void showNow(Context context, String id, String title, String body) {
