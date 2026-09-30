@@ -85,9 +85,17 @@ jobs:
           splash_block=h[h.index('id="sanadBootSplash"'):h.index('<input type="file"',h.index('id="sanadBootSplash"'))]
           assert 'data:image/' not in splash_block
           assert 'sanad_splash.webp' in splash_block
-          # asset paths and non-trivial file sizes are verified here; APK hashes are verified after build.
-          assert Path("app/src/main/assets/sanad_splash.webp").stat().st_size > 50000
-          assert Path("app/src/main/assets/sanad_logo.webp").stat().st_size > 50000
+          # Validate actual WebP binaries, not arbitrary large file sizes.
+          for asset,min_size in [
+              ("app/src/main/assets/sanad_splash.webp",15000),
+              ("app/src/main/assets/sanad_logo.webp",8000),
+              ("app/src/main/assets/sanad_app_icon.webp",8000),
+              ("app/src/main/res/drawable-nodpi/sanad_app_icon.webp",8000),
+          ]:
+              data=Path(asset).read_bytes()
+              assert len(data) > min_size, (asset,len(data))
+              assert data[:4] == b"RIFF", (asset,data[:4])
+              assert data[8:12] == b"WEBP", (asset,data[8:12])
           # zero prepaid linking: account association saved, no fake transfer at zero
           card=h[h.index("async function saveCard"):h.index("async function archiveInstrument",h.index("async function saveCard"))]
           assert "defaultTopupAccountId: isPrepaid ? prepaidFundingSourceId : null" in card
