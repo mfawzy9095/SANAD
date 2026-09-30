@@ -1,9 +1,9 @@
-name: SANAD Android Device Test Build
+name: SANAD V9.0.7 Local Stable Android Build
 
 on:
   push:
     branches:
-      - android-v9.0.6-device-test
+      - android-v9.0.7-local-stable
   workflow_dispatch:
 
 permissions:
@@ -50,7 +50,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq webp
 
-      - name: Verify web source and V9.0.6 regressions
+      - name: Verify web source and V9.0.7 regressions
         shell: bash
         run: |
           set -euo pipefail
@@ -69,7 +69,7 @@ jobs:
           echo "LOGO_SHA=$LOGO_SHA" >> "$GITHUB_ENV"
           echo "ICON_SHA=$ICON_SHA" >> "$GITHUB_ENV"
 
-          grep -q "const SANAD_V9_VERSION = '9.0.6'" "$HTML"
+          grep -q "const SANAD_V9_VERSION = '9.0.7'" "$HTML"
           grep -q 'src="sanad_splash.webp"' "$HTML"
           grep -q 'src="sanad_logo.webp"' "$HTML"
           grep -q "function hideSanadBootSplash" "$HTML"
@@ -171,7 +171,7 @@ jobs:
           for i in $(seq 1 10); do node --check /tmp/sanad-v906.js >/dev/null; done
           file app/src/main/assets/sanad_splash.webp | grep -qi 'Web/P'
           file app/src/main/assets/sanad_logo.webp | grep -qi 'Web/P'
-          echo "V9.0.6 source gates passed 10x"
+          echo "V9.0.7 source gates passed 10x"
 
       - name: Android lint
         run: gradle --no-daemon --stacktrace :app:lintDebug
@@ -185,13 +185,13 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.6-DEVICE-TEST-6.apk"
+          cp "$APK" "SANAD-V9.0.7-LOCAL-STABLE.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
           grep -q "package: name='com.sanad.v9test'" apk-badging.txt
-          grep -q "versionCode='90606'" apk-badging.txt
-          grep -q "versionName='9.0.6-device-test-6'" apk-badging.txt
+          grep -q "versionCode='90707'" apk-badging.txt
+          grep -q "versionName='9.0.7-device-test-6'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
           ! grep -q "android.permission.READ_SMS" apk-permissions.txt
           ! grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
@@ -209,14 +209,14 @@ jobs:
           unzip -l "$APK" | grep -q "assets/sanad_app_icon.webp"
           unzip -l "$APK" | grep -q "assets/sanad_splash.webp"
           unzip -l "$APK" | grep -q "assets/sanad_logo.webp"
-          sha256sum "SANAD-V9.0.6-DEVICE-TEST-6.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.0.7-LOCAL-STABLE.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.6-DEVICE-TEST-6
+          name: SANAD-V9.0.7-LOCAL-STABLE
           path: |
-            SANAD-V9.0.6-DEVICE-TEST-6.apk
+            SANAD-V9.0.7-LOCAL-STABLE.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
