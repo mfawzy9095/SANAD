@@ -699,28 +699,15 @@ body{font-family:"Cairo",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,T
 .empty.mini{padding:20px 10px}.empty.mini .em{font-size:32px}
 @media (max-width:380px){.feature-row{align-items:flex-start;flex-direction:column}.seg{align-self:stretch}.seg button{flex:1}.inline-field{flex-direction:column}.inline-field .btn{width:100%}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}}
-#sanadBootSplash{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:
-radial-gradient(circle at 72% 18%,rgba(50,220,205,.22),transparent 34%),
-radial-gradient(circle at 18% 74%,rgba(0,166,190,.15),transparent 38%),
-linear-gradient(155deg,#ffffff 0%,#f4fffd 54%,#e9fbfa 100%);transition:opacity .32s ease,visibility .32s ease;animation:sanadSplashSafety 0s linear 5s forwards}
+#sanadBootSplash{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f6fffe;overflow:hidden;transition:opacity .32s ease,visibility .32s ease;animation:sanadSplashSafety 0s linear 7s forwards}
 #sanadBootSplash.hide{opacity:0;visibility:hidden;pointer-events:none}
-#sanadBootSplash .sb-logo{width:154px;height:154px;object-fit:contain;filter:drop-shadow(0 16px 22px rgba(0,94,100,.18));animation:sanadSplashFloat 1.6s ease-in-out infinite alternate}
-#sanadBootSplash .sb-ar{font-size:31px;font-weight:800;line-height:1;color:#075d67;margin-top:-6px}
-#sanadBootSplash .sb-en{font-size:17px;font-weight:700;letter-spacing:8px;color:#087681;margin-inline-start:8px}
-#sanadBootSplash .sb-tag{font-size:12px;font-weight:600;color:#5d7a7d;margin-top:3px}
-#sanadBootSplash .sb-loader{width:74px;height:3px;border-radius:99px;background:rgba(0,105,92,.12);overflow:hidden;margin-top:12px}
-#sanadBootSplash .sb-loader i{display:block;width:42%;height:100%;border-radius:inherit;background:linear-gradient(90deg,#00aebb,#00c982);animation:sanadSplashLoad 1.05s ease-in-out infinite}
-@keyframes sanadSplashFloat{from{transform:translateY(0) scale(.985)}to{transform:translateY(-5px) scale(1.015)}}
-@keyframes sanadSplashLoad{0%{transform:translateX(-120%)}100%{transform:translateX(280%)}}
+#sanadBootSplash .sb-full{display:block;width:100%;height:100%;object-fit:contain;object-position:center center;background:#f6fffe}
 @keyframes sanadSplashSafety{to{opacity:0;visibility:hidden;pointer-events:none}}
-[data-theme="dark"] #sanadBootSplash{background:radial-gradient(circle at 72% 18%,rgba(0,200,180,.16),transparent 34%),linear-gradient(155deg,#071716,#0b1d1b 58%,#092220);color:#fff}
-[data-theme="dark"] #sanadBootSplash .sb-ar,[data-theme="dark"] #sanadBootSplash .sb-en{color:#77ead9}
-[data-theme="dark"] #sanadBootSplash .sb-tag{color:#9fc1bd}
 
 </style>
 </head>
 <body>
-<div id="sanadBootSplash" aria-hidden="true"><img class="sb-logo" alt="SANAD" src="sanad_app_icon.webp"><div class="sb-ar">سند</div><div class="sb-en">SANAD</div><div class="sb-tag">إدارة أموالك بذكاء وأمان</div><div class="sb-loader"><i></i></div></div>
+<div id="sanadBootSplash" aria-hidden="true"><img class="sb-full" alt="SANAD" src="sanad_splash.webp" decoding="sync" fetchpriority="high" draggable="false"></div><script>window.__sanadSplashBorn=performance.now();</script>
 
 <input type="file" id="importFile" accept=".json,application/json" style="display:none">
 
@@ -7253,9 +7240,9 @@ function openInstrumentSheet(id, presetType, preserve){
           '<option value="' + c.code + '"' + ((linkedPrepaid ? linkedPrepaid.currency : 'AED') === c.code ? ' selected' : '') + '>' + c.flag + ' ' + c.name + '</option>').join('') +
       '</select>' + (hasTx ? '<div class="field-hint" style="color:var(--warn)">🔒 العملة مقفلة (توجد معاملات).</div>' : '') + '</div>' +
       (!isEdit ? '<div class="field"><label>مصدر الرصيد الأول</label><select id="cardPrepaidFundingMode"><option value="existing">الرصيد موجود بالفعل على البطاقة</option><option value="transfer">شحن من حساب موجود</option></select><div class="field-hint">اختيار التحويل يخصم المبلغ من الحساب ويضيفه للبطاقة كتحويل، وليس كمصروف.</div></div>' : '') +
-      (!isEdit ? '<div class="field" id="cardPrepaidSourceWrap" hidden><label>حساب التمويل</label><select id="cardPrepaidSource">' + prepaidFundingOptions + '</select></div>' : '') +
+      (!isEdit ? '<div class="field" id="cardPrepaidSourceWrap" hidden><label>حساب التمويل</label><select id="cardPrepaidSource">' + prepaidFundingOptions + '</select><div class="field-hint">يمكنك ترك المبلغ 0 لربط حساب التمويل بدون تسجيل شحن أولي.</div></div>' : '') +
       '<div class="field"><label>' + (isEdit ? 'الرصيد الافتتاحي' : 'المبلغ عند الإضافة') + '</label>' +
-        '<input type="number" inputmode="decimal" id="cardBal" value="' + (linkedPrepaid ? linkedPrepaid.openingBalance : 0) + '" ' + (hasTx ? 'disabled' : '') + '>' +
+        '<input type="number" inputmode="decimal" min="0" id="cardBal" value="' + (linkedPrepaid ? linkedPrepaid.openingBalance : 0) + '" ' + (hasTx ? 'disabled' : '') + '>' +
         '<div class="field-hint">' + (hasTx ? 'مقفل (توجد معاملات).' : (isEdit ? 'الرصيد الحالي في البطاقة.' : 'اكتب الرصيد الموجود حاليًا أو مبلغ الشحن الأول.')) + '</div></div>';
   }
   let linkedField = '';
@@ -7379,9 +7366,8 @@ async function saveCard(id, presetType){
       if(!id&&prepaidFundingMode==='transfer'){
         const fundingAcc=Finance.getAccount(prepaidFundingSourceId);
         if(!fundingAcc||fundingAcc.archived||isLiabilityAccount(fundingAcc)){ toast('اختر حساب تمويل صالح'); return; }
-        if(fundingAcc.currency!==cardCur){ toast('الشحن الأول يجب أن يكون من حساب بنفس عملة البطاقة'); return; }
-        if(bal<=0){ toast('أدخل مبلغ الشحن'); return; }
-        if(Finance.accountBalance(fundingAcc.id)+0.001<bal){ toast('رصيد حساب التمويل غير كافٍ'); return; }
+        if(bal>0&&fundingAcc.currency!==cardCur){ toast('الشحن الأول يجب أن يكون من حساب بنفس عملة البطاقة'); return; }
+        if(bal>0&&Finance.accountBalance(fundingAcc.id)+0.001<bal){ toast('رصيد حساب التمويل غير كافٍ'); return; }
       }
     }
     const instEl = document.getElementById('cardInst');
@@ -8818,7 +8804,9 @@ function hideSanadBootSplash(immediate){
   if(!sp)return;
   const finish=()=>{try{sp.remove();}catch(_){}};
   if(immediate){sp.classList.add('hide');finish();return;}
-  requestAnimationFrame(()=>setTimeout(()=>{sp.classList.add('hide');setTimeout(finish,380);},120));
+  const born=Number(window.__sanadSplashBorn)||performance.now();
+  const remaining=Math.max(0,1600-(performance.now()-born));
+  requestAnimationFrame(()=>setTimeout(()=>{sp.classList.add('hide');setTimeout(finish,380);},remaining));
 }
 function showOnboarding(){
   document.getElementById('onboard').hidden = false;
@@ -8982,13 +8970,13 @@ async function boot(){
   if (!S.settings.onboarded){ showOnboarding(); return; }
   startApp();
 }
-/* V9.0.5: startup-safe splash + ordered transaction entry flow */
+/* V9.0.6: exact splash artwork + complete dynamic i18n + zero-value prepaid linking */
 /* =========================================================
    SANAD V9 — Product layers (non-destructive over finance core)
    Local-first features: i18n, theme modes, app privacy lock,
    receipt attachments, Firebase cloud adapter, family sharing.
    ========================================================= */
-const SANAD_V9_VERSION = '9.0.5';
+const SANAD_V9_VERSION = '9.0.6';
 const SANAD_FIREBASE_SDK = '10.14.1';
 
 const SanadExtStorage = {
@@ -9106,7 +9094,21 @@ const SanadI18n = {
     'حركة الأموال':'Money movement','تحويلات داخلة (نفس البلد)':'Incoming transfers (same country)','تحويلات خارجة (نفس البلد)':'Outgoing transfers (same country)','تحويلات واردة (خارج البلد)':'Incoming transfers (cross-country)','تحويلات صادرة (خارج البلد)':'Outgoing transfers (cross-country)','تحويلات داخل البلد':'Domestic transfers','تحويلات خارج البلد':'Outbound transfers','تحويلات واردة':'Incoming transfers','لا توجد':'None',
     'ملخص البطاقة':'Card summary','المديونية الحالية':'Current debt','الحد الائتماني':'Credit limit','مشتريات الفترة':'Purchases in period','سداد الفترة (أصل)':'Repayments in period (principal)','بدون حد':'No limit','الإجمالي':'Total','المصروف':'Expenses','معاملة':'transaction','التوزيع':'Distribution',
     'الديون':'Debts','المؤرشفة':'Archived','استرجاع':'Restore','بطاقة مؤرشفة':'Archived card','أضف كاش':'Add cash','مصدر الكاش الأول':'Initial cash source','الكاش موجود عندي بالفعل':'Cash already on hand','سحب / نقل من حساب موجود':'Transfer from an existing account','لو اخترت حسابًا، SANAD يسجلها كتحويل حتى لا تتضاعف أموالك.':'If you choose an account, SANAD records a transfer so your money is not double-counted.','تمويل كاش':'Cash funding','أدخل مبلغ الكاش':'Enter cash amount','تمويل الكاش الأول يجب أن يكون من حساب بنفس العملة':'Initial cash funding must use an account with the same currency',
-    'يناير':'January','فبراير':'February','مارس':'March','أبريل':'April','مايو':'May','يونيو':'June','يوليو':'July','أغسطس':'August','سبتمبر':'September','أكتوبر':'October','نوفمبر':'November','ديسمبر':'December'
+    'لا يوجد مديونية':'No debt','لا توجد مديونيات':'No liabilities','غير محدد':'Not set','الحد':'Limit','لا يوجد':'None','بطاقة':'Card','افتراضية':'Default','رسوم':'Fees','سداد':'Repay',
+    'أرشفة':'Archive','أرشفة الحساب':'Archive account','أرشفة البطاقة':'Archive card','استرجاع الحساب':'Restore account','حذف الحساب':'Delete account','حذف البطاقة':'Delete card','تعديل الرصيد الحقيقي':'Adjust actual balance',
+    'لا يظهر في الإدخال الجديد.':'It does not appear in new entries.','هذا هو':'This is','للمصروفات.':'for expenses.','في الرئيسية.':'on Home.',
+    'اختر الحساب البنكي المرتبط. البلد والعملة والبنك يُشتقّون تلقائيًا.':'Choose the linked bank account. Country, currency, and institution are set automatically.','مقفل لأن بالبطاقة معاملات.':'Locked because the card has transactions.',
+    'يمكنك ترك المبلغ 0 لربط حساب التمويل بدون تسجيل شحن أولي.':'You can leave the amount at 0 to link the funding account without recording an initial top-up.',
+    'أدخل اسم البطاقة':'Enter the card name','أدخل الاسم':'Enter a name','أدخل مبلغاً صحيحاً':'Enter a valid amount','اختر وسيلة دفع':'Choose a payment source','اختر حساباً':'Choose an account','أدخل سعر تحويل صحيح':'Enter a valid exchange rate',
+    'أضف حساباً أو بطاقة أولاً':'Add an account or card first','البيانات تالفة':'Data is corrupted','التخزين غير متاح':'Storage is unavailable','تم رفض الحفظ لحماية سلامة البيانات':'Save was blocked to protect data integrity','فشل الحفظ — تم التراجع':'Save failed — changes were rolled back',
+    'الرصيد غير كافٍ في البطاقة/الحساب المدفوع مقدمًا':'Insufficient prepaid card/account balance','تعذر تسجيل بعض المعاملات لعدم كفاية الرصيد':'Some transactions could not be recorded because of insufficient balance',
+    'حذف الالتزام':'Delete recurring item','سيتم الحذف نهائياً':'It will be permanently deleted','مصروف متكرر جديد':'New recurring expense','دخل متكرر جديد':'New recurring income','لا يوجد فوات':'Nothing overdue',
+    'هذه رسوم مرتبطة بسداد — عدّلها من السداد':'These fees are linked to a repayment — edit them from the repayment','لا يمكن تعديل التسويات':'Adjustments cannot be edited',
+    'اختر حساب تمويل صالح':'Choose a valid funding account','الشحن الأول يجب أن يكون من حساب بنفس عملة البطاقة':'The initial top-up must use an account in the same currency','رصيد حساب التمويل غير كافٍ':'The funding account balance is insufficient',
+    'الحساب غير موجود':'Account not found','بطاقة الديبت ترتبط بحساب بنكي فقط':'A debit card can only be linked to a bank account','المديونية الافتتاحية لا يمكن أن تكون سالبة':'Opening debt cannot be negative','حد البطاقة لا يمكن أن يكون سالبًا':'Card limit cannot be negative','الرصيد الافتتاحي للبطاقة المدفوعة لا يمكن أن يكون سالبًا':'Prepaid opening balance cannot be negative',
+    'حساب مؤرشف':'Archived account','هذا هو الحساب الافتراضي للمصروفات.':'This is the default spending account.','هذا هو الحساب الأساسي في الرئيسية.':'This is the primary Home account.','مقفل لأن بالبطاقة معاملات':'Locked because the card has transactions',
+    'قيمة الدين عند بداية استخدام التطبيق.':'Debt amount when you started using SANAD.','الشهر (للسنوي)':'Month (yearly)','إعادة المحاولة':'Retry','لا يمكن أرشفة الحساب':'Account cannot be archived','لا يمكن حذف الحساب':'Account cannot be deleted','لا يمكن أرشفة البطاقة':'Card cannot be archived',
+        'يناير':'January','فبراير':'February','مارس':'March','أبريل':'April','مايو':'May','يونيو':'June','يوليو':'July','أغسطس':'August','سبتمبر':'September','أكتوبر':'October','نوفمبر':'November','ديسمبر':'December'
   },
   text(v){
     const s=String(v==null?'':v); if(this.lang!=='en') return s;
@@ -9128,6 +9130,15 @@ const SanadI18n = {
       else if((m=out.match(/^الدخل\s*\(([^)]+)\)$/))) out='Income ('+m[1]+')';
       else if((m=out.match(/^أ(\d+)$/))) out='W'+m[1];
       else if((m=out.match(/^لا توجد حسابات في\s+(.+)$/))) out='No accounts in '+atom(m[1]);
+      else if((m=out.match(/^لا توجد بطاقات في\s+(.+)$/))) out='No cards in '+atom(m[1]);
+      else if((m=out.match(/^أضف حساباً أو بطاقة في\s+(.+)$/))) out='Add an account or card in '+atom(m[1]);
+      else if((m=out.match(/^أضف حساباً أولاً في\s+(.+)$/))) out='Add an account first in '+atom(m[1]);
+      else if((m=out.match(/^أضف حساباً في\s+(.+)$/))) out='Add an account in '+atom(m[1]);
+      else if((m=out.match(/^لم تحدّد حساباً أساسياً في\s+(.+)$/))) out='No primary account selected in '+atom(m[1]);
+      else if((m=out.match(/^يستحق\s+(.+)$/))) out='Due '+m[1];
+      else if((m=out.match(/^\+\s*رسوم\s+(.+)$/))) out='+ Fees '+m[1];
+      else if((m=out.match(/^تحويل إلى\s+(.+)$/))) out='Transfer to '+m[1];
+      else if((m=out.match(/^تحويل وارد من\s+(.+)$/))) out='Incoming transfer from '+m[1];
       else if((m=out.match(/^لا توجد التزامات في\s+(.+)$/))) out='No recurring items in '+atom(m[1]);
       else if((m=out.match(/^الحساب الأساسي في\s+(.+)$/))) out='Primary account in '+atom(m[1]);
       else if((m=out.match(/^ملخص\s+(.+)$/))) out='Summary · '+atom(m[1]);
@@ -9150,6 +9161,9 @@ const SanadI18n = {
       else if((m=out.match(/^تُستخدم تلقائياً عند تسجيل مصروف في\s+(.+)$/))) out='Used automatically when recording an expense in '+atom(m[1]);
       else if((m=out.match(/^حدود الفئات\s*—\s*(.+)$/))) out='Category limits — '+m[1];
       else if((m=out.match(/^بعد\s+(\d+)\s+أيام$/))) out='In '+m[1]+' days';
+      else if((m=out.match(/^(\d+)\s+التزام فات موعده$/))) out=m[1]+' overdue recurring items';
+      else if((m=out.match(/^تم تسجيل\s+(\d+)\s+معاملة$/))) out=m[1]+' transactions recorded';
+      else if((m=out.match(/^تم تسجيل\s+(\d+)\s+معاملة\s+—\s+تعذر تسجيل\s+(\d+)\s+لعدم كفاية رصيد البطاقة المدفوعة مقدمًا$/))) out=m[1]+' transactions recorded — '+m[2]+' skipped due to insufficient prepaid balance';
       else if((m=out.match(/^يوم\s+(\d+)$/))) out='Day '+m[1];
       else if((m=out.match(/^تجاوزت الحد بـ\s+(.+)$/))) out='Over limit by '+m[1];
       else if((m=out.match(/^باقي\s+(.+)$/))) out='Remaining '+m[1];
@@ -9157,7 +9171,7 @@ const SanadI18n = {
     }
     return s.replace(trim,out);
   },
-  originalText:new WeakMap(), originalAttrs:new WeakMap(),
+  originalText:new WeakMap(), originalAttrs:new WeakMap(), _observer:null,
   apply(root){
     this.lang=(S.settings&&S.settings.language==='en')?'en':'ar';
     document.documentElement.lang=this.lang; document.documentElement.dir=this.lang==='en'?'ltr':'rtl';
@@ -9170,16 +9184,46 @@ const SanadI18n = {
     }});
     const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
     nodes.forEach(n=>{
-      if(!this.originalText.has(n)) this.originalText.set(n,n.nodeValue);
+      if(!this.originalText.has(n)||/[\u0600-\u06FF]/.test(n.nodeValue)) this.originalText.set(n,n.nodeValue);
       const src=this.originalText.get(n);
       n.nodeValue=this.lang==='en'?this.text(src):src;
     });
-    root.querySelectorAll&&root.querySelectorAll('input[placeholder],textarea[placeholder],[aria-label]').forEach(el=>{
-      if(!this.originalAttrs.has(el)) this.originalAttrs.set(el,{placeholder:el.placeholder||'',aria:el.getAttribute('aria-label')||''});
-      const orig=this.originalAttrs.get(el)||{};
+    root.querySelectorAll&&root.querySelectorAll('input[placeholder],textarea[placeholder],[aria-label],[title]').forEach(el=>{
+      const prev=this.originalAttrs.get(el)||{placeholder:'',aria:'',title:''};
+      const cur={placeholder:el.placeholder||'',aria:el.getAttribute('aria-label')||'',title:el.getAttribute('title')||''};
+      if(!this.originalAttrs.has(el)||/[\u0600-\u06FF]/.test(cur.placeholder+cur.aria+cur.title)) this.originalAttrs.set(el,cur);
+      const orig=this.originalAttrs.get(el)||prev;
       if('placeholder' in el) el.placeholder=this.lang==='en'?this.text(orig.placeholder||''):(orig.placeholder||'');
       if(el.hasAttribute('aria-label')||orig.aria) el.setAttribute('aria-label',this.lang==='en'?this.text(orig.aria||''):(orig.aria||''));
+      if(el.hasAttribute('title')||orig.title) el.setAttribute('title',this.lang==='en'?this.text(orig.title||''):(orig.title||''));
     });
+  },
+  watch(){
+    if(this._observer||!window.MutationObserver||!document.body)return;
+    this._observer=new MutationObserver(mutations=>{
+      if(this.lang!=='en')return;
+      this._observer.disconnect();
+      try{
+        const roots=new Set();
+        for(const m of mutations){
+          if(m.type==='characterData'&&m.target&&m.target.parentElement){
+            if(/[\u0600-\u06FF]/.test(m.target.nodeValue||'')) this.originalText.set(m.target,m.target.nodeValue);
+            roots.add(m.target.parentElement);
+          }else if(m.type==='attributes'&&m.target&&m.target.nodeType===1){
+            roots.add(m.target);
+          }else{
+            for(const n of (m.addedNodes||[])){
+              if(n.nodeType===1) roots.add(n);
+              else if(n.nodeType===3&&n.parentElement) roots.add(n.parentElement);
+            }
+          }
+        }
+        roots.forEach(r=>this.apply(r));
+      }finally{
+        this._observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['placeholder','aria-label','title']});
+      }
+    });
+    this._observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['placeholder','aria-label','title']});
   }
 };
 
@@ -9402,7 +9446,7 @@ const SanadFullBackup = {
 const SanadV9 = {
   initialized:false,
   async bootstrap(){
-    await SanadExtStorage.init();await Promise.all([SanadSecurity.init(),SanadFamily.init(),SanadCloud.init().catch(e=>console.warn(e))]);SanadTheme.init();this.ensureGlobalInputs();this.initialized=true;
+    await SanadExtStorage.init();await Promise.all([SanadSecurity.init(),SanadFamily.init(),SanadCloud.init().catch(e=>console.warn(e))]);SanadTheme.init();SanadI18n.watch();this.ensureGlobalInputs();this.initialized=true;
   },
   ensureGlobalInputs(){SanadReceipts.ensureInput();},
   settingsHtml(){
@@ -9413,7 +9457,7 @@ const SanadV9 = {
       '<div class="sec"><h2>العائلة والمشاركة</h2></div><div class="list"><div class="list-item" data-sanad-act="open-family"><div class="li-ico">👨‍👩‍👧</div><div class="li-body"><b>إدارة العائلة</b><span>'+fam+'</span></div><div class="li-arrow">›</div></div></div>'+
       '<div class="sec"><h2>نسخة احتياطية كاملة</h2></div><button type="button" class="btn" data-sanad-act="full-export">📦 تصدير كامل مع الفواتير</button><button type="button" class="btn" data-sanad-act="full-import">📥 استيراد نسخة كاملة</button>';
   },
-  async setLanguage(lang){if(!['ar','en'].includes(lang)||!canWrite())return;const prev=S.settings.language;S.settings.language=lang;const ok=await persist();if(!ok){S.settings.language=prev;return;}render();},
+  async setLanguage(lang){if(!['ar','en'].includes(lang)||!canWrite())return;const prev=S.settings.language;S.settings.language=lang;const ok=await persist();if(!ok){S.settings.language=prev;return;}render();requestAnimationFrame(()=>SanadI18n.apply(document));},
   async afterStart(){SanadTheme.apply();SanadI18n.apply();if(SanadSecurity.cfg.enabled)SanadSecurity.show();hideSanadBootSplash();},
   async click(el){
     const a=el.dataset.sanadAct,v=el.dataset.value;
