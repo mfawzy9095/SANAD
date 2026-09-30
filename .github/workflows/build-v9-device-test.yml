@@ -61,8 +61,14 @@ jobs:
           grep -q "window.__sanadSplashBorn" "$HTML"
           grep -q "SanadI18n.watch()" "$HTML"
           grep -q "'أضف حساب':'Add account'" "$HTML"
+          grep -q "'أضف حسابًا':'Add account'" "$HTML"
+          grep -q "'أضف حساباً':'Add account'" "$HTML"
+          grep -q "'بدون':'None'" "$HTML"
           grep -q "'— بدون —':'— None —'" "$HTML"
           grep -q "'لا يوجد مديونية':'No debt'" "$HTML"
+          grep -q "'لا توجد مديونية':'No debt'" "$HTML"
+          grep -q "id=\"sanadSplashImage\"" "$HTML"
+          grep -q "im.src='sanad_logo.webp'" "$HTML"
           grep -q "يمكنك ترك المبلغ 0 لربط حساب التمويل بدون تسجيل شحن أولي" "$HTML"
           grep -q "if(bal>0&&fundingAcc.currency!==cardCur)" "$HTML"
           grep -q "prepaidFundingMode==='transfer'&&prepaidFundingSourceId&&bal>0" "$HTML"
@@ -87,15 +93,19 @@ jobs:
           assert 'sanad_splash.webp' in splash_block
           # Validate actual WebP binaries, not arbitrary large file sizes.
           for asset,min_size in [
-              ("app/src/main/assets/sanad_splash.webp",8000),
-              ("app/src/main/assets/sanad_logo.webp",8000),
-              ("app/src/main/assets/sanad_app_icon.webp",8000),
-              ("app/src/main/res/drawable-nodpi/sanad_app_icon.webp",8000),
+              ("app/src/main/assets/sanad_splash.webp",50000),
+              ("app/src/main/assets/sanad_logo.webp",20000),
+              ("app/src/main/assets/sanad_app_icon.webp",20000),
+              ("app/src/main/res/drawable-nodpi/sanad_app_icon.webp",20000),
           ]:
               data=Path(asset).read_bytes()
               assert len(data) > min_size, (asset,len(data))
               assert data[:4] == b"RIFF", (asset,data[:4])
               assert data[8:12] == b"WEBP", (asset,data[8:12])
+          # splash must show exact artwork first, with logo fallback only on asset error
+          assert 'src="sanad_splash.webp"' in splash_block
+          assert 'id="sanadSplashImage"' in splash_block
+          assert "im.src='sanad_logo.webp'" in splash_block
           # zero prepaid linking: account association saved, no fake transfer at zero
           card=h[h.index("async function saveCard"):h.index("async function archiveInstrument",h.index("async function saveCard"))]
           assert "defaultTopupAccountId: isPrepaid ? prepaidFundingSourceId : null" in card
@@ -104,8 +114,12 @@ jobs:
           # English critical strings specifically reported by device testing
           required={
             "أضف حساب":"Add account",
+            "أضف حسابًا":"Add account",
+            "أضف حساباً":"Add account",
+            "بدون":"None",
             "— بدون —":"— None —",
             "لا يوجد مديونية":"No debt",
+            "لا توجد مديونية":"No debt",
             "يمكنك ترك المبلغ 0 لربط حساب التمويل بدون تسجيل شحن أولي.":"You can leave the amount at 0 to link the funding account without recording an initial top-up.",
             "حساباتك في كل بلد":"Your accounts in every country",
             "التالي":"Next",
