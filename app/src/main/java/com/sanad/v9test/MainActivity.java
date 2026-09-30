@@ -357,9 +357,9 @@ public final class MainActivity extends Activity {
     @Override
     public void onBackPressed() {
         webView.evaluateJavascript(
-                "(function(){var w=document.getElementById('sheetWrap');if(w&&w.classList.contains('show')){if(typeof closeSheet==='function')closeSheet();return 'closed';}return 'none';})()",
+                "(function(){try{if(typeof sanadHandleBack==='function'&&sanadHandleBack())return 'handled';}catch(e){}return 'none';})()",
                 result -> {
-                    if (result != null && result.contains("closed")) return;
+                    if (result != null && result.contains("handled")) return;
                     if (webView.canGoBack()) webView.goBack();
                     else MainActivity.super.onBackPressed();
                 }
