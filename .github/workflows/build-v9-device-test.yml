@@ -110,6 +110,11 @@ jobs:
             "حساباتك في كل بلد":"Your accounts in every country",
             "التالي":"Next",
             "تخطي":"Skip",
+            "لا يوجد أشخاص بعد":"No people yet",
+            "إضافة شخص":"Add person",
+            "لا يوجد فرق":"No difference",
+            "أضف حساباً أولاً للسداد":"Add an account first for repayment",
+            "أضف حسابًا يمكن الشحن منه أولاً":"Add an account that can fund the top-up first",
           }
           for ar,en in required.items():
               needle=repr(ar)+":"+repr(en)
