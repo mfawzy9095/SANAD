@@ -1,0 +1,14 @@
+{
+  "app_version": "9.0.2-device-test-2",
+  "package": "com.sanad.v9test",
+  "permissions": [
+    "android.permission.INTERNET"
+  ],
+  "web_sha256": "c7291d64c960ea2dde35d0c5428f1235719028c83665522b2de2cedbc1b88141",
+  "web_bytes": 556610,
+  "app/src/main/java/com/sanad/v9test/MainActivity.java_sha256": "027ccd39dcb1162c219b5e18819ce32406ce70a981adc2a37d150acaf3f53fdc",
+  "app/src/main/AndroidManifest.xml_sha256": "ae0537ed7a62f2ec3d17b6a3657712e9e9a02bd021ade19701aa3a733b16e8d5",
+  "app/build.gradle_sha256": "5fad76b51bd4497a129411cc9a488fbacfcca2a19eb85e2fef15e227f14f6dde",
+  ".github/workflows/build-v9-device-test.yml_sha256": "027e1b55c17739d4865812d2656bc0c236fedb5fef682fb37c7af459f78b05ca",
+  "web-v9.0.2.patch_sha256": "cf5daf8321e4eb1efac9f6ce99bd2fcdac1279754396e1ded81ad1a867fba15e"
+}

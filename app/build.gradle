@@ -3,18 +3,21 @@ plugins {
 }
 
 android {
-    namespace 'com.sanad.offline'
+    namespace 'com.sanad.v9test'
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.sanad.offline'
+        applicationId 'com.sanad.v9test'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '0.1.0'
+        versionCode 90202
+        versionName '9.0.2-device-test-2'
     }
 
     buildTypes {
+        debug {
+            debuggable true
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -25,4 +28,15 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    packaging {
+        resources {
+            excludes += ['/META-INF/{AL2.0,LGPL2.1}']
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.14.0'
+    implementation 'androidx.core:core:1.15.0'
 }
