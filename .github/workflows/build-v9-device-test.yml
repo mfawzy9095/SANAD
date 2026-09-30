@@ -35,6 +35,12 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Install WebP decoder
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq webp
+
       - name: Verify web source and V9.0.6 regressions
         shell: bash
         run: |
@@ -140,6 +146,12 @@ jobs:
               needle=repr(ar)+":"+repr(en)
               assert needle in h, needle
           PY
+          dwebp app/src/main/assets/sanad_splash.webp -o /tmp/sanad-splash.png >/dev/null
+          dwebp app/src/main/assets/sanad_logo.webp -o /tmp/sanad-logo.png >/dev/null
+          dwebp app/src/main/assets/sanad_app_icon.webp -o /tmp/sanad-icon.png >/dev/null
+          test -s /tmp/sanad-splash.png
+          test -s /tmp/sanad-logo.png
+          test -s /tmp/sanad-icon.png
 
           python3 - <<'PY'
           import pathlib,re
