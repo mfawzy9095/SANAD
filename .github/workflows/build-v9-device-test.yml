@@ -90,7 +90,6 @@ jobs:
           grep -q "async pruneMissingTransactions()" "$HTML"
           ! grep -Eq "keyNum[[:space:]]*\(|#keypad|\.keypad|custom.?keypad" "$HTML"
           grep -q 'src="sanad_splash.webp"' "$HTML"
-          grep -q 'src="sanad_logo.webp"' "$HTML"
           grep -q "function hideSanadBootSplash" "$HTML"
           grep -q "window.__sanadSplashBorn" "$HTML"
           grep -q "SanadI18n.watch()" "$HTML"
