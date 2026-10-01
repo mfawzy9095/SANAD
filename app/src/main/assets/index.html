@@ -751,6 +751,7 @@ window.__sanadSplashBorn=performance.now();
 <div class="toast" id="toast"></div>
 
 <script src="js/finance-core.js"></script>
+<script src="js/state-core.js"></script>
 <script>
 /* =========================================================
    SANAD — Architecture Refactor
@@ -759,7 +760,9 @@ window.__sanadSplashBorn=performance.now();
    ========================================================= */
 
 const FinanceCore = window.SanadFinanceCore;
+const StateCore = window.SanadStateCore;
 if (!FinanceCore) throw new Error('SANAD finance core failed to load');
+if (!StateCore) throw new Error('SANAD state core failed to load');
 
 const CURRENCIES = {
   EGP:{code:'EGP',symbol:'ج.م',name:'جنيه مصري',flag:'🇪🇬'},
@@ -845,28 +848,9 @@ function uid(p){ return (p||'t')+Date.now().toString(36)+Math.random().toString(
 function pad(n){ return String(n).padStart(2,'0'); }
 function isoToday(){ const d = new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
 function isFiniteNumberLike(v){ return v !== '' && v !== null && v !== undefined && Number.isFinite(Number(v)); }
-function isValidIsoDate(v){
-  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  const [y,m,d] = v.split('-').map(Number);
-  const dt = new Date(y, m-1, d);
-  return dt.getFullYear() === y && dt.getMonth() === m-1 && dt.getDate() === d;
-}
-function txTimeValue(t){
-  const c = Number(t && t.created);
-  if (Number.isFinite(c)) return c;
-  if (t && isValidIsoDate(t.date)){
-    const [y,m,d] = t.date.split('-').map(Number);
-    return new Date(y,m-1,d,12,0,0,0).getTime();
-  }
-  return 0;
-}
-function compareTxDesc(a,b){
-  const dc = String((b && b.date) || '').localeCompare(String((a && a.date) || ''));
-  if (dc) return dc;
-  const tc = txTimeValue(b) - txTimeValue(a);
-  if (tc) return tc;
-  return String((b && b.id) || '').localeCompare(String((a && a.id) || ''));
-}
+function isValidIsoDate(v){ return StateCore.isValidIsoDate(v); }
+function txTimeValue(t){ return StateCore.txTimeValue(t); }
+function compareTxDesc(a,b){ return StateCore.compareTxDesc(a,b); }
 function ymKey(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1); }
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g,m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function fmt(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('en-US',{maximumFractionDigits:2}); }
@@ -930,37 +914,9 @@ function isPreviewDeniedError(err){
   return false;
 }
 
-/* V8.8.4.3 FIX 11: deterministic deep content fingerprint */
-function stableStringify(obj){
-  if (obj === null || obj === undefined) return JSON.stringify(obj);
-  if (typeof obj !== 'object') return JSON.stringify(obj);
-  if (Array.isArray(obj)){
-    const allHaveId = obj.length > 0 && obj.every(x => x && typeof x === 'object' && 'id' in x);
-    const arr = allHaveId
-      ? [...obj].sort((a,b) => String(a.id).localeCompare(String(b.id)))
-      : obj;
-    return '[' + arr.map(stableStringify).join(',') + ']';
-  }
-  const keys = Object.keys(obj).sort();
-  return '{' + keys.map(k => JSON.stringify(k) + ':' + stableStringify(obj[k])).join(',') + '}';
-}
-function stateFingerprint(st){
-  if (!st) return '';
-  try {
-    return stableStringify({
-      schemaVersion: st.schemaVersion,
-      institutions: st.institutions || [],
-      accounts: st.accounts || [],
-      paymentInstruments: st.paymentInstruments || [],
-      transactions: st.transactions || [],
-      beneficiaries: st.beneficiaries || [],
-      categories: st.categories || {},
-      tags: st.tags || [],
-      recurring: st.recurring || [],
-      settings: st.settings || {}
-    });
-  } catch(e){ return 'fp-error:' + (e && e.message ? e.message : 'unknown'); }
-}
+/* Deterministic financial-state fingerprint lives in state-core.js. */
+function stableStringify(obj){ return StateCore.stableStringify(obj); }
+function stateFingerprint(st){ return StateCore.stateFingerprint(st); }
 
 const IDBStorage = {
   _db:null,
