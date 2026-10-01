@@ -1,10 +1,10 @@
-name: SANAD V9.0.9 Stability RC Android Build
-# stability-gate: v9.0.9
+name: SANAD V9.0.10 Auto Unlock RC Android Build
+# stability-gate: v9.0.10-auto-unlock
 
 on:
   push:
     branches:
-      - fix-v9.0.9-stability
+      - fix-v9.0.10-auto-unlock
   pull_request:
     branches:
       - main
@@ -51,7 +51,7 @@ jobs:
           grep -q 'android:icon="@mipmap/ic_launcher"' app/src/main/AndroidManifest.xml
           grep -q 'android:roundIcon="@mipmap/ic_launcher_round"' app/src/main/AndroidManifest.xml
 
-      - name: Verify web source and V9.0.9 stability regressions
+      - name: Verify web source and V9.0.10 auto-unlock regressions
         shell: bash
         run: |
           set -euo pipefail
@@ -60,10 +60,15 @@ jobs:
           SOURCE_SHA="$(sha256sum "$HTML" | awk '{print $1}')"
           echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
 
-          grep -q "const SANAD_V9_VERSION = '9.0.9'" "$HTML"
+          grep -q "const SANAD_V9_VERSION = '9.0.10'" "$HTML"
           grep -q "_criticalMutationInFlight" "$HTML"
           grep -q "reason:'busy'" "$HTML"
           grep -q "relockAfterMs:30000" "$HTML"
+          grep -q "_autoPrompting:false" "$HTML"
+          grep -q "sanad-lock.auto-auth .lock-card" "$HTML"
+          grep -q "setTimeout(()=>this.unlock(true),80)" "$HTML"
+          grep -q "el.classList.add('auto-auth')" "$HTML"
+          grep -q "el.classList.remove('auto-auth')" "$HTML"
           grep -q "window.sanadAppBackgrounded" "$HTML"
           grep -q "window.sanadAppForegrounded" "$HTML"
           grep -q "async function secureWipeAll()" "$HTML"
@@ -155,10 +160,10 @@ jobs:
           html=pathlib.Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
           scripts=re.findall(r"<script[^>]*>(.*?)</script>",html,re.S)
           assert scripts
-          pathlib.Path("/tmp/sanad-v909.js").write_text("\n".join(scripts),encoding="utf-8")
+          pathlib.Path("/tmp/sanad-v9010.js").write_text("\n".join(scripts),encoding="utf-8")
           PY
-          for i in $(seq 1 10); do node --check /tmp/sanad-v909.js >/dev/null; done
-          echo "V9.0.9 source gates passed 10x"
+          for i in $(seq 1 10); do node --check /tmp/sanad-v9010.js >/dev/null; done
+          echo "V9.0.10 source gates passed 10x"
 
       - name: JVM regression tests
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
@@ -175,13 +180,13 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.9-STABILITY-RC.apk"
+          cp "$APK" "SANAD-V9.0.10-AUTO-UNLOCK-RC.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
           grep -q "package: name='com.sanad.v9test'" apk-badging.txt
-          grep -q "versionCode='90900'" apk-badging.txt
-          grep -q "versionName='9.0.9-stability-rc'" apk-badging.txt
+          grep -q "versionCode='91000'" apk-badging.txt
+          grep -q "versionName='9.0.10-auto-unlock-rc'" apk-badging.txt
           grep -q "application-label:'SANAD — سند'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
           grep -q "android.permission.POST_NOTIFICATIONS" apk-permissions.txt
@@ -197,14 +202,14 @@ jobs:
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          sha256sum "SANAD-V9.0.9-STABILITY-RC.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.0.10-AUTO-UNLOCK-RC.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.9-STABILITY-RC
+          name: SANAD-V9.0.10-AUTO-UNLOCK-RC
           path: |
-            SANAD-V9.0.9-STABILITY-RC.apk
+            SANAD-V9.0.10-AUTO-UNLOCK-RC.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
