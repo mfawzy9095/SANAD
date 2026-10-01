@@ -587,6 +587,7 @@ jobs:
           node app/src/test/js/bank-message-core.test.js
           node --check "$BANK_INGESTION_CORE"
           node app/src/test/js/bank-ingestion-core.test.js
+          node app/src/test/js/bank-ingestion-schema.test.js
 
       - name: JVM regression tests
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
