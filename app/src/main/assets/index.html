@@ -761,6 +761,7 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/state-model-core.js"></script>
 <script src="js/i18n-core.js"></script>
 <script src="js/schema-core.js"></script>
+<script src="js/persistence-core.js"></script>
 <script>
 /* =========================================================
    SANAD — Architecture Refactor
@@ -779,6 +780,7 @@ const SchemaRepairCore = window.SanadSchemaRepairCore;
 const StateModelCore = window.SanadStateModelCore;
 const I18nCore = window.SanadI18nCore;
 const SchemaCore = window.SanadSchemaCore;
+const PersistenceCore = window.SanadPersistenceCore;
 if (!FinanceCore) throw new Error('SANAD finance core failed to load');
 if (!StateCore) throw new Error('SANAD state core failed to load');
 if (!StorageCore) throw new Error('SANAD storage core failed to load');
@@ -790,6 +792,7 @@ if (!SchemaRepairCore) throw new Error('SANAD schema repair core failed to load'
 if (!StateModelCore) throw new Error('SANAD state model core failed to load');
 if (!I18nCore) throw new Error('SANAD i18n core failed to load');
 if (!SchemaCore) throw new Error('SANAD schema core failed to load');
+if (!PersistenceCore) throw new Error('SANAD persistence core failed to load');
 
 const SchemaRepair = SchemaRepairCore.createSchemaRepairCore({financeCore:FinanceCore});
 
@@ -979,6 +982,14 @@ const Schema = SchemaCore.createSchema({
   schemaRepair:SchemaRepair
 });
 
+const PersistenceService = PersistenceCore.createPersistenceService({
+  storage: Storage,
+  validateState: st => Schema.validateStateStrict(st),
+  fingerprint: stateFingerprint,
+  onRecovery: enterRecoveryMode,
+  logError: (...args) => console.error(...args)
+});
+
 const StateModel = StateModelCore.createStateModel({
   schemaVersion:SCHEMA_VERSION,
   defaultCats:DEFAULT_CATS,
@@ -1049,27 +1060,11 @@ async function enterRecoveryMode(reason, err){
 
 /* Rotate 3 pre-crit snapshots: pre-crit-3 ← pre-crit-2 ← pre-crit-1 ← state */
 async function writeRotatedPreCritSnapshot(state){
-  const stateFp = stateFingerprint(state);
-  try {
-    const s2 = await Storage.readSnapshot('pre-crit-2');
-    const s1 = await Storage.readSnapshot('pre-crit-1');
-    if (s2){
-      const w3 = await Storage.writeSnapshot('pre-crit-3', s2);
-      if (!w3) return { ok:false, reason:'snap3-write-failed' };
-    }
-    if (s1){
-      const w2 = await Storage.writeSnapshot('pre-crit-2', s1);
-      if (!w2) return { ok:false, reason:'snap2-write-failed' };
-    }
-    const w1 = await Storage.writeSnapshot('pre-crit-1', state);
-    if (!w1) return { ok:false, reason:'snap1-write-failed' };
-    const rb = await Storage.readSnapshot('pre-crit-1');
-    if (!rb) return { ok:false, reason:'snap1-readback-null' };
-    if (stateFingerprint(rb) !== stateFp) return { ok:false, reason:'snap1-fp-mismatch' };
-    return { ok:true };
-  } catch(e){
-    return { ok:false, reason:'snap-exception', error:e };
-  }
+  return PersistenceService.rotateVerifiedSnapshot(
+    state,
+    {one:'pre-crit-1',two:'pre-crit-2',three:'pre-crit-3'},
+    'snap'
+  );
 }
 
 /* V8.8.4.8: verified user-snapshot rotation (1←2←3) used before destructive ops.
@@ -1079,91 +1074,23 @@ async function writeRotatedUserSnapshot(state){
     try { await Storage.rotateSnapshot(state); return {ok:true}; }
     catch(e){ return {ok:false, reason:'preview-rotate-failed', error:e}; }
   }
-  const fp = stateFingerprint(state);
-  try {
-    const s2 = await Storage.readSnapshot('2');
-    const s1 = await Storage.readSnapshot('1');
-    if (s2){
-      const w3 = await Storage.writeSnapshot('3', s2);
-      if (!w3) return {ok:false, reason:'user-snap3-write-failed'};
-    }
-    if (s1){
-      const w2 = await Storage.writeSnapshot('2', s1);
-      if (!w2) return {ok:false, reason:'user-snap2-write-failed'};
-    }
-    const w1 = await Storage.writeSnapshot('1', state);
-    if (!w1) return {ok:false, reason:'user-snap1-write-failed'};
-    const rb = await Storage.readSnapshot('1');
-    if (!rb) return {ok:false, reason:'user-snap1-readback-null'};
-    if (stateFingerprint(rb) !== fp) return {ok:false, reason:'user-snap1-fp-mismatch'};
-    return {ok:true};
-  } catch(e){
-    return {ok:false, reason:'user-snap-exception', error:e};
-  }
+  return PersistenceService.rotateVerifiedSnapshot(
+    state,
+    {one:'1',two:'2',three:'3'},
+    'user-snap'
+  );
 }
 
 /* Write previous state and verify it reads back with matching fingerprint */
 async function tryRestoreVerified(prevState){
-  if (!prevState) return false;
-  const prevFp = stateFingerprint(prevState);
-  try {
-    const w = await Storage.writeState(prevState);
-    if (!w) return false;
-    const r = await Storage.readState();
-    if (!r.ok || !r.state) return false;
-    return stateFingerprint(r.state) === prevFp;
-  } catch(_){ return false; }
+  return PersistenceService.tryRestoreVerified(prevState);
 }
 
 /* verifiedWriteState: write → read → fingerprint compare.
    On ANY failure: try to restore fallbackState with verification.
    If restore fails too: enter Recovery/read-only. */
 async function verifiedWriteState(nextState, fallbackState){
-  const integrityErrors = Schema.validateStateStrict(nextState);
-  if (integrityErrors.length){
-    console.error('Blocked invalid financial state:', integrityErrors);
-    return { ok:false, reason:'invalid-state', restored:!!fallbackState, errors:integrityErrors };
-  }
-  const nextFp = stateFingerprint(nextState);
-  let wrote = false;
-  try { wrote = await Storage.writeState(nextState); } catch(_){ wrote = false; }
-  if (!wrote){
-    if (fallbackState){
-      const okRestore = await tryRestoreVerified(fallbackState);
-      if (!okRestore){
-        await enterRecoveryMode('write-failed + rollback-failed', new Error('durable write rejected'));
-        return { ok:false, reason:'write-failed', restored:false };
-      }
-      return { ok:false, reason:'write-failed', restored:true };
-    }
-    return { ok:false, reason:'write-failed', restored:false };
-  }
-  let verify = { ok:false };
-  try { verify = await Storage.readState(); } catch(_){ verify = { ok:false }; }
-  if (!verify.ok || !verify.state){
-    if (fallbackState){
-      const okRestore = await tryRestoreVerified(fallbackState);
-      if (!okRestore){
-        await enterRecoveryMode('verify-failed + rollback-failed', new Error('read-back failed'));
-        return { ok:false, reason:'verify-failed', restored:false };
-      }
-      return { ok:false, reason:'verify-failed', restored:true };
-    }
-    return { ok:false, reason:'verify-failed', restored:false };
-  }
-  const actualFp = stateFingerprint(verify.state);
-  if (actualFp !== nextFp){
-    if (fallbackState){
-      const okRestore = await tryRestoreVerified(fallbackState);
-      if (!okRestore){
-        await enterRecoveryMode('fingerprint-mismatch + rollback-failed', new Error('persisted ≠ intended'));
-        return { ok:false, reason:'fingerprint-mismatch', restored:false };
-      }
-      return { ok:false, reason:'fingerprint-mismatch', restored:true };
-    }
-    return { ok:false, reason:'fingerprint-mismatch', restored:false };
-  }
-  return { ok:true, reason:'ok', restored:false };
+  return PersistenceService.verifiedWriteState(nextState, fallbackState);
 }
 
 /* V8.8.4.9: transient flag for specific mutation-rejection reasons.
@@ -1174,25 +1101,7 @@ let _lastMutationError = null;
    Returns null if OK, or 'prepaid-insufficient' if the candidate worsened a
    prepaid account balance. Legacy negative balances may be improved but not worsened. */
 function checkPrepaidInvariant(prepaidBefore){
-  const accounts = S.accounts || [];
-  for (const a of accounts){
-    if (!a || a.type !== 'prepaid') continue;
-    let afterBal = 0;
-    try { afterBal = Finance.accountBalance(a.id); }
-    catch(_){ afterBal = 0; }
-    const hadBefore = prepaidBefore.has(a.id);
-    const beforeBal = hadBefore ? prepaidBefore.get(a.id) : null;
-    /* A) NEW prepaid account with negative balance */
-    if (!hadBefore){
-      if (afterBal < -0.01) return 'prepaid-insufficient';
-      continue;
-    }
-    /* B) was non-negative, now negative */
-    if (beforeBal >= -0.01 && afterBal < -0.01) return 'prepaid-insufficient';
-    /* C) was negative, got worse by more than 0.01 */
-    if (beforeBal < -0.01 && afterBal < beforeBal - 0.01) return 'prepaid-insufficient';
-  }
-  return null;
+  return FinanceCore.checkPrepaidInvariant(prepaidBefore,S);
 }
 
 async function _commitCriticalMutationImpl(mutateFn){
@@ -1202,13 +1111,7 @@ async function _commitCriticalMutationImpl(mutateFn){
   const beforeFp = stateFingerprint(before);
 
   /* V8.8.4.10: capture pre-mutation prepaid balances for centralized invariant. */
-  const prepaidBefore = new Map();
-  S.accounts.forEach(a => {
-    if (a && a.type === 'prepaid'){
-      try { prepaidBefore.set(a.id, Finance.accountBalance(a.id)); }
-      catch(_){ prepaidBefore.set(a.id, 0); }
-    }
-  });
+  const prepaidBefore = FinanceCore.capturePrepaidBalances(S);
 
   let mainWriteAttempted = false;
   try {
