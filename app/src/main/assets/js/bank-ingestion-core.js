@@ -1,0 +1,258 @@
+(function(root,factory){
+  let MessageCore=null,Registry=null;
+  if(typeof module==='object'&&module.exports){
+    MessageCore=require('./bank-message-core.js');
+    Registry=require('./uae-bank-registry-core.js');
+    module.exports=factory(MessageCore,Registry);
+  }else{
+    MessageCore=root&&root.SanadBankMessageCore;
+    Registry=root&&root.SanadUaeBankRegistryCore;
+    if(root)root.SanadBankIngestionCore=factory(MessageCore,Registry);
+  }
+})(typeof globalThis!=='undefined'?globalThis:this,function(MessageCore,Registry){
+  'use strict';
+  if(!MessageCore)throw new Error('bank-message-core-required');
+  if(!Registry)throw new Error('bank-registry-required');
+
+  function num(v){const n=Number(v);return Number.isFinite(n)?n:null;}
+  function round2(v){const n=num(v);return n==null?null:Math.round(n*100)/100;}
+  function clone(v){return JSON.parse(JSON.stringify(v));}
+  function arr(v){return Array.isArray(v)?v:[];}
+  function idFactory(options){
+    if(options&&typeof options.uid==='function')return options.uid;
+    let seq=0;
+    return p=>String(p||'auto')+'_auto_'+(++seq);
+  }
+  function institutionBankId(inst){
+    if(!inst)return null;
+    if(inst.bankRegistryId&&Registry.get(inst.bankRegistryId))return inst.bankRegistryId;
+    const hit=Registry.detect(inst.name||'');
+    return hit?hit.bank.id:null;
+  }
+  function institutionProviderId(inst){
+    if(!inst||!Registry.getProvider)return null;
+    if(inst.providerRegistryId&&Registry.getProvider(inst.providerRegistryId))return inst.providerRegistryId;
+    const hit=Registry.detectProvider?Registry.detectProvider(inst.name||''):null;
+    return hit?hit.provider.id:null;
+  }
+  function findInstitution(state,parsed){
+    const institutions=arr(state&&state.institutions);
+    if(parsed.bankId){
+      return institutions.find(i=>institutionBankId(i)===parsed.bankId)||null;
+    }
+    if(parsed.providerId){
+      return institutions.find(i=>institutionProviderId(i)===parsed.providerId)||null;
+    }
+    return null;
+  }
+  function sourceDisplay(parsed){
+    if(parsed.bankId){
+      const b=Registry.get(parsed.bankId);
+      return b?b.name:parsed.bankId;
+    }
+    if(parsed.providerId&&Registry.getProvider){
+      const p=Registry.getProvider(parsed.providerId);
+      return p?p.name:parsed.providerId;
+    }
+    return 'Financial source';
+  }
+  function duplicateOf(parsed,state){
+    const key=MessageCore.dedupeKey(parsed);
+    return arr(state&&state.transactions).find(t=>
+      (parsed.transactionRef&&t.bankTransactionRef===parsed.transactionRef) ||
+      (parsed.eventId&&t.bankImportEventId===parsed.eventId) ||
+      (key&&t.bankImportKey===key)
+    )||null;
+  }
+  function observedAfter(parsed){
+    if(num(parsed.availableBalance)!=null)return round2(parsed.availableBalance);
+    if(num(parsed.availableCredit)!=null)return round2(parsed.availableCredit);
+    return null;
+  }
+  function openingBalanceForObserved(parsed){
+    const observed=num(parsed.availableBalance);
+    const amount=num(parsed.amount);
+    if(observed==null||amount==null)return null;
+    if(parsed.kind==='purchase'||parsed.kind==='outgoing_transfer'||parsed.kind==='cash_withdrawal'||parsed.kind==='bill_payment'||parsed.kind==='mobile_recharge'){
+      return round2(observed+amount+(num(parsed.fee)||0));
+    }
+    if(parsed.kind==='deposit'||parsed.kind==='salary'||parsed.kind==='refund'||parsed.kind==='incoming_transfer'){
+      return round2(observed-amount);
+    }
+    return null;
+  }
+  function makeInstitution(parsed,uid){
+    if(parsed.bankId){
+      const b=Registry.get(parsed.bankId);
+      if(!b)return null;
+      return {id:uid('inst'),name:b.name,country:'UAE',type:'bank',bankRegistryId:b.id,autoDiscovered:true};
+    }
+    if(parsed.providerId&&Registry.getProvider){
+      const p=Registry.getProvider(parsed.providerId);
+      if(!p)return null;
+      return {id:uid('inst'),name:p.name,country:p.country||'UAE',type:'wallet_provider',providerRegistryId:p.id,autoDiscovered:true};
+    }
+    return null;
+  }
+  function makeAssetAccount(parsed,institutionId,uid,kind){
+    const opening=openingBalanceForObserved(parsed);
+    if(opening==null)return null;
+    const provider=!!parsed.providerId;
+    const accountType=provider?'ewallet':'bank';
+    const ref=parsed.accountRef||parsed.accountSuffix||null;
+    const name=provider
+      ? sourceDisplay(parsed)+' Wallet'
+      : sourceDisplay(parsed)+(ref?' • '+String(ref):' Account');
+    const out={
+      id:uid('a'),institutionId:institutionId||null,country:'UAE',name,
+      type:accountType,currency:parsed.currency||'AED',
+      openingBalance:opening,openingDebt:0,creditLimit:0,defaultRepaymentAccountId:null,
+      icon:provider?'📱':'🏦',color:'#00695C',archived:false,created:new Date(parsed.postedAt||Date.now()).toISOString().slice(0,10),
+      autoDiscovered:true,autoDiscoverySource:parsed.bankId||parsed.providerId||null,
+      observedBalance:num(parsed.availableBalance),observedBalanceAt:Number(parsed.postedAt)||Date.now()
+    };
+    if(ref)out.bankRefs=[String(ref)];
+    return out;
+  }
+  function makeCreditAccount(parsed,institutionId,uid){
+    if(!parsed.cardLast4)return null;
+    return {
+      id:uid('a'),institutionId:institutionId||null,country:'UAE',
+      name:sourceDisplay(parsed)+' • Credit ****'+parsed.cardLast4,
+      type:'credit',currency:parsed.currency||'AED',
+      openingBalance:0,openingDebt:0,creditLimit:0,defaultRepaymentAccountId:null,
+      icon:'💠',color:'#6A1B9A',archived:false,created:new Date(parsed.postedAt||Date.now()).toISOString().slice(0,10),
+      autoDiscovered:true,autoDiscoverySource:parsed.bankId||null,baselinePartial:true,
+      observedAvailableCredit:num(parsed.availableCredit),observedAvailableCreditAt:Number(parsed.postedAt)||Date.now()
+    };
+  }
+  function makeInstrument(parsed,account,institutionId,uid){
+    if(!parsed.cardLast4||!parsed.cardType||!account)return null;
+    const type=parsed.cardType;
+    if(!['credit_card','debit_card','wallet_card'].includes(type))return null;
+    return {
+      id:uid('card'),accountId:account.id,institutionId:institutionId||account.institutionId||null,
+      country:account.country||'UAE',type,last4:String(parsed.cardLast4),
+      name:(type==='credit_card'?'Credit':type==='debit_card'?'Debit':'Wallet')+' ****'+parsed.cardLast4,
+      icon:type==='credit_card'?'💠':type==='wallet_card'?'📱':'💳',
+      color:account.color||'#00695C',archived:false,autoDiscovered:true
+    };
+  }
+  function updateObservation(parsed,route){
+    const target=(route&&route.account)||(route&&route.fromAccount)||null;
+    if(!target)return [];
+    const updates=[];
+    if(num(parsed.availableBalance)!=null){
+      updates.push({accountId:target.id,field:'observedBalance',value:round2(parsed.availableBalance),at:Number(parsed.postedAt)||Date.now()});
+    }
+    if(num(parsed.availableCredit)!=null){
+      updates.push({accountId:target.id,field:'observedAvailableCredit',value:round2(parsed.availableCredit),at:Number(parsed.postedAt)||Date.now()});
+    }
+    return updates;
+  }
+  function autoEligible(parsed,route){
+    if(!parsed||!parsed.recognized)return {ok:false,reason:'unrecognized'};
+    if(parsed.ignored)return {ok:false,reason:parsed.reason||'ignored'};
+    if(Number(parsed.confidence||0)<0.95)return {ok:false,reason:'low-confidence'};
+    if(!route||route.status!=='routed')return {ok:false,reason:(route&&route.reason)||'route-required'};
+    if((num(parsed.fee)||0)+(num(parsed.vat)||0)>0)return {ok:false,reason:'fee-review-required'};
+    if(parsed.kind==='cash_withdrawal'&&!route.targetAccount)return {ok:false,reason:'cash-destination-required'};
+    return {ok:true};
+  }
+  function plan(parsed,state,options){
+    const uid=idFactory(options);
+    if(!parsed||!parsed.recognized)return {action:'review',reason:(parsed&&parsed.reason)||'unrecognized',confidence:0};
+    const dup=duplicateOf(parsed,state);
+    if(dup)return {action:'duplicate',reason:'already-imported',existingTransactionId:dup.id,confidence:1};
+
+    let draft=clone(state||{});
+    if(!Array.isArray(draft.institutions))draft.institutions=[];
+    if(!Array.isArray(draft.accounts))draft.accounts=[];
+    if(!Array.isArray(draft.paymentInstruments))draft.paymentInstruments=[];
+    if(!Array.isArray(draft.transactions))draft.transactions=[];
+
+    let route=MessageCore.resolveRoute(parsed,draft);
+    const direct=autoEligible(parsed,route);
+    if(direct.ok){
+      const built=MessageCore.buildTransaction(parsed,route,{uid});
+      if(!built.ok)return {action:'review',reason:built.reason||'build-failed',confidence:0};
+      return {action:'auto-save',reason:'exact-route',confidence:Math.min(1,Number(parsed.confidence||0)),transaction:built.transaction,create:{institutions:[],accounts:[],instruments:[]},observations:updateObservation(parsed,route)};
+    }
+
+    const create={institutions:[],accounts:[],instruments:[]};
+    if(!parsed.bankId&&!parsed.providerId)return {action:'review',reason:'source-not-identified',confidence:0};
+
+    let institution=findInstitution(draft,parsed);
+    if(!institution){
+      institution=makeInstitution(parsed,uid);
+      if(!institution)return {action:'review',reason:'source-not-identified',confidence:0};
+      create.institutions.push(institution);draft.institutions.push(institution);
+    }
+
+    if(parsed.kind==='purchase'&&parsed.cardLast4&&parsed.cardType){
+      if(parsed.cardType==='credit_card'){
+        const acc=makeCreditAccount(parsed,institution.id,uid);
+        if(!acc)return {action:'review',reason:'credit-discovery-incomplete',confidence:0};
+        const card=makeInstrument(parsed,acc,institution.id,uid);
+        create.accounts.push(acc);create.instruments.push(card);
+        draft.accounts.push(acc);draft.paymentInstruments.push(card);
+      }else if(parsed.cardType==='debit_card'||parsed.cardType==='wallet_card'){
+        const acc=makeAssetAccount(parsed,institution.id,uid,'purchase');
+        if(!acc)return {action:'review',reason:'observed-balance-required',confidence:0};
+        const expectedType=parsed.cardType==='wallet_card'?'ewallet':'bank';
+        acc.type=expectedType;
+        acc.icon=expectedType==='ewallet'?'📱':'🏦';
+        const card=makeInstrument(parsed,acc,institution.id,uid);
+        create.accounts.push(acc);create.instruments.push(card);
+        draft.accounts.push(acc);draft.paymentInstruments.push(card);
+      }
+    }else if(['deposit','salary','refund','incoming_transfer'].includes(parsed.kind)){
+      const acc=makeAssetAccount(parsed,institution.id,uid,parsed.kind);
+      if(!acc)return {action:'review',reason:'observed-balance-required',confidence:0};
+      create.accounts.push(acc);draft.accounts.push(acc);
+    }else{
+      return {action:'review',reason:direct.reason||'existing-source-required',confidence:0};
+    }
+
+    route=MessageCore.resolveRoute(parsed,draft);
+    const eligible=autoEligible(parsed,route);
+    if(!eligible.ok)return {action:'review',reason:eligible.reason,confidence:0,create};
+    const built=MessageCore.buildTransaction(parsed,route,{uid});
+    if(!built.ok)return {action:'review',reason:built.reason||'build-failed',confidence:0,create};
+    return {
+      action:'auto-save',reason:'safe-auto-discovery',confidence:Math.min(0.99,Number(parsed.confidence||0)),
+      transaction:built.transaction,create,observations:updateObservation(parsed,route),discovered:true
+    };
+  }
+  function applyPlan(state,plan){
+    if(!state||!plan||plan.action!=='auto-save')return false;
+    const create=plan.create||{};
+    arr(create.institutions).forEach(x=>state.institutions.push(clone(x)));
+    arr(create.accounts).forEach(x=>state.accounts.push(clone(x)));
+    arr(create.instruments).forEach(x=>state.paymentInstruments.push(clone(x)));
+    if(plan.transaction)state.transactions.push(clone(plan.transaction));
+    for(const o of arr(plan.observations)){
+      const a=state.accounts.find(x=>x&&x.id===o.accountId);
+      if(!a)continue;
+      a[o.field]=o.value;
+      a[o.field+'At']=o.at;
+    }
+    return true;
+  }
+  function reconciliation(parsed,state,plan,accountBalanceFn){
+    if(!parsed||!plan||plan.action!=='auto-save'||typeof accountBalanceFn!=='function')return null;
+    const observed=num(parsed.availableBalance);
+    if(observed==null)return null;
+    const tx=plan.transaction||{};
+    const accountId=tx.accountId||tx.fromAccountId||null;
+    if(!accountId)return null;
+    const calculated=round2(accountBalanceFn(state,accountId));
+    if(calculated==null)return null;
+    const diff=round2(observed-calculated);
+    return {accountId,observed:round2(observed),calculated,difference:diff,matched:Math.abs(diff)<=0.01};
+  }
+
+  return Object.freeze({
+    autoEligible,duplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay
+  });
+});
