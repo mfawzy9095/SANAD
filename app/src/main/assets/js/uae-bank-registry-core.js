@@ -542,6 +542,9 @@
     "popular": false
   }
 ].map(x=>Object.freeze(x)));
+  const PAYMENT_PROVIDERS=Object.freeze([
+    {id:'du-pay',name:'du Pay',aliases:['du Pay','duPay','du Pay wallet','duPay wallet','dupay.ae'],type:'digital_wallet',country:'UAE'}
+  ].map(x=>Object.freeze(x)));
   function normalize(value){
     return String(value==null?'':value).toLowerCase()
       .replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d))
@@ -558,6 +561,7 @@
   }
   function aliasesFor(bank){return [bank.name].concat(bank.aliases||[]);}
   function get(id){return BANKS.find(b=>b.id===id)||null;}
+  function getProvider(id){return PAYMENT_PROVIDERS.find(p=>p.id===id)||null;}
   function list(){return BANKS.slice().sort((a,b)=>{if(!!a.popular!==!!b.popular)return a.popular?-1:1;return a.name.localeCompare(b.name,'en');});}
   function detect(text){
     let best=null;
@@ -568,5 +572,14 @@
     }
     return best;
   }
-  return Object.freeze({SOURCE,BANKS,list,get,detect,normalize});
+  function detectProvider(text){
+    let best=null;
+    for(const provider of PAYMENT_PROVIDERS)for(const alias of [provider.name].concat(provider.aliases||[])){
+      if(!containsAlias(text,alias))continue;
+      const score=normalize(alias).length;
+      if(!best||score>best.score)best={provider,alias,score};
+    }
+    return best;
+  }
+  return Object.freeze({SOURCE,BANKS,PAYMENT_PROVIDERS,list,get,getProvider,detect,detectProvider,normalize});
 });

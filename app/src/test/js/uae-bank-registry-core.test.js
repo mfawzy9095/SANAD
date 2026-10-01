@@ -9,4 +9,6 @@ assert.strictEqual(R.detect('ADCB transaction alert').bank.id,'adcb');
 assert.strictEqual(R.detect('مصرف أبوظبي الإسلامي').bank.id,'adib');
 assert.strictEqual(R.detect('Wio Bank').bank.id,'wio');
 assert.strictEqual(R.get('ruya').name,'Ruya Community Islamic Bank L.L.C');
+assert.strictEqual(R.getProvider('du-pay').name,'du Pay');
+assert.strictEqual(R.detectProvider('Your du Pay wallet').provider.id,'du-pay');
 console.log('UAE bank registry regression tests: PASS');
