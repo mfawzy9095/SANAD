@@ -56,9 +56,8 @@
       });
     }
 
-    function webAuthnAvailable(storageMode){
+    function webAuthnEnvironmentAvailable(){
       return !!(
-        storageMode==='idb' &&
         host &&
         host.isSecureContext &&
         host.PublicKeyCredential &&
@@ -67,6 +66,10 @@
         cryptoObj &&
         cryptoObj.subtle
       );
+    }
+
+    function webAuthnAvailable(storageMode){
+      return storageMode==='idb'&&webAuthnEnvironmentAvailable();
     }
 
     async function getCredential(publicKey){
@@ -83,6 +86,7 @@
       nativeAvailable,
       nativeResult,
       nativeAuth,
+      webAuthnEnvironmentAvailable,
       webAuthnAvailable,
       getCredential,
       createCredential

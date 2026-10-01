@@ -27,6 +27,7 @@ const Adapter=require('../../main/assets/js/security-adapter.js');
   });
 
   assert.strictEqual(A.nativeAvailable(),true);
+  assert.strictEqual(A.webAuthnEnvironmentAvailable(),true);
   assert.strictEqual(A.webAuthnAvailable('idb'),true);
   assert.strictEqual(A.webAuthnAvailable('memory'),false);
 
@@ -60,6 +61,7 @@ const Adapter=require('../../main/assets/js/security-adapter.js');
   });
   assert.strictEqual(unavailable.nativeAvailable(),false);
   assert.strictEqual(await unavailable.nativeAuth('x'),false);
+  assert.strictEqual(unavailable.webAuthnEnvironmentAvailable(),false);
   assert.strictEqual(unavailable.webAuthnAvailable('idb'),false);
   await assert.rejects(()=>unavailable.getCredential({}),/webauthn-get-unavailable/);
   await assert.rejects(()=>unavailable.createCredential({}),/webauthn-create-unavailable/);

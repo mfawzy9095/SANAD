@@ -756,6 +756,7 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/feature-storage-core.js"></script>
 <script src="js/backup-core.js"></script>
 <script src="js/security-core.js"></script>
+<script src="js/security-adapter.js"></script>
 <script src="js/receipt-core.js"></script>
 <script src="js/schema-repair-core.js"></script>
 <script src="js/state-model-core.js"></script>
@@ -778,6 +779,7 @@ const StorageCore = window.SanadStorageCore;
 const FeatureStorageCore = window.SanadFeatureStorageCore;
 const BackupCore = window.SanadBackupCore;
 const SecurityCore = window.SanadSecurityCore;
+const SecurityAdapterCore = window.SanadSecurityAdapter;
 const ReceiptCore = window.SanadReceiptCore;
 const SchemaRepairCore = window.SanadSchemaRepairCore;
 const StateModelCore = window.SanadStateModelCore;
@@ -793,6 +795,7 @@ if (!StorageCore) throw new Error('SANAD storage core failed to load');
 if (!FeatureStorageCore) throw new Error('SANAD feature storage core failed to load');
 if (!BackupCore) throw new Error('SANAD backup core failed to load');
 if (!SecurityCore) throw new Error('SANAD security core failed to load');
+if (!SecurityAdapterCore) throw new Error('SANAD security adapter failed to load');
 if (!ReceiptCore) throw new Error('SANAD receipt core failed to load');
 if (!SchemaRepairCore) throw new Error('SANAD schema repair core failed to load');
 if (!StateModelCore) throw new Error('SANAD state model core failed to load');
@@ -810,6 +813,12 @@ const SecurityCrypto = SecurityCore.createSecurityCore({
   TextEncoder: window.TextEncoder,
   btoa: window.btoa.bind(window),
   atob: window.atob.bind(window)
+});
+const SecurityAdapter = SecurityAdapterCore.createSecurityAdapter({
+  host: window,
+  navigator: window.navigator,
+  crypto: window.crypto,
+  setTimeout: window.setTimeout.bind(window)
 });
 
 const CURRENCIES = {
@@ -7803,11 +7812,10 @@ const SanadSecurity = {
   setMarker(on){try{localStorage.setItem(this.markerKey,on?'1':'0');return true;}catch(_){return false;}},
   async hash(s){return SecurityCrypto.hash(s);},
   async recoveryDigest(code,saltB64,iterations){return SecurityCrypto.recoveryDigest(code,saltB64,iterations);},
-  nativeAvailable(){try{return !!(window.AndroidBridge&&typeof AndroidBridge.supportsDeviceAuth==='function'&&AndroidBridge.supportsDeviceAuth());}catch(_){return false;}},
-  supported(){return !!(SanadExtStorage.mode==='idb'&&(this.nativeAvailable()||(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials&&crypto.subtle)));},
-  _nativeResolve:null,
-  nativeResult(ok){if(this._nativeResolve){const r=this._nativeResolve;this._nativeResolve=null;r(!!ok);}},
-  async nativeAuth(reason){if(!this.nativeAvailable())return false;return await new Promise(resolve=>{this._nativeResolve=resolve;try{AndroidBridge.authenticateDevice(String(reason||'Verify SANAD'));}catch(e){this._nativeResolve=null;resolve(false);return;}setTimeout(()=>{if(this._nativeResolve===resolve){this._nativeResolve=null;resolve(false);}},60000);});},
+  nativeAvailable(){return SecurityAdapter.nativeAvailable();},
+  supported(){return !!(SanadExtStorage.mode==='idb'&&(this.nativeAvailable()||SecurityAdapter.webAuthnEnvironmentAvailable()));},
+  nativeResult(ok){return SecurityAdapter.nativeResult(ok);},
+  async nativeAuth(reason){return SecurityAdapter.nativeAuth(reason,60000);},
   onBackground(ts){if(this.cfg.enabled&&this.unlocked)this.backgroundAt=Number(ts)||Date.now();},
   onForeground(ts){
     if(!this.cfg.enabled||!this.unlocked||!this.backgroundAt){this.backgroundAt=0;return;}
@@ -7817,8 +7825,8 @@ const SanadSecurity = {
   async authorize(reason){
     if(this.nativeAvailable())return this.nativeAuth(reason||'Verify SANAD');
     if(!this.cfg.enabled)return true;
-    if(!(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials&&crypto.subtle&&this.cfg.credentialId))return false;
-    try{const cred=await navigator.credentials.get({publicKey:{challenge:this.random(),allowCredentials:[{type:'public-key',id:this.unb64(this.cfg.credentialId)}],timeout:60000,userVerification:'required'}});return !!cred;}catch(_){return false;}
+    if(!(SecurityAdapter.webAuthnEnvironmentAvailable()&&this.cfg.credentialId))return false;
+    try{const cred=await SecurityAdapter.getCredential({challenge:this.random(),allowCredentials:[{type:'public-key',id:this.unb64(this.cfg.credentialId)}],timeout:60000,userVerification:'required'});return !!cred;}catch(_){return false;}
   },
   async init(){const marker=this.markerEnabled(),stored=await SanadExtStorage.get('security',null),base={enabled:false,authMode:null,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(stored&&typeof stored==='object'){this.cfg=Object.assign(base,stored);this.setMarker(!!this.cfg.enabled);}else if(marker){this.cfg=Object.assign(base,{enabled:true,storageUnavailable:true});}else this.cfg=base;this.unlocked=!this.cfg.enabled;this.pendingStart=false;},
   ensureOverlay(){let el=document.getElementById('sanadLock');if(el)return el;el=document.createElement('div');el.id='sanadLock';el.className='sanad-lock';el.hidden=true;el.innerHTML='<div class="lock-card"><div class="lock-logo">س</div><h2>SANAD · سند</h2><p>التطبيق مقفول لحماية خصوصيتك.</p><button type="button" class="btn primary" data-sanad-act="unlock">🔐 فتح بالبصمة / قفل الجهاز</button><button type="button" class="btn text" data-sanad-act="recovery-unlock">استخدام رمز الاسترداد</button><div class="lock-note">لا يتم حفظ أو إرسال بيانات بصمتك إلى SANAD.</div></div>';document.body.appendChild(el);return el;},
@@ -7856,8 +7864,8 @@ const SanadSecurity = {
         if(!verified){toast('لم يتم التحقق من قفل الجهاز');return;}
         authMode='android-device';
       }else{
-        if(!(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials&&crypto.subtle&&SanadExtStorage.mode==='idb'))throw new Error('WebAuthn unavailable');
-        const cred=await navigator.credentials.create({publicKey:{challenge:this.random(),rp:{name:'SANAD'},user:{id:this.random(),name:'sanad-local-user',displayName:'SANAD local lock'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],timeout:60000,attestation:'none',authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'preferred'}}});
+        if(!SecurityAdapter.webAuthnAvailable(SanadExtStorage.mode))throw new Error('WebAuthn unavailable');
+        const cred=await SecurityAdapter.createCredential({challenge:this.random(),rp:{name:'SANAD'},user:{id:this.random(),name:'sanad-local-user',displayName:'SANAD local lock'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],timeout:60000,attestation:'none',authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'preferred'}});
         if(!cred)throw new Error('No credential');
         credentialId=this.b64(cred.rawId);
       }
@@ -7884,8 +7892,8 @@ const SanadSecurity = {
       if(!auto)toast('تعذر التحقق');
       return false;
     }
-    if(!(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials&&crypto.subtle)){toast('القفل غير متاح في هذه البيئة — استخدم رمز الاسترداد');return false;}
-    try{const cred=await navigator.credentials.get({publicKey:{challenge:this.random(),allowCredentials:[{type:'public-key',id:this.unb64(this.cfg.credentialId)}],timeout:60000,userVerification:'required'}});if(cred){this.finishUnlock();return true;}}catch(e){console.warn('unlock failed',e);}
+    if(!SecurityAdapter.webAuthnEnvironmentAvailable()){toast('القفل غير متاح في هذه البيئة — استخدم رمز الاسترداد');return false;}
+    try{const cred=await SecurityAdapter.getCredential({challenge:this.random(),allowCredentials:[{type:'public-key',id:this.unb64(this.cfg.credentialId)}],timeout:60000,userVerification:'required'});if(cred){this.finishUnlock();return true;}}catch(e){console.warn('unlock failed',e);}
     this._autoPrompting=false;this.ensureOverlay().classList.remove('auto-auth');toast('تعذر التحقق');return false;
   },
   async recovery(){const code=prompt(SanadI18n.lang==='en'?'Enter recovery code':'أدخل رمز الاسترداد');if(!code)return;let got='';try{got=(this.cfg.recoveryKdf==='PBKDF2-SHA256'&&this.cfg.recoverySalt)?await this.recoveryDigest(code,this.cfg.recoverySalt,this.cfg.recoveryIterations):await this.hash(this.normalizeRecovery(code));}catch(e){console.warn('recovery verify failed',e);}if(got&&got===this.cfg.recoveryHash){const next={enabled:false,authMode:null,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(!await SanadExtStorage.set('security',next)){toast('تعذر حفظ إعدادات القفل');return;}this.cfg=next;this.setMarker(false);this.finishUnlock();render();toast('تم فتح التطبيق وإيقاف القفل');}else toast('رمز غير صحيح');}

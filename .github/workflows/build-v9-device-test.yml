@@ -139,6 +139,16 @@ jobs:
           node app/src/test/js/security-core.test.js
           SECURITY_ADAPTER="app/src/main/assets/js/security-adapter.js"
           test -s "$SECURITY_ADAPTER"
+          SECURITY_ADAPTER_SHA="$(sha256sum "$SECURITY_ADAPTER" | awk '{print $1}')"
+          echo "SECURITY_ADAPTER_SHA=$SECURITY_ADAPTER_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/security-adapter.js"></script>' "$HTML"
+          grep -q "const SecurityAdapterCore = window.SanadSecurityAdapter" "$HTML"
+          grep -q "SecurityAdapterCore.createSecurityAdapter" "$HTML"
+          grep -q "SecurityAdapter.nativeAvailable()" "$HTML"
+          grep -q "SecurityAdapter.nativeAuth(reason,60000)" "$HTML"
+          grep -q "SecurityAdapter.webAuthnEnvironmentAvailable()" "$HTML"
+          grep -q "SecurityAdapter.getCredential" "$HTML"
+          grep -q "SecurityAdapter.createCredential" "$HTML"
           node --check "$SECURITY_ADAPTER"
           node app/src/test/js/security-adapter.test.js
 
@@ -359,6 +369,7 @@ jobs:
           feature=h.index('<script src="js/feature-storage-core.js"></script>')
           backup=h.index('<script src="js/backup-core.js"></script>')
           security=h.index('<script src="js/security-core.js"></script>')
+          security_adapter=h.index('<script src="js/security-adapter.js"></script>')
           receipt=h.index('<script src="js/receipt-core.js"></script>')
           schema_repair=h.index('<script src="js/schema-repair-core.js"></script>')
           state_model=h.index('<script src="js/state-model-core.js"></script>')
@@ -375,6 +386,7 @@ jobs:
           feature_bind=h.index('const FeatureStorageCore = window.SanadFeatureStorageCore', inline)
           backup_bind=h.index('const BackupCore = window.SanadBackupCore', inline)
           security_bind=h.index('const SecurityCore = window.SanadSecurityCore', inline)
+          security_adapter_bind=h.index('const SecurityAdapterCore = window.SanadSecurityAdapter', inline)
           receipt_bind=h.index('const ReceiptCore = window.SanadReceiptCore', inline)
           schema_repair_bind=h.index('const SchemaRepairCore = window.SanadSchemaRepairCore', inline)
           state_model_bind=h.index('const StateModelCore = window.SanadStateModelCore', inline)
@@ -384,7 +396,7 @@ jobs:
           mutation_bind=h.index('const MutationCore = window.SanadMutationCore', inline)
           reminder_bind=h.index('const ReminderCore = window.SanadReminderCore', inline)
           report_bind=h.index('const ReportCore = window.SanadReportCore', inline)
-          assert finance < state < storage < feature < backup < security < receipt < schema_repair < state_model < i18n < schema < persistence < mutation < reminder < report < inline < bind < state_bind < storage_bind < feature_bind < backup_bind < security_bind < receipt_bind < schema_repair_bind < state_model_bind < i18n_bind < schema_bind < persistence_bind < mutation_bind < reminder_bind < report_bind
+          assert finance < state < storage < feature < backup < security < security_adapter < receipt < schema_repair < state_model < i18n < schema < persistence < mutation < reminder < report < inline < bind < state_bind < storage_bind < feature_bind < backup_bind < security_bind < security_adapter_bind < receipt_bind < schema_repair_bind < state_model_bind < i18n_bind < schema_bind < persistence_bind < mutation_bind < reminder_bind < report_bind
           assert "accountBalance(accountId){ return FinanceCore.accountBalance(S, accountId); }" in h
           assert "creditAvailable(accountId){ return FinanceCore.creditAvailable(S, accountId); }" in h
           receipt_ui=h[h.index("const SanadReceipts = {"):h.index("const SanadSecurity = {")]
@@ -486,6 +498,8 @@ jobs:
           test "$EMBEDDED_BACKUP_CORE_SHA" = "$BACKUP_CORE_SHA"
           EMBEDDED_SECURITY_CORE_SHA="$(unzip -p "$APK" assets/js/security-core.js | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_SECURITY_CORE_SHA" = "$SECURITY_CORE_SHA"
+          EMBEDDED_SECURITY_ADAPTER_SHA="$(unzip -p "$APK" assets/js/security-adapter.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_SECURITY_ADAPTER_SHA" = "$SECURITY_ADAPTER_SHA"
           EMBEDDED_RECEIPT_CORE_SHA="$(unzip -p "$APK" assets/js/receipt-core.js | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_RECEIPT_CORE_SHA" = "$RECEIPT_CORE_SHA"
           EMBEDDED_SCHEMA_REPAIR_CORE_SHA="$(unzip -p "$APK" assets/js/schema-repair-core.js | sha256sum | awk '{print $1}')"
