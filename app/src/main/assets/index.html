@@ -758,6 +758,7 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/security-core.js"></script>
 <script src="js/receipt-core.js"></script>
 <script src="js/schema-repair-core.js"></script>
+<script src="js/state-model-core.js"></script>
 <script>
 /* =========================================================
    SANAD — Architecture Refactor
@@ -773,6 +774,7 @@ const BackupCore = window.SanadBackupCore;
 const SecurityCore = window.SanadSecurityCore;
 const ReceiptCore = window.SanadReceiptCore;
 const SchemaRepairCore = window.SanadSchemaRepairCore;
+const StateModelCore = window.SanadStateModelCore;
 if (!FinanceCore) throw new Error('SANAD finance core failed to load');
 if (!StateCore) throw new Error('SANAD state core failed to load');
 if (!StorageCore) throw new Error('SANAD storage core failed to load');
@@ -781,6 +783,7 @@ if (!BackupCore) throw new Error('SANAD backup core failed to load');
 if (!SecurityCore) throw new Error('SANAD security core failed to load');
 if (!ReceiptCore) throw new Error('SANAD receipt core failed to load');
 if (!SchemaRepairCore) throw new Error('SANAD schema repair core failed to load');
+if (!StateModelCore) throw new Error('SANAD state model core failed to load');
 
 const SchemaRepair = SchemaRepairCore.createSchemaRepairCore({financeCore:FinanceCore});
 
@@ -1699,20 +1702,14 @@ const Schema = {
   }
 };
 
-const DEFAULT_STATE = () => ({
-  schemaVersion: SCHEMA_VERSION,
-  institutions:[],accounts:[],paymentInstruments:[],transactions:[],beneficiaries:[],
-  categories: deepClone(DEFAULT_CATS),
-  tags:[],recurring:[],
-  settings:{
-    theme:'light',language:'ar',onboarded:false,hideAmounts:false,notificationsEnabled:false,
-    budgets:{},saving:{amount:0,currency:'EGP',saved:0,targetDate:null},
-    warnPct:80,alertPct:100,lastFx:{},dismissedReminders:{},
-    defaultCountry:'UAE',primaryAccountByCountry:{},lastExpenseSourceByCountry:{},
-    categoryBudgets:{},overallSpendingLimits:{},budgetAlerts:{},
-    defaultAccountByCountry:{}, defaultInstrumentByCountry:{}
-  }
+const StateModel = StateModelCore.createStateModel({
+  schemaVersion:SCHEMA_VERSION,
+  defaultCats:DEFAULT_CATS,
+  countries:COUNTRIES,
+  deepClone
 });
+const DEFAULT_STATE = () => StateModel.defaultState();
+
 const S = {
   schemaVersion: SCHEMA_VERSION,
   institutions:[],accounts:[],paymentInstruments:[],transactions:[],beneficiaries:[],
@@ -1738,49 +1735,9 @@ const S = {
 
 function canWrite(){ return S.previewMode || S.storageStatus === 'ok'; }
 
-function snapshotState(){
-  return {
-    schemaVersion: S.schemaVersion,
-    institutions: deepClone(S.institutions),
-    accounts: deepClone(S.accounts),
-    paymentInstruments: deepClone(S.paymentInstruments),
-    transactions: deepClone(S.transactions),
-    beneficiaries: deepClone(S.beneficiaries),
-    categories: deepClone(S.categories),
-    tags: deepClone(S.tags),
-    recurring: deepClone(S.recurring),
-    settings: deepClone(S.settings)
-  };
-}
+function snapshotState(){ return StateModel.snapshotState(S); }
 
-function loadStateInto(state){
-  S.schemaVersion = state.schemaVersion || SCHEMA_VERSION;
-  S.institutions = Array.isArray(state.institutions) ? state.institutions : [];
-  S.accounts = Array.isArray(state.accounts) ? state.accounts : [];
-  S.paymentInstruments = Array.isArray(state.paymentInstruments) ? state.paymentInstruments : [];
-  S.transactions = Array.isArray(state.transactions) ? state.transactions : [];
-  S.beneficiaries = Array.isArray(state.beneficiaries) ? state.beneficiaries : [];
-  S.categories = state.categories && typeof state.categories === 'object'
-    ? {expense: Array.isArray(state.categories.expense) ? state.categories.expense : [],
-       income: Array.isArray(state.categories.income) ? state.categories.income : []}
-    : deepClone(DEFAULT_CATS);
-  S.tags = Array.isArray(state.tags) ? state.tags : [];
-  S.recurring = Array.isArray(state.recurring) ? state.recurring : [];
-  S.settings = Object.assign({}, DEFAULT_STATE().settings, state.settings || {});
-  if (!S.settings.budgets || typeof S.settings.budgets !== 'object') S.settings.budgets = {};
-  if (!S.settings.saving || typeof S.settings.saving !== 'object') S.settings.saving = {amount:0,currency:'EGP',saved:0,targetDate:null};
-  if (!S.settings.lastFx || typeof S.settings.lastFx !== 'object') S.settings.lastFx = {};
-  if (!S.settings.dismissedReminders || typeof S.settings.dismissedReminders !== 'object') S.settings.dismissedReminders = {};
-  if (!S.settings.primaryAccountByCountry || typeof S.settings.primaryAccountByCountry !== 'object') S.settings.primaryAccountByCountry = {};
-  if (!S.settings.lastExpenseSourceByCountry || typeof S.settings.lastExpenseSourceByCountry !== 'object') S.settings.lastExpenseSourceByCountry = {};
-  if (!S.settings.categoryBudgets || typeof S.settings.categoryBudgets !== 'object') S.settings.categoryBudgets = {};
-  if (!S.settings.overallSpendingLimits || typeof S.settings.overallSpendingLimits !== 'object') S.settings.overallSpendingLimits = {};
-  if (!S.settings.budgetAlerts || typeof S.settings.budgetAlerts !== 'object') S.settings.budgetAlerts = {};
-  if (!S.settings.defaultAccountByCountry || typeof S.settings.defaultAccountByCountry !== 'object') S.settings.defaultAccountByCountry = {};
-  if (!S.settings.defaultInstrumentByCountry || typeof S.settings.defaultInstrumentByCountry !== 'object') S.settings.defaultInstrumentByCountry = {};
-  if (!S.settings.defaultCountry || !COUNTRIES[S.settings.defaultCountry]) S.settings.defaultCountry = 'UAE';
-  S.activeCountry = S.settings.defaultCountry;
-}
+function loadStateInto(state){ return StateModel.loadStateInto(S,state); }
 
 async function persist(){
   if (!canWrite()) return false;
