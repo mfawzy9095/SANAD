@@ -1,10 +1,10 @@
-name: SANAD V9.0.10 Auto Unlock RC Android Build
-# stability-gate: v9.0.10-auto-unlock
+name: SANAD Architecture Refactor Gate
+# architecture-gate: phase-1-finance-core
 
 on:
   push:
     branches:
-      - fix-v9.0.10-auto-unlock
+      - refactor-v9.1-architecture
   pull_request:
     branches:
       - main
@@ -51,7 +51,7 @@ jobs:
           grep -q 'android:icon="@mipmap/ic_launcher"' app/src/main/AndroidManifest.xml
           grep -q 'android:roundIcon="@mipmap/ic_launcher_round"' app/src/main/AndroidManifest.xml
 
-      - name: Verify web source and V9.0.10 auto-unlock regressions
+      - name: Verify stable baseline and modular finance core
         shell: bash
         run: |
           set -euo pipefail
@@ -59,6 +59,18 @@ jobs:
           test -s "$HTML"
           SOURCE_SHA="$(sha256sum "$HTML" | awk '{print $1}')"
           echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
+          CORE="app/src/main/assets/js/finance-core.js"
+          test -s "$CORE"
+          CORE_SHA="$(sha256sum "$CORE" | awk '{print $1}')"
+          echo "CORE_SHA=$CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/finance-core.js"></script>' "$HTML"
+          grep -q "const FinanceCore = window.SanadFinanceCore" "$HTML"
+          grep -q "FinanceCore.accountBalance(S, accountId)" "$HTML"
+          grep -q "FinanceCore.accountDebt(S, accountId)" "$HTML"
+          grep -q "FinanceCore.creditAvailable(S, accountId)" "$HTML"
+          grep -q "FinanceCore.suggestRate(fromCur,toCur,S.settings.lastFx,DEFAULT_FX)" "$HTML"
+          node --check "$CORE"
+          node app/src/test/js/finance-core.test.js
 
           grep -q "const SANAD_V9_VERSION = '9.0.10'" "$HTML"
           grep -q "_criticalMutationInFlight" "$HTML"
@@ -156,6 +168,17 @@ jobs:
           PY
 
           python3 - <<'PY'
+          from pathlib import Path
+          h=Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
+          ext=h.index('<script src="js/finance-core.js"></script>')
+          inline=h.index('<script>', ext)
+          bind=h.index('const FinanceCore = window.SanadFinanceCore', inline)
+          assert ext < inline < bind
+          assert "accountBalance(accountId){ return FinanceCore.accountBalance(S, accountId); }" in h
+          assert "creditAvailable(accountId){ return FinanceCore.creditAvailable(S, accountId); }" in h
+          PY
+
+          python3 - <<'PY'
           import pathlib,re
           html=pathlib.Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
           scripts=re.findall(r"<script[^>]*>(.*?)</script>",html,re.S)
@@ -164,6 +187,11 @@ jobs:
           PY
           for i in $(seq 1 10); do node --check /tmp/sanad-v9010.js >/dev/null; done
           echo "V9.0.10 source gates passed 10x"
+
+      - name: JavaScript finance-core regression tests
+        run: |
+          node --check app/src/main/assets/js/finance-core.js
+          node app/src/test/js/finance-core.test.js
 
       - name: JVM regression tests
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
@@ -180,7 +208,7 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.10-AUTO-UNLOCK-RC.apk"
+          cp "$APK" "SANAD-V9.0.10-REFACTOR-A1.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
@@ -199,17 +227,19 @@ jobs:
           ! grep -q "android.permission.WRITE_EXTERNAL_STORAGE" apk-permissions.txt
           EMBEDDED_SHA="$(unzip -p "$APK" assets/index.html | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_SHA" = "$SOURCE_SHA"
+          EMBEDDED_CORE_SHA="$(unzip -p "$APK" assets/js/finance-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_CORE_SHA" = "$CORE_SHA"
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          sha256sum "SANAD-V9.0.10-AUTO-UNLOCK-RC.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.0.10-REFACTOR-A1.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.10-AUTO-UNLOCK-RC
+          name: SANAD-V9.0.10-REFACTOR-A1
           path: |
-            SANAD-V9.0.10-AUTO-UNLOCK-RC.apk
+            SANAD-V9.0.10-REFACTOR-A1.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
