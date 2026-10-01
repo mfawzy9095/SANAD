@@ -71,6 +71,16 @@ jobs:
           grep -q "FinanceCore.suggestRate(fromCur,toCur,S.settings.lastFx,DEFAULT_FX)" "$HTML"
           node --check "$CORE"
           node app/src/test/js/finance-core.test.js
+          STATE_CORE="app/src/main/assets/js/state-core.js"
+          test -s "$STATE_CORE"
+          STATE_CORE_SHA="$(sha256sum "$STATE_CORE" | awk '{print $1}')"
+          echo "STATE_CORE_SHA=$STATE_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/state-core.js"></script>' "$HTML"
+          grep -q "const StateCore = window.SanadStateCore" "$HTML"
+          grep -q "StateCore.stateFingerprint(st)" "$HTML"
+          grep -q "StateCore.compareTxDesc(a,b)" "$HTML"
+          node --check "$STATE_CORE"
+          node app/src/test/js/state-core.test.js
 
           grep -q "const SANAD_V9_VERSION = '9.0.10'" "$HTML"
           grep -q "_criticalMutationInFlight" "$HTML"
@@ -170,10 +180,12 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           h=Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
-          ext=h.index('<script src="js/finance-core.js"></script>')
-          inline=h.index('<script>', ext)
+          finance=h.index('<script src="js/finance-core.js"></script>')
+          state=h.index('<script src="js/state-core.js"></script>')
+          inline=h.index('<script>', state)
           bind=h.index('const FinanceCore = window.SanadFinanceCore', inline)
-          assert ext < inline < bind
+          state_bind=h.index('const StateCore = window.SanadStateCore', inline)
+          assert finance < state < inline < bind < state_bind
           assert "accountBalance(accountId){ return FinanceCore.accountBalance(S, accountId); }" in h
           assert "creditAvailable(accountId){ return FinanceCore.creditAvailable(S, accountId); }" in h
           PY
@@ -188,10 +200,12 @@ jobs:
           for i in $(seq 1 10); do node --check /tmp/sanad-v9010.js >/dev/null; done
           echo "V9.0.10 source gates passed 10x"
 
-      - name: JavaScript finance-core regression tests
+      - name: JavaScript core regression tests
         run: |
           node --check app/src/main/assets/js/finance-core.js
           node app/src/test/js/finance-core.test.js
+          node --check app/src/main/assets/js/state-core.js
+          node app/src/test/js/state-core.test.js
 
       - name: JVM regression tests
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
@@ -229,6 +243,8 @@ jobs:
           test "$EMBEDDED_SHA" = "$SOURCE_SHA"
           EMBEDDED_CORE_SHA="$(unzip -p "$APK" assets/js/finance-core.js | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_CORE_SHA" = "$CORE_SHA"
+          EMBEDDED_STATE_CORE_SHA="$(unzip -p "$APK" assets/js/state-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_STATE_CORE_SHA" = "$STATE_CORE_SHA"
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
