@@ -753,6 +753,7 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/finance-core.js"></script>
 <script src="js/state-core.js"></script>
 <script src="js/storage-core.js"></script>
+<script src="js/feature-storage-core.js"></script>
 <script>
 /* =========================================================
    SANAD — Architecture Refactor
@@ -763,9 +764,11 @@ window.__sanadSplashBorn=performance.now();
 const FinanceCore = window.SanadFinanceCore;
 const StateCore = window.SanadStateCore;
 const StorageCore = window.SanadStorageCore;
+const FeatureStorageCore = window.SanadFeatureStorageCore;
 if (!FinanceCore) throw new Error('SANAD finance core failed to load');
 if (!StateCore) throw new Error('SANAD state core failed to load');
 if (!StorageCore) throw new Error('SANAD storage core failed to load');
+if (!FeatureStorageCore) throw new Error('SANAD feature storage core failed to load');
 
 const CURRENCIES = {
   EGP:{code:'EGP',symbol:'ج.م',name:'جنيه مصري',flag:'🇪🇬'},
@@ -8795,60 +8798,16 @@ const SANAD_FIREBASE_SDK = '10.14.1';
 /* Local Stable policy: cloud/family remain disabled until V9.1 per-record sync + rules ship. */
 const SANAD_CLOUD_FAMILY_BETA_ENABLED = false;
 
-const SanadExtStorage = {
-  db:null, mode:'memory', memKV:new Map(), memReceipts:new Map(),
-  async init(){
-    if (!('indexedDB' in window)) { this.mode='memory'; return {mode:this.mode}; }
-    try {
-      this.db = await new Promise((resolve,reject)=>{
-        const req=indexedDB.open('sanad_features_v1',1);
-        req.onupgradeneeded=()=>{
-          const db=req.result;
-          if(!db.objectStoreNames.contains('kv')) db.createObjectStore('kv',{keyPath:'key'});
-          if(!db.objectStoreNames.contains('receipts')) db.createObjectStore('receipts',{keyPath:'txId'});
-        };
-        req.onsuccess=()=>resolve(req.result);
-        req.onerror=()=>reject(req.error||new Error('feature db open failed'));
-        req.onblocked=()=>reject(new Error('feature db blocked'));
-      });
-      this.mode='idb';
-    } catch(e){ console.warn('SANAD feature DB fallback:',e); this.mode='memory'; }
-    return {mode:this.mode};
+const SanadExtStorage = FeatureStorageCore.createFeatureStorage({
+  dbName: 'sanad_features_v1',
+  getIndexedDB: () => {
+    try { return ('indexedDB' in window) ? indexedDB : null; }
+    catch(_) { return null; }
   },
-  async get(key, fallback=null){
-    if(this.mode!=='idb' || !this.db) return this.memKV.has(key)?deepClone(this.memKV.get(key)):fallback;
-    try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('kv','readonly');const r=tx.objectStore('kv').get(key);r.onsuccess=()=>resolve(r.result?deepClone(r.result.value):fallback);r.onerror=()=>reject(r.error);});}catch(_){return fallback;}
-  },
-  async set(key,value){
-    if(this.mode!=='idb' || !this.db){this.memKV.set(key,deepClone(value)); return true;}
-    try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('kv','readwrite');tx.objectStore('kv').put({key,value:deepClone(value)});tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('aborted'));});}catch(_){return false;}
-  },
-  async del(key){if(this.mode!=='idb' || !this.db){this.memKV.delete(key);return true;}try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('kv','readwrite');tx.objectStore('kv').delete(key);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);});}catch(_){return false;}},
-  async putReceipt(txId,blob,meta){if(!txId||!blob)return false;const rec={txId,blob,meta:Object.assign({updatedAt:Date.now()},meta||{})};if(this.mode!=='idb'||!this.db){this.memReceipts.set(txId,rec);return true;}try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readwrite');tx.objectStore('receipts').put(rec);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);});}catch(_){return false;}},
-  async getReceipt(txId){if(this.mode!=='idb'||!this.db)return this.memReceipts.get(txId)||null;try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readonly');const r=tx.objectStore('receipts').get(txId);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error);});}catch(_){return null;}},
-  async delReceipt(txId){if(this.mode!=='idb'||!this.db){this.memReceipts.delete(txId);return true;}try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readwrite');tx.objectStore('receipts').delete(txId);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);});}catch(_){return false;}},
-  async listReceipts(){if(this.mode!=='idb'||!this.db)return Array.from(this.memReceipts.values());try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readonly');const r=tx.objectStore('receipts').getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});}catch(_){return [];}},
-  async replaceReceipts(records){
-    records=Array.isArray(records)?records:[];
-    if(this.mode!=='idb'||!this.db){const next=new Map();for(const rec of records){if(!rec||!rec.txId||!rec.blob)return false;next.set(rec.txId,rec);}this.memReceipts=next;return true;}
-    try{return await new Promise((resolve,reject)=>{const tx=this.db.transaction('receipts','readwrite'),store=tx.objectStore('receipts');store.clear();for(const rec of records){if(!rec||!rec.txId||!rec.blob){tx.abort();return;}store.put(rec);}tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('receipt replace aborted'));});}catch(_){return false;}
-  },
-  async pruneReceiptOrphans(validIds){const valid=validIds instanceof Set?validIds:new Set(validIds||[]),all=await this.listReceipts();let removed=0;for(const rec of all){if(rec&&rec.txId&&!valid.has(rec.txId)){if(await this.delReceipt(rec.txId))removed++;}}return removed;},
-  async secureWipe(){
-    this.memKV.clear(); this.memReceipts.clear();
-    if(this.mode!=='idb'||!this.db){this.db=null;this.mode='memory';return true;}
-    try{
-      try{this.db.close();}catch(_){}
-      this.db=null;
-      const ok=await new Promise(resolve=>{
-        let req;try{req=indexedDB.deleteDatabase('sanad_features_v1');}catch(_){resolve(false);return;}
-        req.onsuccess=()=>resolve(true);req.onerror=()=>resolve(false);req.onblocked=()=>resolve(false);
-      });
-      if(ok)this.mode='memory';
-      return ok;
-    }catch(_){return false;}
-  }
-};
+  deepClone,
+  warn: (...args) => console.warn(...args)
+});
+
 
 const SanadI18n = {
   lang:'ar',
