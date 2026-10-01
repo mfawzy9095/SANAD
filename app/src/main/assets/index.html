@@ -755,6 +755,8 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/storage-core.js"></script>
 <script src="js/feature-storage-core.js"></script>
 <script src="js/backup-core.js"></script>
+<script src="js/security-core.js"></script>
+<script src="js/receipt-core.js"></script>
 <script>
 /* =========================================================
    SANAD — Architecture Refactor
@@ -767,11 +769,22 @@ const StateCore = window.SanadStateCore;
 const StorageCore = window.SanadStorageCore;
 const FeatureStorageCore = window.SanadFeatureStorageCore;
 const BackupCore = window.SanadBackupCore;
+const SecurityCore = window.SanadSecurityCore;
+const ReceiptCore = window.SanadReceiptCore;
 if (!FinanceCore) throw new Error('SANAD finance core failed to load');
 if (!StateCore) throw new Error('SANAD state core failed to load');
 if (!StorageCore) throw new Error('SANAD storage core failed to load');
 if (!FeatureStorageCore) throw new Error('SANAD feature storage core failed to load');
 if (!BackupCore) throw new Error('SANAD backup core failed to load');
+if (!SecurityCore) throw new Error('SANAD security core failed to load');
+if (!ReceiptCore) throw new Error('SANAD receipt core failed to load');
+
+const SecurityCrypto = SecurityCore.createSecurityCore({
+  crypto: window.crypto,
+  TextEncoder: window.TextEncoder,
+  btoa: window.btoa.bind(window),
+  atob: window.atob.bind(window)
+});
 
 const CURRENCIES = {
   EGP:{code:'EGP',symbol:'ج.م',name:'جنيه مصري',flag:'🇪🇬'},
@@ -9024,14 +9037,29 @@ const SanadReceipts = {
     return input;
   },
   async handleFile(file){
-    if(!file)return; if(!/^image\//.test(file.type)){toast('اختر صورة فاتورة');return;} if(file.size>15*1024*1024){toast('الصورة كبيرة جداً');return;}
-    try{ const blob=await this.compress(file); this.pending={blob,meta:{name:file.name||'receipt.jpg',type:blob.type||'image/jpeg',size:blob.size,updatedAt:Date.now()}}; this.refreshControls(); toast('فاتورة مرفقة'); }
-    catch(e){console.error(e);toast('تعذر معالجة صورة الفاتورة');}
+    const check=ReceiptCore.validateFile(file);
+    if(!check.ok){
+      if(check.reason==='missing')return;
+      if(check.reason==='type'){toast('اختر صورة فاتورة');return;}
+      if(check.reason==='size'){toast('الصورة كبيرة جداً');return;}
+      return;
+    }
+    try{
+      const blob=await this.compress(file);
+      this.pending={blob,meta:ReceiptCore.makeMeta(file,blob,Date.now())};
+      this.refreshControls();
+      toast('فاتورة مرفقة');
+    }catch(e){console.error(e);toast('تعذر معالجة صورة الفاتورة');}
     this.ensureInput().value='';
   },
   async compress(file){
-    const bmp=await createImageBitmap(file); const max=1600; const scale=Math.min(1,max/Math.max(bmp.width,bmp.height)); const w=Math.max(1,Math.round(bmp.width*scale)),h=Math.max(1,Math.round(bmp.height*scale));
-    const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);ctx.drawImage(bmp,0,0,w,h); if(bmp.close)bmp.close();
+    const bmp=await createImageBitmap(file);
+    const dims=ReceiptCore.compressionDimensions(bmp.width,bmp.height);
+    const c=document.createElement('canvas');
+    c.width=dims.width;c.height=dims.height;
+    const ctx=c.getContext('2d',{alpha:false});
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,dims.width,dims.height);ctx.drawImage(bmp,0,0,dims.width,dims.height);
+    if(bmp.close)bmp.close();
     return await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('canvas encode failed')),'image/jpeg',0.78));
   },
   async currentRecord(){const id=S.form&&['tx','transfer'].includes(S.form._sheet)&&S.form.id;return id?SanadExtStorage.getReceipt(id):null;},
@@ -9046,7 +9074,7 @@ const SanadReceipts = {
     let rec=this.pending; if(!rec&&S.form&&S.form.id)rec=await SanadExtStorage.getReceipt(S.form.id);
     const old=box.querySelector('.receipt-preview'); if(old)old.remove(); const del=box.querySelector('[data-sanad-act="remove-receipt"]');if(del)del.remove();
     if(rec&&rec.blob){
-      state.textContent='فاتورة مرفقة · '+Math.max(1,Math.round(rec.blob.size/1024))+' KB'; const url=URL.createObjectURL(rec.blob);this.objectUrls.add(url);
+      state.textContent='فاتورة مرفقة · '+ReceiptCore.sizeLabel(rec.blob.size); const url=URL.createObjectURL(rec.blob);this.objectUrls.add(url);
       const img=document.createElement('img');img.className='receipt-preview';img.src=url;img.alt='Receipt preview';box.appendChild(img);
       const b=document.createElement('button');b.type='button';b.className='btn text';b.dataset.sanadAct='remove-receipt';b.textContent='🗑 إزالة الفاتورة';box.appendChild(b);
     }else state.textContent='لا توجد فاتورة';
@@ -9074,14 +9102,14 @@ const SanadReceipts = {
 
 const SanadSecurity = {
   cfg:{enabled:false,authMode:null,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false}, unlocked:true, pendingStart:false, markerKey:'sanad_security_enabled_v1', backgroundAt:0, relockAfterMs:30000, _autoPrompting:false,
-  b64(bytes){return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');},
-  unb64(s){s=String(s||'').replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const bin=atob(s);return Uint8Array.from(bin,c=>c.charCodeAt(0));},
-  random(n=32){const a=new Uint8Array(n);crypto.getRandomValues(a);return a;},
-  normalizeRecovery(s){return String(s||'').replace(/[^0-9]/g,'');},
+  b64(bytes){return SecurityCrypto.b64(bytes);},
+  unb64(s){return SecurityCrypto.unb64(s);},
+  random(n=32){return SecurityCrypto.random(n);},
+  normalizeRecovery(s){return SecurityCrypto.normalizeRecovery(s);},
   markerEnabled(){try{return localStorage.getItem(this.markerKey)==='1';}catch(_){return false;}},
   setMarker(on){try{localStorage.setItem(this.markerKey,on?'1':'0');return true;}catch(_){return false;}},
-  async hash(s){const b=new TextEncoder().encode(String(s));return this.b64(await crypto.subtle.digest('SHA-256',b));},
-  async recoveryDigest(code,saltB64,iterations){const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(this.normalizeRecovery(code)),{name:'PBKDF2'},false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:this.unb64(saltB64),iterations:Number(iterations)||210000,hash:'SHA-256'},key,256);return this.b64(bits);},
+  async hash(s){return SecurityCrypto.hash(s);},
+  async recoveryDigest(code,saltB64,iterations){return SecurityCrypto.recoveryDigest(code,saltB64,iterations);},
   nativeAvailable(){try{return !!(window.AndroidBridge&&typeof AndroidBridge.supportsDeviceAuth==='function'&&AndroidBridge.supportsDeviceAuth());}catch(_){return false;}},
   supported(){return !!(SanadExtStorage.mode==='idb'&&(this.nativeAvailable()||(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials&&crypto.subtle)));},
   _nativeResolve:null,
@@ -9140,7 +9168,7 @@ const SanadSecurity = {
         if(!cred)throw new Error('No credential');
         credentialId=this.b64(cred.rawId);
       }
-      const digits=Array.from(this.random(16)).map(x=>(x%10)).join(''),recovery=digits.replace(/(\d{4})(?=\d)/g,'$1-');
+      const digits=SecurityCrypto.generateRecoveryCode(16),recovery=SecurityCrypto.formatRecovery(digits);
       const salt=this.b64(this.random(16)),iterations=210000,recoveryHash=await this.recoveryDigest(digits,salt,iterations);
       this.cfg={enabled:true,authMode,credentialId,recoveryHash,recoverySalt:salt,recoveryKdf:'PBKDF2-SHA256',recoveryIterations:iterations,storageUnavailable:false};
       if(!await SanadExtStorage.set('security',this.cfg))throw new Error('security settings write failed');
