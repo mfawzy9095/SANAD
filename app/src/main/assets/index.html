@@ -1330,27 +1330,16 @@ const Finance = {
     return ReportCore.chartBuckets(period,expenses,month||S.month,Date.now());
   },
   getCategoryBudget(month, country, currency, category){
-    const mb = S.settings.categoryBudgets[month];
-    if (!mb || !mb[country] || !mb[country][currency]) return 0;
-    return Number(mb[country][currency][category]) || 0;
+    return ReportCore.getCategoryBudget(S.settings.categoryBudgets,month,country,currency,category);
   },
   setCategoryBudget(month, country, currency, category, amount){
-    if (!S.settings.categoryBudgets[month]) S.settings.categoryBudgets[month] = {};
-    if (!S.settings.categoryBudgets[month][country]) S.settings.categoryBudgets[month][country] = {};
-    if (!S.settings.categoryBudgets[month][country][currency]) S.settings.categoryBudgets[month][country][currency] = {};
-    if (amount > 0) S.settings.categoryBudgets[month][country][currency][category] = amount;
-    else delete S.settings.categoryBudgets[month][country][currency][category];
+    return ReportCore.setCategoryBudget(S.settings.categoryBudgets,month,country,currency,category,amount);
   },
   getOverallLimit(month, country, currency){
-    const ol = S.settings.overallSpendingLimits[month];
-    if (!ol || !ol[country]) return 0;
-    return Number(ol[country][currency]) || 0;
+    return ReportCore.getOverallLimit(S.settings.overallSpendingLimits,month,country,currency);
   },
   setOverallLimit(month, country, currency, amount){
-    if (!S.settings.overallSpendingLimits[month]) S.settings.overallSpendingLimits[month] = {};
-    if (!S.settings.overallSpendingLimits[month][country]) S.settings.overallSpendingLimits[month][country] = {};
-    if (amount > 0) S.settings.overallSpendingLimits[month][country][currency] = amount;
-    else delete S.settings.overallSpendingLimits[month][country][currency];
+    return ReportCore.setOverallLimit(S.settings.overallSpendingLimits,month,country,currency,amount);
   },
   computeBudgetStatus(spent, budget){ return ReportCore.computeBudgetStatus(spent,budget); },
   /* V8.8.4.3 FIX 2: evaluate ALL configured budgets so re-arm works when spending drops */

@@ -297,6 +297,12 @@ jobs:
           grep -q "function setCategoryBudget" "$REPORT_CORE"
           grep -q "function getOverallLimit" "$REPORT_CORE"
           grep -q "function setOverallLimit" "$REPORT_CORE"
+          grep -q "ReportCore.getCategoryBudget(S.settings.categoryBudgets" "$HTML"
+          grep -q "ReportCore.setCategoryBudget(S.settings.categoryBudgets" "$HTML"
+          grep -q "ReportCore.getOverallLimit(S.settings.overallSpendingLimits" "$HTML"
+          grep -q "ReportCore.setOverallLimit(S.settings.overallSpendingLimits" "$HTML"
+          ! grep -q "const mb = S.settings.categoryBudgets\[month\]" "$HTML"
+          ! grep -q "const ol = S.settings.overallSpendingLimits\[month\]" "$HTML"
           grep -q "ReportCore.computeBudgetStatus(spent,budget)" "$HTML"
           node --check "$REPORT_CORE"
           node app/src/test/js/report-core.test.js
