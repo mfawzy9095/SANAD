@@ -3513,6 +3513,7 @@ async function saveTx(){
   closeSheet(); render(); buzz(20);
   toast(wasEdit ? 'تم التعديل' : (f.kind === 'income' ? 'تم تسجيل الدخل' : 'تمت الإضافة'));
   setTimeout(showBudgetAlertsIfAny, 400);
+  return true;
 }
 
 /* V8.8.4.3 FIX 1: use standalone helper, not Finance.getCountryMoneyAccounts */
@@ -4032,6 +4033,7 @@ async function saveTransfer(){
   closeSheet(); render(); buzz(20);
   toast(wasEdit ? 'تم التعديل' : (isExternal ? 'تم التحويل' : (isRepayment ? 'تم السداد' : 'تم التحويل')));
   setTimeout(showBudgetAlertsIfAny, 400);
+  return true;
 }
 function openEditExternalTransferSheet(id){
   if (!canWrite()){ toast('وضع القراءة فقط'); return; }
@@ -7700,9 +7702,9 @@ const SanadReceipts = {
     if(this.pending){this.pending=null;this.refreshControls();return;}
     if(S.form&&S.form.id){await this.domain().remove(S.form.id);this.refreshControls();toast('تم حذف الفاتورة');}
   },
-  async attachAfterSave(beforeIds,editId,pending){
+  async attachAfterSave(saveSucceeded,beforeIds,editId,pending){
     if(!pending||!pending.blob)return;
-    const txId=ReceiptCore.resolveAttachmentTxId(beforeIds,editId,S.transactions);
+    const txId=ReceiptCore.resolveAttachmentAfterSave(saveSucceeded,beforeIds,editId,S.transactions);
     if(!txId)return;
     const ok=await this.domain().attach(txId,pending); if(ok){this.pending=null;}
   },
@@ -8046,8 +8048,8 @@ const _sanadCoreOpenSheet=openSheet; openSheet=function(html,kind){_sanadCoreOpe
 const _sanadCoreRenderTxSheet=renderTxSheet; renderTxSheet=function(){_sanadCoreRenderTxSheet();requestAnimationFrame(()=>{SanadReceipts.injectTxControls();SanadFamily.injectTxToggle();SanadI18n.apply(document.getElementById('sheet'));});};
 const _sanadCoreRenderTransferSheet=renderTransferSheet; renderTransferSheet=function(){_sanadCoreRenderTransferSheet();requestAnimationFrame(()=>{SanadReceipts.injectTxControls();SanadI18n.apply(document.getElementById('sheet'));});};
 const _sanadCoreOpenTxDetails=openTxDetails; openTxDetails=function(id){_sanadCoreOpenTxDetails(id);requestAnimationFrame(()=>SanadReceipts.injectDetails(id));};
-const _sanadCoreSaveTx=saveTx; saveTx=async function(){const ids=new Set(S.transactions.map(t=>t.id));const edit=S.form&&S.form.id;const pending=SanadReceipts.pending;const shareToggle=document.querySelector('[data-family-share-toggle]');const shareWanted=shareToggle?shareToggle.classList.contains('on'):null;await _sanadCoreSaveTx();const added=S.transactions.find(t=>!ids.has(t.id));const targetId=edit||(added&&added.id);if(targetId&&pending)await SanadReceipts.attachAfterSave(ids,edit,pending);if(targetId&&shareWanted!==null)await SanadFamily.setShared(targetId,shareWanted);};
-const _sanadCoreSaveTransfer=saveTransfer; saveTransfer=async function(){const ids=new Set(S.transactions.map(t=>t.id));const edit=S.form&&S.form.id;const pending=SanadReceipts.pending;await _sanadCoreSaveTransfer();const added=S.transactions.find(t=>!ids.has(t.id));const targetId=edit||(added&&added.id);if(targetId&&pending)await SanadReceipts.attachAfterSave(ids,edit,pending);};
+const _sanadCoreSaveTx=saveTx; saveTx=async function(){const ids=new Set(S.transactions.map(t=>t.id));const edit=S.form&&S.form.id;const pending=SanadReceipts.pending;const shareToggle=document.querySelector('[data-family-share-toggle]');const shareWanted=shareToggle?shareToggle.classList.contains('on'):null;const saved=await _sanadCoreSaveTx();const targetId=ReceiptCore.resolveAttachmentAfterSave(saved===true,ids,edit,S.transactions);if(pending)await SanadReceipts.attachAfterSave(saved===true,ids,edit,pending);if(targetId&&shareWanted!==null)await SanadFamily.setShared(targetId,shareWanted);return saved;};
+const _sanadCoreSaveTransfer=saveTransfer; saveTransfer=async function(){const ids=new Set(S.transactions.map(t=>t.id));const edit=S.form&&S.form.id;const pending=SanadReceipts.pending;const saved=await _sanadCoreSaveTransfer();if(pending)await SanadReceipts.attachAfterSave(saved===true,ids,edit,pending);return saved;};
 const _sanadCoreCommit=commitCriticalMutation; commitCriticalMutation=async function(fn){const r=await _sanadCoreCommit(fn);if(r&&r.ok&&!r.noop){await SanadCloud.markDirty();syncNativeNotifications();}return r;};
 const _sanadCorePersist=persist; persist=async function(){const r=await _sanadCorePersist();if(r)await SanadCloud.markDirty();return r;};
 const _sanadCoreStartApp=startApp; startApp=function(){if(SecurityCrypto.shouldShowLockOverlay({enabled:SanadSecurity.cfg.enabled,unlocked:SanadSecurity.unlocked})){SanadSecurity.pendingStart=true;const app=document.getElementById('app'),ob=document.getElementById('onboard');if(app)app.hidden=true;if(ob)ob.hidden=true;SanadTheme.apply();SanadI18n.apply();SanadSecurity.show();return;}_sanadCoreStartApp();setTimeout(()=>SanadV9.afterStart(),0);};
