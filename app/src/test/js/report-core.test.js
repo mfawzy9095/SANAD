@@ -64,6 +64,7 @@ const state={
   assert.strictEqual(d.categoryByCur.AED.transferFee,6);
   assert.strictEqual(d.categoryByCur.AED.externalTransfer,25);
   assert.ok(d.chartBuckets.length>=4);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(d,'now'),false);
 })();
 
 (function budgetStatus(){
