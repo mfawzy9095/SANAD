@@ -762,6 +762,7 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/i18n-core.js"></script>
 <script src="js/schema-core.js"></script>
 <script src="js/persistence-core.js"></script>
+<script src="js/mutation-core.js"></script>
 <script>
 /* =========================================================
    SANAD — Architecture Refactor
@@ -781,6 +782,7 @@ const StateModelCore = window.SanadStateModelCore;
 const I18nCore = window.SanadI18nCore;
 const SchemaCore = window.SanadSchemaCore;
 const PersistenceCore = window.SanadPersistenceCore;
+const MutationCore = window.SanadMutationCore;
 if (!FinanceCore) throw new Error('SANAD finance core failed to load');
 if (!StateCore) throw new Error('SANAD state core failed to load');
 if (!StorageCore) throw new Error('SANAD storage core failed to load');
@@ -793,6 +795,7 @@ if (!StateModelCore) throw new Error('SANAD state model core failed to load');
 if (!I18nCore) throw new Error('SANAD i18n core failed to load');
 if (!SchemaCore) throw new Error('SANAD schema core failed to load');
 if (!PersistenceCore) throw new Error('SANAD persistence core failed to load');
+if (!MutationCore) throw new Error('SANAD mutation core failed to load');
 
 const SchemaRepair = SchemaRepairCore.createSchemaRepairCore({financeCore:FinanceCore});
 
@@ -1104,70 +1107,25 @@ function checkPrepaidInvariant(prepaidBefore){
   return FinanceCore.checkPrepaidInvariant(prepaidBefore,S);
 }
 
+const MutationService = MutationCore.createMutationService({
+  canWrite,
+  snapshotState,
+  loadState: loadStateInto,
+  fingerprint: stateFingerprint,
+  captureInvariant: () => FinanceCore.capturePrepaidBalances(S),
+  checkInvariant: checkPrepaidInvariant,
+  validateState: st => Schema.validateStateStrict(st),
+  isPreview: () => S.previewMode,
+  writeSafetySnapshot: writeRotatedPreCritSnapshot,
+  verifiedWrite: verifiedWriteState,
+  tryRestore: tryRestoreVerified,
+  enterRecovery: enterRecoveryMode,
+  setMutationError: v => { _lastMutationError = v; },
+  logError: (...args) => console.error(...args)
+});
+
 async function _commitCriticalMutationImpl(mutateFn){
-  if (!canWrite()) return {ok:false, reason:'read-only'};
-  _lastMutationError = null;
-  const before = snapshotState();
-  const beforeFp = stateFingerprint(before);
-
-  /* V8.8.4.10: capture pre-mutation prepaid balances for centralized invariant. */
-  const prepaidBefore = FinanceCore.capturePrepaidBalances(S);
-
-  let mainWriteAttempted = false;
-  try {
-    const result = await mutateFn();
-    if (result === false){
-      loadStateInto(before);
-      return {ok:false, reason:'mutation-rejected'};
-    }
-
-    /* V8.8.4.10: centralized prepaid invariant — BEFORE any snapshot or main write. */
-    const inv = checkPrepaidInvariant(prepaidBefore);
-    if (inv){
-      _lastMutationError = 'prepaid-insufficient';
-      loadStateInto(before);
-      return {ok:false, reason:'prepaid-insufficient', restored:true};
-    }
-
-    const integrityErrors = Schema.validateStateStrict(snapshotState());
-    if (integrityErrors.length){
-      _lastMutationError = 'invalid-state';
-      console.error('Mutation rejected by financial integrity validator:', integrityErrors);
-      loadStateInto(before);
-      return {ok:false, reason:'invalid-state', errors:integrityErrors, restored:true};
-    }
-
-    if (!S.previewMode){
-      const snapRes = await writeRotatedPreCritSnapshot(before);
-      if (!snapRes.ok){
-        loadStateInto(before);
-        return {ok:false, reason: snapRes.reason || 'snapshot-failed'};
-      }
-    }
-    const after = snapshotState();
-    const afterFp = stateFingerprint(after);
-    mainWriteAttempted = true;
-    const vres = await verifiedWriteState(after, before);
-    mainWriteAttempted = false;
-    if (!vres.ok){
-      loadStateInto(before);
-      return {ok:false, reason: vres.reason || 'verify-failed', restored: !!vres.restored};
-    }
-    if (afterFp === beforeFp){
-      return {ok:true, noop:true};
-    }
-    return {ok:true};
-  } catch(e){
-    loadStateInto(before);
-    if (!mainWriteAttempted){
-      return {ok:false, reason:'exception', error:e, restored:false};
-    }
-    try {
-      const okRestore = await tryRestoreVerified(before);
-      if (!okRestore) await enterRecoveryMode('exception + rollback-failed', e);
-    } catch(_){}
-    return {ok:false, reason:'exception', error:e};
-  }
+  return MutationService.run(mutateFn);
 }
 
 let _criticalMutationInFlight = false;
