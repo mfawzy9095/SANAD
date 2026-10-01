@@ -155,6 +155,8 @@
     if(parsed.ignored)return {ok:false,reason:parsed.reason||'ignored'};
     if(Number(parsed.confidence||0)<0.95)return {ok:false,reason:'low-confidence'};
     if(!route||route.status!=='routed')return {ok:false,reason:(route&&route.reason)||'route-required'};
+    if(Number(route.confidence||0)<0.90)return {ok:false,reason:'route-confidence-low'};
+    if(parsed.cardLast4&&parsed.cardType&&['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)&&!route.instrument)return {ok:false,reason:'instrument-missing'};
     if((num(parsed.fee)||0)+(num(parsed.vat)||0)>0)return {ok:false,reason:'fee-review-required'};
     if(parsed.kind==='cash_withdrawal'&&!route.targetAccount)return {ok:false,reason:'cash-destination-required'};
     return {ok:true};
@@ -172,6 +174,7 @@
     if(!Array.isArray(draft.transactions))draft.transactions=[];
 
     let route=MessageCore.resolveRoute(parsed,draft);
+    const initialRoute=route;
     const direct=autoEligible(parsed,route);
     if(direct.ok){
       const built=MessageCore.buildTransaction(parsed,route,{uid});
@@ -197,14 +200,18 @@
         create.accounts.push(acc);create.instruments.push(card);
         draft.accounts.push(acc);draft.paymentInstruments.push(card);
       }else if(parsed.cardType==='debit_card'||parsed.cardType==='wallet_card'){
-        const acc=makeAssetAccount(parsed,institution.id,uid,'purchase');
-        if(!acc)return {action:'review',reason:'observed-balance-required',confidence:0};
         const expectedType=parsed.cardType==='wallet_card'?'ewallet':'bank';
-        acc.type=expectedType;
-        acc.icon=expectedType==='ewallet'?'📱':'🏦';
+        let acc=initialRoute&&initialRoute.account&&initialRoute.account.type===expectedType?draft.accounts.find(a=>a.id===initialRoute.account.id):null;
+        if(!acc){
+          acc=makeAssetAccount(parsed,institution.id,uid,'purchase');
+          if(!acc)return {action:'review',reason:'observed-balance-required',confidence:0};
+          acc.type=expectedType;
+          acc.icon=expectedType==='ewallet'?'📱':'🏦';
+          create.accounts.push(acc);draft.accounts.push(acc);
+        }
         const card=makeInstrument(parsed,acc,institution.id,uid);
-        create.accounts.push(acc);create.instruments.push(card);
-        draft.accounts.push(acc);draft.paymentInstruments.push(card);
+        if(!card)return {action:'review',reason:'instrument-discovery-failed',confidence:0};
+        create.instruments.push(card);draft.paymentInstruments.push(card);
       }
     }else if(['deposit','salary','refund','incoming_transfer'].includes(parsed.kind)){
       const acc=makeAssetAccount(parsed,institution.id,uid,parsed.kind);

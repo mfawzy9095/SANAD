@@ -33,6 +33,19 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.create.instruments[0].last4,'0308');
 }
 
+
+// A new debit card on a known bank account creates only the missing instrument.
+{
+  const p=P.parse({id:'n3',postedAt:2500,text:'تمت عملية شراء بقيمة AED 5.10 لدى NMC MED CEN SHJ BR ,SHARJAH باستخدام بطاقة خصم تنتهي أرقامها بـ 3993. الرصيد المتوفر هو AED 2,684.31.'});
+  const s={institutions:[{id:'i1',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd'}],accounts:[{id:'bank1',institutionId:'i1',country:'UAE',name:'Current',type:'bank',currency:'AED',openingBalance:2689.41,openingDebt:0,creditLimit:0,archived:false}],paymentInstruments:[],transactions:[]};
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.create.accounts.length,0);
+  assert.strictEqual(plan.create.instruments.length,1);
+  assert.strictEqual(plan.create.instruments[0].accountId,'bank1');
+  assert.strictEqual(plan.create.instruments[0].type,'debit_card');
+}
+
 // du Pay purchase creates an ewallet + wallet_card using the observed post-transaction balance.
 {
   const p=P.parse({id:'d1',postedAt:3000,text:'Hello Mohamed Abd, Your du Pay Card ending in 7105 has been used for AED 9.75 at FRESH CRAFT MINI MART. Your available balance is now AED 0.53 and your transaction ID is DG108RVT5U. Fee AED 0.00, VAT AED 0.00.'});
@@ -63,7 +76,7 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   const p=P.parse({id:'d3',postedAt:5000,text:'Your request to transfer AED 149.00 to Mohamed Abdelrahman Fawzy is successfully processed and the amount has been credited in the beneficiary account. TID: DIR7BQ7FZ3'});
   const plan=I.plan(p,empty(),{uid});
   assert.strictEqual(plan.action,'review');
-  assert.strictEqual(plan.reason,'existing-source-required');
+  assert.strictEqual(plan.reason,'transfer-source-not-found');
 }
 
 // Unknown source cannot auto-create a financial account/card.
