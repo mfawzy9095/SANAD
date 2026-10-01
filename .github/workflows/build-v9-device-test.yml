@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - refactor-v9.1-architecture
+      - feature-v9.2-ui-features
   pull_request:
     branches:
       - main
@@ -551,6 +552,10 @@ jobs:
           node app/src/test/js/reminder-core.test.js
           node --check app/src/main/assets/js/report-core.js
           node app/src/test/js/report-core.test.js
+          node --check app/src/main/assets/js/uae-bank-registry-core.js
+          node app/src/test/js/uae-bank-registry-core.test.js
+          node --check app/src/main/assets/js/bank-message-core.js
+          node app/src/test/js/bank-message-core.test.js
 
       - name: JVM regression tests
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
