@@ -150,10 +150,6 @@ jobs:
           grep -q '<script src="js/schema-repair-core.js"></script>' "$HTML"
           grep -q "const SchemaRepairCore = window.SanadSchemaRepairCore" "$HTML"
           grep -q "SchemaRepairCore.createSchemaRepairCore" "$HTML"
-          grep -q "SchemaRepair.normalizeRepaymentFees(state)" "$HTML"
-          grep -q "SchemaRepair.repairPrepaidOwnedAccounts(state)" "$HTML"
-          grep -q "SchemaRepair.schemaAccountBalance(state, accountId)" "$HTML"
-          grep -q "SchemaRepair.repairCreditArchiveConsistency(state)" "$HTML"
           node --check "$SCHEMA_REPAIR_CORE"
           node app/src/test/js/schema-repair-core.test.js
           STATE_MODEL_CORE="app/src/main/assets/js/state-model-core.js"
@@ -186,6 +182,10 @@ jobs:
           grep -q "SchemaCore.createSchema" "$HTML"
           ! grep -q "const Schema = {" "$HTML"
           grep -q "schemaRepair:SchemaRepair" "$HTML"
+          grep -q "SchemaRepair.normalizeRepaymentFees(state)" "$SCHEMA_CORE"
+          grep -q "SchemaRepair.repairPrepaidOwnedAccounts(state)" "$SCHEMA_CORE"
+          grep -q "SchemaRepair.schemaAccountBalance(state, accountId)" "$SCHEMA_CORE"
+          grep -q "SchemaRepair.repairCreditArchiveConsistency(state)" "$SCHEMA_CORE"
           node --check "$SCHEMA_CORE"
           node app/src/test/js/schema-core.test.js
 
