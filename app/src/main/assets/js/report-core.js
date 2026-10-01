@@ -210,6 +210,33 @@
     };
   }
 
+  function getCategoryBudget(categoryBudgets,month,country,currency,category){
+    const mb=categoryBudgets&&categoryBudgets[month];
+    if(!mb||!mb[country]||!mb[country][currency])return 0;
+    return Number(mb[country][currency][category])||0;
+  }
+
+  function setCategoryBudget(categoryBudgets,month,country,currency,category,amount){
+    if(!categoryBudgets[month])categoryBudgets[month]={};
+    if(!categoryBudgets[month][country])categoryBudgets[month][country]={};
+    if(!categoryBudgets[month][country][currency])categoryBudgets[month][country][currency]={};
+    if(amount>0)categoryBudgets[month][country][currency][category]=amount;
+    else delete categoryBudgets[month][country][currency][category];
+  }
+
+  function getOverallLimit(overallSpendingLimits,month,country,currency){
+    const ol=overallSpendingLimits&&overallSpendingLimits[month];
+    if(!ol||!ol[country])return 0;
+    return Number(ol[country][currency])||0;
+  }
+
+  function setOverallLimit(overallSpendingLimits,month,country,currency,amount){
+    if(!overallSpendingLimits[month])overallSpendingLimits[month]={};
+    if(!overallSpendingLimits[month][country])overallSpendingLimits[month][country]={};
+    if(amount>0)overallSpendingLimits[month][country][currency]=amount;
+    else delete overallSpendingLimits[month][country][currency];
+  }
+
   function computeBudgetStatus(spent,budget){
     const b=Number(budget)||0,s=Number(spent)||0;
     if(b<=0)return {level:'none',pct:0};
@@ -227,6 +254,10 @@
     reportTransferEntries,
     chartBuckets,
     buildReportDataset,
+    getCategoryBudget,
+    setCategoryBudget,
+    getOverallLimit,
+    setOverallLimit,
     computeBudgetStatus
   });
 });

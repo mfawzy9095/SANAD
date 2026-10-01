@@ -293,6 +293,10 @@ jobs:
           grep -q "const ReportCore = window.SanadReportCore" "$HTML"
           grep -q "ReportCore.reportExpenseEntries(S" "$HTML"
           grep -q "ReportCore.buildReportDataset(S" "$HTML"
+          grep -q "function getCategoryBudget" "$REPORT_CORE"
+          grep -q "function setCategoryBudget" "$REPORT_CORE"
+          grep -q "function getOverallLimit" "$REPORT_CORE"
+          grep -q "function setOverallLimit" "$REPORT_CORE"
           grep -q "ReportCore.computeBudgetStatus(spent,budget)" "$HTML"
           node --check "$REPORT_CORE"
           node app/src/test/js/report-core.test.js

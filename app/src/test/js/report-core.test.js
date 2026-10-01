@@ -67,6 +67,26 @@ const state={
   assert.strictEqual(Object.prototype.hasOwnProperty.call(d,'now'),false);
 })();
 
+(function budgetAccess(){
+  const categoryBudgets={};
+  R.setCategoryBudget(categoryBudgets,'2026-09','UAE','AED','food',500);
+  assert.strictEqual(R.getCategoryBudget(categoryBudgets,'2026-09','UAE','AED','food'),500);
+  assert.deepStrictEqual(categoryBudgets,{2026-09:{UAE:{AED:{food:500}}}});
+  R.setCategoryBudget(categoryBudgets,'2026-09','UAE','AED','food',0);
+  assert.strictEqual(R.getCategoryBudget(categoryBudgets,'2026-09','UAE','AED','food'),0);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(categoryBudgets['2026-09'].UAE.AED,'food'),false);
+  assert.strictEqual(R.getCategoryBudget(null,'2026-09','UAE','AED','food'),0);
+
+  const overallSpendingLimits={};
+  R.setOverallLimit(overallSpendingLimits,'2026-09','UAE','AED',1200);
+  assert.strictEqual(R.getOverallLimit(overallSpendingLimits,'2026-09','UAE','AED'),1200);
+  assert.deepStrictEqual(overallSpendingLimits,{2026-09:{UAE:{AED:1200}}});
+  R.setOverallLimit(overallSpendingLimits,'2026-09','UAE','AED',0);
+  assert.strictEqual(R.getOverallLimit(overallSpendingLimits,'2026-09','UAE','AED'),0);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(overallSpendingLimits['2026-09'].UAE,'AED'),false);
+  assert.strictEqual(R.getOverallLimit(null,'2026-09','UAE','AED'),0);
+})();
+
 (function budgetStatus(){
   assert.deepStrictEqual(R.computeBudgetStatus(0,0),{level:'none',pct:0});
   assert.strictEqual(R.computeBudgetStatus(79,100).level,'normal');
