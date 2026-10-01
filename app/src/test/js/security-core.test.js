@@ -30,5 +30,24 @@ const Core=require('../../main/assets/js/security-core.js');
   assert.strictEqual(h1,h2);
   assert.notStrictEqual(h1,await S.hash('sanad'));
 
+  assert.strictEqual(S.shouldRelockOnForeground({
+    enabled:true,unlocked:true,backgroundAt:1000,now:30999,relockAfterMs:30000
+  }),false);
+  assert.strictEqual(S.shouldRelockOnForeground({
+    enabled:true,unlocked:true,backgroundAt:1000,now:31000,relockAfterMs:30000
+  }),true);
+  assert.strictEqual(S.shouldRelockOnForeground({
+    enabled:false,unlocked:true,backgroundAt:1000,now:999999,relockAfterMs:30000
+  }),false);
+  assert.strictEqual(S.shouldRelockOnForeground({
+    enabled:true,unlocked:false,backgroundAt:1000,now:999999,relockAfterMs:30000
+  }),false);
+  assert.strictEqual(S.shouldRelockOnForeground({
+    enabled:true,unlocked:true,backgroundAt:0,now:999999,relockAfterMs:30000
+  }),false);
+  assert.strictEqual(S.shouldRelockOnForeground({
+    enabled:true,unlocked:true,backgroundAt:5000,now:4000,relockAfterMs:30000
+  }),false);
+
   console.log('security-core regression tests: PASS');
 })().catch(e=>{console.error(e);process.exit(1);});

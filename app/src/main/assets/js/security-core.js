@@ -79,6 +79,16 @@
       return b64(bits);
     }
 
+    function shouldRelockOnForeground(options){
+      const o=options||{};
+      if(!o.enabled||!o.unlocked||!o.backgroundAt)return false;
+      const now=Number(o.now);
+      const backgroundAt=Number(o.backgroundAt);
+      const threshold=Number(o.relockAfterMs);
+      const elapsed=Math.max(0,(now||0)-backgroundAt);
+      return elapsed>=(threshold||0);
+    }
+
     return Object.freeze({
       b64,
       unb64,
@@ -87,7 +97,8 @@
       formatRecovery,
       generateRecoveryCode,
       hash,
-      recoveryDigest
+      recoveryDigest,
+      shouldRelockOnForeground
     });
   }
 
