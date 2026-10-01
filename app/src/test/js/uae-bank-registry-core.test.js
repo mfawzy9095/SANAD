@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('assert');
+const R=require('../../main/assets/js/uae-bank-registry-core.js');
+assert.strictEqual(R.BANKS.length,62);
+assert.strictEqual(R.SOURCE.authority,'Central Bank of the UAE (CBUAE)');
+assert.strictEqual(R.detect('EmiratesNBD').bank.id,'emirates-nbd');
+assert.strictEqual(R.detect('ENBD').bank.id,'emirates-nbd');
+assert.strictEqual(R.detect('ADCB transaction alert').bank.id,'adcb');
+assert.strictEqual(R.detect('مصرف أبوظبي الإسلامي').bank.id,'adib');
+assert.strictEqual(R.detect('Wio Bank').bank.id,'wio');
+assert.strictEqual(R.get('ruya').name,'Ruya Community Islamic Bank L.L.C');
+console.log('UAE bank registry regression tests: PASS');
