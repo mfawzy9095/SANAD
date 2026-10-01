@@ -2370,19 +2370,12 @@ function viewRep(){
   const chart = ds.chartBuckets;
   const maxChart = Math.max.apply(null, chart.map(x => x.val).concat(1));
   /* V8.8.4.3 FIX 8: transaction count = distinct sourceTxId */
-  const expEntriesForCur = ds.expenses.filter(e => e.currency === activeCur);
-  const totalExpCount = new Set(expEntriesForCur.map(e => e.sourceTxId)).size;
-  const pieData = (() => {
-    const all = cats;
-    if (all.length <= 6){
-      return all.map(([id,v]) => { const c = Finance.getCat('expense', id); return {v, c: c.c, n: c.n}; });
-    }
-    const top5 = all.slice(0, 5);
-    const rest = all.slice(5).reduce((s,[,v]) => s + v, 0);
-    const out = top5.map(([id,v]) => { const c = Finance.getCat('expense', id); return {v, c: c.c, n: c.n}; });
-    out.push({v: rest, c: '#94a3b8', n: 'أخرى'});
-    return out;
-  })();
+  const totalExpCount = ReportCore.distinctSourceTransactionCount(ds.expenses,activeCur);
+  const pieData = ReportCore.categoryPieBuckets(categoryTotals).map(bucket => {
+    if (bucket.other) return {v:bucket.value, c:'#94a3b8', n:'أخرى'};
+    const c = Finance.getCat('expense', bucket.id);
+    return {v:bucket.value, c:c.c, n:c.n};
+  });
   const periodTabs = '<div class="tabs">' +
     [['today','اليوم'],['week','أسبوع'],['month','شهر'],['6months','6 أشهر']].map(([k,l]) =>
       '<button type="button" data-period="' + k + '" class="' + (p === k ? 'on' : '') + '">' + l + '</button>'
@@ -2576,17 +2569,12 @@ function drawPie(animate){
   const activeCur = S.repCurrency;
   if (!activeCur) return;
   const ds = Finance.buildReportDataset({country, period:p, accountId: S.repAccountId || null, currency: activeCur, month: S.month});
-  const cats = Object.entries(ds.categoryByCur[activeCur] || {}).sort((a,b) => b[1] - a[1]);
-  if (!cats.length) return;
-  let data;
-  if (cats.length <= 6){
-    data = cats.map(([id,v]) => ({v, c: Finance.getCat('expense', id).c}));
-  } else {
-    const top5 = cats.slice(0,5);
-    const rest = cats.slice(5).reduce((s,[,v]) => s + v, 0);
-    data = top5.map(([id,v]) => ({v, c: Finance.getCat('expense', id).c}));
-    data.push({v: rest, c: '#94a3b8'});
-  }
+  const buckets = ReportCore.categoryPieBuckets(ds.categoryByCur[activeCur] || {});
+  if (!buckets.length) return;
+  const data = buckets.map(bucket => ({
+    v:bucket.value,
+    c:bucket.other ? '#94a3b8' : Finance.getCat('expense', bucket.id).c
+  }));
   const total = data.reduce((s,d) => s + d.v, 0);
   if (!total) return;
   const dpr = window.devicePixelRatio || 1;
