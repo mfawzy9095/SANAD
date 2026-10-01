@@ -34,6 +34,8 @@ public class BankNotificationFilterTest {
                 "Emirates NBD OTP 123456 for purchase AED 20.00. Do not share this verification code."));
         assertFalse(BankNotificationFilter.looksLikeCandidate(
                 "WhatsApp Ahmed sent you a message."));
+    }
+
     @Test
     public void acceptsArabicCreditCardAndDuPayCompletedTransactions() {
         assertTrue(BankNotificationFilter.looksLikeCandidate(
@@ -58,7 +60,5 @@ public class BankNotificationFilterTest {
                 "نود تأكيد استلام دفعة AED 433.00 عن البطاقة الائتمانية التي تبدأ بالرقم 457828."));
         assertFalse(BankNotificationFilter.looksLikeCandidate(
                 "Your du Pay Card ending in 7105 has been suspended from Google Pay."));
-    }
-
     }
 }
