@@ -865,7 +865,8 @@ const REGULAR_ACCOUNT_TYPES = ['bank','ewallet','prepaid','other','debt'];
 const INSTRUMENT_TYPES = [
   {id:'debit_card',name:'بطاقة ديبت',icon:'💳',short:'تسحب من الحساب البنكي'},
   {id:'credit_card',name:'بطاقة ائتمان',icon:'💠',short:'مشتريات تصبح مديونية'},
-  {id:'prepaid_card',name:'بطاقة مدفوعة مقدمًا',icon:'🎴',short:'تشحنها وتصرف منها'}
+  {id:'prepaid_card',name:'بطاقة مدفوعة مقدمًا',icon:'🎴',short:'تشحنها وتصرف منها'},
+  {id:'wallet_card',name:'بطاقة محفظة',icon:'📱',short:'بطاقة مرتبطة مباشرة برصيد المحفظة'}
 ];
 const DEFAULT_CATS = {
   expense:[
@@ -5818,12 +5819,13 @@ function openInstrumentSheet(id, presetType, preserve){
   const isCredit = type === 'credit_card';
   const isPrepaid = type === 'prepaid_card';
   const isDebit = type === 'debit_card';
+  const isWalletCard = type === 'wallet_card';
   if (isEdit && inst && inst.accountId){
     const acc = Finance.getAccount(inst.accountId);
     if (acc) data.country = acc.country;
   }
   const countryAccounts = S.accounts.filter(a => !a.archived && a.country === data.country);
-  const eligibleLinked = isDebit ? countryAccounts.filter(a => a.type === 'bank') : (isPrepaid ? [] : countryAccounts);
+  const eligibleLinked = isDebit ? countryAccounts.filter(a => a.type === 'bank') : (isWalletCard ? countryAccounts.filter(a => a.type === 'ewallet') : (isPrepaid ? [] : countryAccounts));
   const assetAccounts = countryAccounts.filter(a => isAssetAccount(a) && !a.ownedByInstrumentId);
   const linkedOptions = '<option value="">— اختر حساب بنكي —</option>' + eligibleLinked.map(a =>
     '<option value="' + a.id + '"' + (data.accountId === a.id ? ' selected' : '') + '>' + a.icon + ' ' + esc(a.name) + ' (' + Finance.curSymbol(a.currency) + ')</option>').join('');
@@ -5883,12 +5885,12 @@ function openInstrumentSheet(id, presetType, preserve){
         '<div class="field-hint">' + (hasTx ? 'مقفل (توجد معاملات).' : (isEdit ? 'الرصيد الحالي في البطاقة.' : 'اكتب الرصيد الموجود حاليًا أو مبلغ الشحن الأول.')) + '</div></div>';
   }
   let linkedField = '';
-  if (isDebit){
-    linkedField = '<div class="field"><label>الحساب البنكي المرتبط</label>' +
+  if (isDebit || isWalletCard){
+    linkedField = '<div class="field"><label>' + (isWalletCard ? 'المحفظة المرتبطة' : 'الحساب البنكي المرتبط') + '</label>' +
       '<select id="cardLinked" ' + (hasTx ? 'disabled' : '') + '>' + linkedOptions + '</select>' +
-      (hasTx ? '<div class="field-hint" style="color:var(--warn)">🔒 مقفل لأن بالبطاقة معاملات.</div>' : '<div class="field-hint">البطاقة تسحب من هذا الحساب مباشرة.</div>') + '</div>';
+      (hasTx ? '<div class="field-hint" style="color:var(--warn)">🔒 مقفل لأن بالبطاقة معاملات.</div>' : '<div class="field-hint">' + (isWalletCard ? 'البطاقة تسحب مباشرة من رصيد المحفظة.' : 'البطاقة تسحب من هذا الحساب مباشرة.') + '</div>') + '</div>';
   }
-  const showCountryPicker = !isDebit;
+  const showCountryPicker = !(isDebit || isWalletCard);
   const showInstField = (isCredit || isPrepaid) || (isDebit && !data.accountId);
   const isDefaultCard = S.settings.defaultInstrumentByCountry[data.country] === data.id;
   const countryName = countryInfo(data.country).name;
@@ -5920,8 +5922,9 @@ function openInstrumentSheet(id, presetType, preserve){
     '<div class="sheet-body">' +
       (isEdit && data.archived ? '<div class="help-box warn"><span class="hi">📦</span><div class="ht"><b>بطاقة مؤرشفة</b>.</div></div>' : '') +
       (isDebit ? '<div class="help-box"><span class="hi">💳</span><div class="ht"><b>بطاقة ديبت</b>اختر الحساب البنكي المرتبط. البلد والعملة والبنك يُشتقّون تلقائيًا.</div></div>' : '') +
+      (isWalletCard ? '<div class="help-box"><span class="hi">📱</span><div class="ht"><b>بطاقة محفظة</b>مرتبطة مباشرة برصيد المحفظة ولا تنشئ رصيدًا منفصلاً.</div></div>' : '') +
       '<div class="field"><label>اسم البطاقة</label><input type="text" id="cardName" maxlength="30" value="' + esc(data.name) + '" placeholder="' + (isCredit ? 'NBD Credit' : isPrepaid ? 'FAB Prepaid' : 'ADCB Debit') + '"></div>' +
-      (isDebit ? linkedField : '') +
+      ((isDebit || isWalletCard) ? linkedField : '') +
       (showCountryPicker ? '<div class="field"><label>البلد</label><div class="country-picker">' + countryOpts + '</div>' +
         '<input type="hidden" id="cardCountry" value="' + data.country + '"></div>' : '') +
       (showInstField ? '<div class="field" id="cardBankRegistryWrap"' + (data.country === 'UAE' ? '' : ' hidden') + '><label>البنك في الإمارات</label>' +
@@ -5934,7 +5937,7 @@ function openInstrumentSheet(id, presetType, preserve){
         '<input type="text" id="cardLast4" maxlength="4" inputmode="numeric" value="' + esc(data.last4 || '') + '" placeholder="1234"></div>' +
       '<div class="field"><label>الأيقونة</label><div class="icon-grid">' + icons + '</div><input type="hidden" id="cardIco" value="' + data.icon + '"></div>' +
       '<div class="field"><label>اللون</label><div class="color-row">' + colors + '</div><input type="hidden" id="cardCol" value="' + data.color + '"></div>' +
-      (isDebit ? '<input type="hidden" id="cardCountry" value="' + data.country + '">' : '') +
+      ((isDebit || isWalletCard) ? '<input type="hidden" id="cardCountry" value="' + data.country + '">' : '') +
       defaultToggleHtml +
       creditActionsHtml +
       '<button type="button" class="btn primary" data-act="save-card" data-id="' + (id||'') + '" data-type="' + type + '" style="margin-top:8px">' + (isEdit ? 'حفظ' : 'إضافة') + '</button>' +
@@ -5967,19 +5970,21 @@ async function saveCard(id, presetType){
   const isCredit = presetType === 'credit_card';
   const isPrepaid = presetType === 'prepaid_card';
   const isDebit = presetType === 'debit_card';
+  const isWalletCard = presetType === 'wallet_card';
   let linkedAccount = null;
   let country = '';
   let institutionId = null;
   let accountId = null;
   let cardCur = 'AED';
   let debt = 0, limit = 0, bal = 0, repayId = null, prepaidFundingMode = 'existing', prepaidFundingSourceId = null;
-  if (isDebit){
+  if (isDebit || isWalletCard){
     const linkedEl = document.getElementById('cardLinked');
     const linked = linkedEl ? linkedEl.value : '';
-    if (!linked){ toast('اختر الحساب البنكي المرتبط'); return; }
+    if (!linked){ toast(isWalletCard ? 'اختر المحفظة المرتبطة' : 'اختر الحساب البنكي المرتبط'); return; }
     linkedAccount = Finance.getAccount(linked);
     if (!linkedAccount){ toast('الحساب غير موجود'); return; }
-    if (linkedAccount.type !== 'bank'){ toast('بطاقة الديبت ترتبط بحساب بنكي فقط'); return; }
+    if (isDebit && linkedAccount.type !== 'bank'){ toast('بطاقة الديبت ترتبط بحساب بنكي فقط'); return; }
+    if (isWalletCard && linkedAccount.type !== 'ewallet'){ toast('بطاقة المحفظة ترتبط بمحفظة إلكترونية فقط'); return; }
     country = linkedAccount.country;
     institutionId = linkedAccount.institutionId;
     cardCur = linkedAccount.currency;
@@ -6052,9 +6057,9 @@ async function saveCard(id, presetType){
     const newInstName = instNameEl && instNameEl.value ? (instNameEl.value || '').trim() : '';
     const officialEl = document.getElementById('cardBankRegistry');
     const officialBankId = officialEl && country === 'UAE' ? (officialEl.value || null) : null;
-    if (officialBankId && !isDebit) institutionId = Finance.ensureRegisteredBank(officialBankId, country);
-    else if (newInstName && !isDebit) institutionId = Finance.ensureInstitution(newInstName, country, 'bank');
-    if (institutionId && !isDebit){
+    if (officialBankId && !isDebit && !isWalletCard) institutionId = Finance.ensureRegisteredBank(officialBankId, country);
+    else if (newInstName && !isDebit && !isWalletCard) institutionId = Finance.ensureInstitution(newInstName, country, 'bank');
+    if (institutionId && !isDebit && !isWalletCard){
       const inst = Finance.getInstitution(institutionId);
       if (inst && inst.country !== country){ institutionId = null; }
     }
@@ -6111,7 +6116,7 @@ async function saveCard(id, presetType){
       const inst = Finance.getInstrument(id);
       if (inst){
         inst.accountId = accountId;
-        inst.institutionId = isDebit ? (linkedAccount ? linkedAccount.institutionId : null) : institutionId;
+        inst.institutionId = (isDebit || isWalletCard) ? (linkedAccount ? linkedAccount.institutionId : null) : institutionId;
         inst.name = name;
         inst.last4 = last4;
         const finalAcc = Finance.getAccount(accountId);
@@ -6122,11 +6127,11 @@ async function saveCard(id, presetType){
     } else {
       const finalAcc = Finance.getAccount(accountId);
       if (!finalAcc){ return false; }
-      if (finalAcc.country !== country && isDebit){ return false; }
+      if (finalAcc.country !== country && (isDebit || isWalletCard)){ return false; }
       savedInstId = uid('pi');
       S.paymentInstruments.push({
         id: savedInstId, accountId,
-        institutionId: isDebit ? (linkedAccount ? linkedAccount.institutionId : null) : institutionId,
+        institutionId: (isDebit || isWalletCard) ? (linkedAccount ? linkedAccount.institutionId : null) : institutionId,
         name, type: presetType, last4, country: finalAcc.country,
         icon, color, archived: false, created: isoToday(),
         defaultTopupAccountId: isPrepaid ? prepaidFundingSourceId : null

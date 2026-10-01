@@ -552,12 +552,16 @@ jobs:
           node app/src/test/js/reminder-core.test.js
           BANK_REGISTRY_CORE="app/src/main/assets/js/uae-bank-registry-core.js"
           BANK_MESSAGE_CORE="app/src/main/assets/js/bank-message-core.js"
+          BANK_INGESTION_CORE="app/src/main/assets/js/bank-ingestion-core.js"
           test -s "$BANK_REGISTRY_CORE"
           test -s "$BANK_MESSAGE_CORE"
+          test -s "$BANK_INGESTION_CORE"
           BANK_REGISTRY_CORE_SHA="$(sha256sum "$BANK_REGISTRY_CORE" | awk '{print $1}')"
           BANK_MESSAGE_CORE_SHA="$(sha256sum "$BANK_MESSAGE_CORE" | awk '{print $1}')"
+          BANK_INGESTION_CORE_SHA="$(sha256sum "$BANK_INGESTION_CORE" | awk '{print $1}')"
           echo "BANK_REGISTRY_CORE_SHA=$BANK_REGISTRY_CORE_SHA" >> "$GITHUB_ENV"
           echo "BANK_MESSAGE_CORE_SHA=$BANK_MESSAGE_CORE_SHA" >> "$GITHUB_ENV"
+          echo "BANK_INGESTION_CORE_SHA=$BANK_INGESTION_CORE_SHA" >> "$GITHUB_ENV"
           grep -q '<script src="js/uae-bank-registry-core.js"></script>' "app/src/main/assets/index.html"
           grep -q '<script src="js/bank-message-core.js"></script>' "app/src/main/assets/index.html"
           grep -q "const UaeBankRegistryCore = window.SanadUaeBankRegistryCore" "app/src/main/assets/index.html"
@@ -575,6 +579,8 @@ jobs:
           node app/src/test/js/uae-bank-registry-core.test.js
           node --check "$BANK_MESSAGE_CORE"
           node app/src/test/js/bank-message-core.test.js
+          node --check "$BANK_INGESTION_CORE"
+          node app/src/test/js/bank-ingestion-core.test.js
 
       - name: JVM regression tests
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
@@ -648,6 +654,8 @@ jobs:
           test "$EMBEDDED_BANK_REGISTRY_CORE_SHA" = "$BANK_REGISTRY_CORE_SHA"
           EMBEDDED_BANK_MESSAGE_CORE_SHA="$(unzip -p "$APK" assets/js/bank-message-core.js | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_BANK_MESSAGE_CORE_SHA" = "$BANK_MESSAGE_CORE_SHA"
+          EMBEDDED_BANK_INGESTION_CORE_SHA="$(unzip -p "$APK" assets/js/bank-ingestion-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_BANK_INGESTION_CORE_SHA" = "$BANK_INGESTION_CORE_SHA"
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
