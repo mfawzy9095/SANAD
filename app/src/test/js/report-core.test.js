@@ -87,6 +87,35 @@ const state={
   assert.strictEqual(R.getOverallLimit(null,'2026-09','UAE','AED'),0);
 })();
 
+(function budgetAlertEvaluation(){
+  const budgetAlerts={};
+  const options={
+    month:'2026-09',country:'UAE',budgetAlerts,
+    overallSpendingLimits:{'2026-09':{UAE:{AED:100}}},
+    categoryBudgets:{'2026-09':{UAE:{AED:{food:50}}}}
+  };
+  let ds={spendingByCur:{AED:80},categoryByCur:{AED:{food:40}}};
+  let alerts=R.evaluateBudgetAlerts(ds,options);
+  assert.deepStrictEqual(alerts.map(x=>x.type).sort(),['category','overall']);
+  assert.deepStrictEqual(budgetAlerts['overall|2026-09|UAE|AED|_'],{warned80:true,warned95:false,warned100:false});
+  assert.deepStrictEqual(budgetAlerts['category|2026-09|UAE|AED|food'],{warned80:true,warned95:false,warned100:false});
+  assert.strictEqual(R.evaluateBudgetAlerts(ds,options).length,0);
+
+  ds={spendingByCur:{AED:70},categoryByCur:{AED:{food:30}}};
+  assert.strictEqual(R.evaluateBudgetAlerts(ds,options).length,0);
+  assert.deepStrictEqual(budgetAlerts['overall|2026-09|UAE|AED|_'],{warned80:false,warned95:false,warned100:false});
+
+  ds={spendingByCur:{AED:95},categoryByCur:{AED:{food:47.5}}};
+  alerts=R.evaluateBudgetAlerts(ds,options);
+  assert.deepStrictEqual(alerts.map(x=>x.level),['strong','strong']);
+  assert.strictEqual(R.evaluateBudgetAlerts(ds,options).length,0);
+
+  ds={spendingByCur:{AED:110},categoryByCur:{AED:{food:55}}};
+  alerts=R.evaluateBudgetAlerts(ds,options);
+  assert.deepStrictEqual(alerts.map(x=>x.level),['over','over']);
+  assert.deepStrictEqual(budgetAlerts['overall|2026-09|UAE|AED|_'],{warned80:true,warned95:true,warned100:true});
+})();
+
 (function budgetStatus(){
   assert.deepStrictEqual(R.computeBudgetStatus(0,0),{level:'none',pct:0});
   assert.strictEqual(R.computeBudgetStatus(79,100).level,'normal');

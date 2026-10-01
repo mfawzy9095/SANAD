@@ -297,6 +297,7 @@ jobs:
           grep -q "function setCategoryBudget" "$REPORT_CORE"
           grep -q "function getOverallLimit" "$REPORT_CORE"
           grep -q "function setOverallLimit" "$REPORT_CORE"
+          grep -q "function evaluateBudgetAlerts" "$REPORT_CORE"
           grep -q "ReportCore.getCategoryBudget(S.settings.categoryBudgets" "$HTML"
           grep -q "ReportCore.setCategoryBudget(S.settings.categoryBudgets" "$HTML"
           grep -q "ReportCore.getOverallLimit(S.settings.overallSpendingLimits" "$HTML"

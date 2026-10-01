@@ -237,6 +237,62 @@
     else delete overallSpendingLimits[month][country][currency];
   }
 
+  function evaluateBudgetAlerts(dataset,options){
+    const ds=dataset||{};
+    const o=options||{};
+    const month=o.month;
+    const country=o.country;
+    const overallSpendingLimits=o.overallSpendingLimits||{};
+    const categoryBudgets=o.categoryBudgets||{};
+    const budgetAlerts=o.budgetAlerts||{};
+    const spendingByCur=ds.spendingByCur||{};
+    const categoryByCur=ds.categoryByCur||{};
+    const evaluated=[];
+
+    const overallByCur=(overallSpendingLimits[month]&&overallSpendingLimits[month][country])||{};
+    Object.entries(overallByCur).forEach(([cur,limit])=>{
+      const lim=Number(limit)||0;
+      if(lim<=0)return;
+      const spent=spendingByCur[cur]||0;
+      const st=computeBudgetStatus(spent,lim);
+      evaluated.push({type:'overall',month,country,currency:cur,level:st.level,spent,limit:lim,pct:st.pct});
+    });
+
+    const catByCur=(categoryBudgets[month]&&categoryBudgets[month][country])||{};
+    Object.entries(catByCur).forEach(([cur,cats])=>{
+      Object.entries(cats||{}).forEach(([catId,limit])=>{
+        const lim=Number(limit)||0;
+        if(lim<=0)return;
+        const spent=(categoryByCur[cur]&&categoryByCur[cur][catId])||0;
+        const st=computeBudgetStatus(spent,lim);
+        evaluated.push({type:'category',month,country,currency:cur,category:catId,level:st.level,spent,limit:lim,pct:st.pct});
+      });
+    });
+
+    const newAlerts=[];
+    for(const al of evaluated){
+      const key=al.type+'|'+al.month+'|'+al.country+'|'+al.currency+'|'+(al.category||'_');
+      const stored=budgetAlerts[key]||{warned80:false,warned95:false,warned100:false};
+      const pct=al.pct||0;
+      if(pct<80){
+        stored.warned80=false;stored.warned95=false;stored.warned100=false;
+      }else if(pct<95){
+        stored.warned95=false;stored.warned100=false;
+      }else if(pct<100){
+        stored.warned100=false;
+      }
+
+      let trigger=false;
+      if(al.level==='warn'&&!stored.warned80){stored.warned80=true;trigger=true;}
+      else if(al.level==='strong'&&!stored.warned95){stored.warned80=true;stored.warned95=true;trigger=true;}
+      else if(al.level==='over'&&!stored.warned100){stored.warned80=true;stored.warned95=true;stored.warned100=true;trigger=true;}
+
+      budgetAlerts[key]=stored;
+      if(trigger)newAlerts.push(al);
+    }
+    return newAlerts;
+  }
+
   function computeBudgetStatus(spent,budget){
     const b=Number(budget)||0,s=Number(spent)||0;
     if(b<=0)return {level:'none',pct:0};
@@ -258,6 +314,7 @@
     setCategoryBudget,
     getOverallLimit,
     setOverallLimit,
+    evaluateBudgetAlerts,
     computeBudgetStatus
   });
 });
