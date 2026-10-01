@@ -310,6 +310,7 @@ jobs:
           ! grep -q "const ol = S.settings.overallSpendingLimits\[month\]" "$HTML"
           grep -q "ReportCore.computeBudgetStatus(spent,budget)" "$HTML"
           node --check "$REPORT_CORE"
+          node --check app/src/test/js/report-core.test.js
           node app/src/test/js/report-core.test.js
 
           grep -q "const SANAD_V9_VERSION = '9.0.10'" "$HTML"
