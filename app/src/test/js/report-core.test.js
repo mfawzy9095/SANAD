@@ -116,6 +116,34 @@ const state={
   assert.deepStrictEqual(budgetAlerts['overall|2026-09|UAE|AED|_'],{warned80:true,warned95:true,warned100:true});
 })();
 
+(function reportTransferAndCreditActivity(){
+  const transferState={accounts:[
+    {id:'a',currency:'AED'},{id:'b',currency:'EGP'},{id:'c',currency:'USD'}
+  ]};
+  const transfers=[
+    {fromAccountId:'a',toAccountId:'b',fromAmount:10,toAmount:100},
+    {fromAccountId:'a',toAccountId:'c',fromAmount:5,toAmount:2,fromCurrency:'USD'},
+    {fromAccountId:'missing',toAccountId:'missing2',fromAmount:3,toAmount:4}
+  ];
+  assert.deepStrictEqual(R.transferCurrencyTotals(transferState,transfers,true),{AED:13,USD:5});
+  assert.deepStrictEqual(R.transferCurrencyTotals(transferState,transfers,false),{EGP:100,USD:2,AED:4});
+  assert.deepStrictEqual(R.transferCurrencyTotals(transferState,null,true),{});
+
+  const creditState={transactions:[
+    {type:'expense',accountId:'card',amount:999,walletAmount:120,date:'2026-09-10'},
+    {type:'expense',accountId:'card',amount:80,date:'2026-09-11'},
+    {type:'expense',accountId:'other',amount:50,date:'2026-09-11'},
+    {type:'transfer',toAccountId:'card',toAmount:70,date:'2026-09-12'},
+    {type:'transfer',toAccountId:'card',toAmount:30,date:'2026-10-01'}
+  ]};
+  assert.deepStrictEqual(R.creditPeriodActivity(creditState,'card',{start:'2026-09-01',end:'2026-09-30'}),{
+    purchases:200,repaymentPrincipal:70
+  });
+  assert.deepStrictEqual(R.creditPeriodActivity(null,'card',{start:'2026-09-01',end:'2026-09-30'}),{
+    purchases:0,repaymentPrincipal:0
+  });
+})();
+
 (function reportPresentationData(){
   assert.deepStrictEqual(R.categoryPieBuckets({food:30,transport:20}),[
     {id:'food',value:30,other:false},{id:'transport',value:20,other:false}

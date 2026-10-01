@@ -298,6 +298,8 @@ jobs:
           grep -q "function getOverallLimit" "$REPORT_CORE"
           grep -q "function setOverallLimit" "$REPORT_CORE"
           grep -q "function evaluateBudgetAlerts" "$REPORT_CORE"
+          grep -q "function transferCurrencyTotals" "$REPORT_CORE"
+          grep -q "function creditPeriodActivity" "$REPORT_CORE"
           grep -q "function categoryPieBuckets" "$REPORT_CORE"
           grep -q "function distinctSourceTransactionCount" "$REPORT_CORE"
           grep -q "ReportCore.getCategoryBudget(S.settings.categoryBudgets" "$HTML"

@@ -293,6 +293,35 @@
     return newAlerts;
   }
 
+  function transferCurrencyTotals(state,list,useFrom){
+    const totals={};
+    const rows=Array.isArray(list)?list:[];
+    rows.forEach(t=>{
+      if(!t)return;
+      const accountId=useFrom?t.fromAccountId:t.toAccountId;
+      const acc=getAccount(state,accountId);
+      const cur=(useFrom?t.fromCurrency:t.toCurrency)||(acc?acc.currency:'AED');
+      const amount=useFrom?(Number(t.fromAmount)||0):(Number(t.toAmount)||0);
+      totals[cur]=(totals[cur]||0)+amount;
+    });
+    return totals;
+  }
+
+  function creditPeriodActivity(state,accountId,range){
+    const r=range||{};
+    let purchases=0,repaymentPrincipal=0;
+    for(const t of (state&&state.transactions)||[]){
+      if(!t||!t.date||t.date<r.start||t.date>r.end)continue;
+      if(t.type==='expense'&&t.accountId===accountId){
+        purchases+=Number(t.walletAmount!=null?t.walletAmount:t.amount)||0;
+      }
+      if(t.type==='transfer'&&t.toAccountId===accountId){
+        repaymentPrincipal+=Number(t.toAmount)||0;
+      }
+    }
+    return {purchases,repaymentPrincipal};
+  }
+
   function categoryPieBuckets(categoryTotals){
     const all=Object.entries(categoryTotals||{}).sort((a,b)=>(Number(b[1])||0)-(Number(a[1])||0));
     if(all.length<=6)return all.map(([id,value])=>({id,value:Number(value)||0,other:false}));
@@ -329,6 +358,8 @@
     getOverallLimit,
     setOverallLimit,
     evaluateBudgetAlerts,
+    transferCurrencyTotals,
+    creditPeriodActivity,
     categoryPieBuckets,
     distinctSourceTransactionCount,
     computeBudgetStatus
