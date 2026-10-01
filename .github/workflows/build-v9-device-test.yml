@@ -212,13 +212,13 @@ jobs:
           grep -q "function hideSanadBootSplash" "$HTML"
           grep -q "window.__sanadSplashBorn" "$HTML"
           grep -q "SanadI18n.watch()" "$HTML"
-          grep -q "'أضف حساب':'Add account'" "$HTML"
-          grep -q "'أضف حسابًا':'Add account'" "$HTML"
-          grep -q "'أضف حساباً':'Add account'" "$HTML"
-          grep -q "'بدون':'None'" "$HTML"
-          grep -q "'— بدون —':'— None —'" "$HTML"
-          grep -q "'لا يوجد مديونية':'No debt'" "$HTML"
-          grep -q "'لا توجد مديونية':'No debt'" "$HTML"
+          grep -q "'أضف حساب':'Add account'" "$I18N_CORE"
+          grep -q "'أضف حسابًا':'Add account'" "$I18N_CORE"
+          grep -q "'أضف حساباً':'Add account'" "$I18N_CORE"
+          grep -q "'بدون':'None'" "$I18N_CORE"
+          grep -q "'— بدون —':'— None —'" "$I18N_CORE"
+          grep -q "'لا يوجد مديونية':'No debt'" "$I18N_CORE"
+          grep -q "'لا توجد مديونية':'No debt'" "$I18N_CORE"
           grep -q "يمكنك ترك المبلغ 0 لربط حساب التمويل بدون تسجيل شحن أولي" "$HTML"
           grep -q "if(bal>0&&fundingAcc.currency!==cardCur)" "$HTML"
           grep -q "prepaidFundingMode==='transfer'&&prepaidFundingSourceId&&bal>0" "$HTML"
@@ -227,6 +227,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           h=Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
+          i18n=Path("app/src/main/assets/js/i18n-core.js").read_text(encoding="utf-8")
           tx=h[h.index("function renderTxSheet(){"):h.index("function dispAmount",h.index("function renderTxSheet(){"))]
           expected=["sourceArea","cat-scroll","native-amount-input","sanadReceiptQuickMount","tx-main-date","adv-details"]
           pos=[tx.index(x) for x in expected]
@@ -270,7 +271,7 @@ jobs:
             "أضف حسابًا يمكن الشحن منه أولاً":"Add an account that can fund the top-up first",
           }
           for ar,en in required.items():
-              assert repr(ar)+":"+repr(en) in h, (ar,en)
+              assert repr(ar)+":"+repr(en) in i18n, (ar,en)
           PY
 
           python3 - <<'PY'
