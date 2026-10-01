@@ -1,0 +1,638 @@
+name: SANAD Architecture Refactor Gate
+# architecture-gate: phase-1-finance-core
+
+on:
+  push:
+    branches:
+      - refactor-v9.1-architecture
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sanad-architecture-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: Verify stable branding resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s app/src/main/res/drawable/ic_launcher_foreground.xml
+          test -s app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          test -s app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+          grep -q '@color/sanad_primary' app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          grep -q '@drawable/ic_launcher_foreground' app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          grep -q 'android:icon="@mipmap/ic_launcher"' app/src/main/AndroidManifest.xml
+          grep -q 'android:roundIcon="@mipmap/ic_launcher_round"' app/src/main/AndroidManifest.xml
+
+      - name: Verify stable baseline and modular finance core
+        shell: bash
+        run: |
+          set -euo pipefail
+          HTML="app/src/main/assets/index.html"
+          test -s "$HTML"
+          MAIN_ACTIVITY="app/src/main/java/com/sanad/v9test/MainActivity.java"
+          MANIFEST="app/src/main/AndroidManifest.xml"
+          test -s "$MAIN_ACTIVITY"
+          test -s "$MANIFEST"
+          grep -q 'APP_URL = "https://appassets.androidplatform.net/assets/index.html"' "$MAIN_ACTIVITY"
+          grep -q 'settings.setAllowFileAccess(false)' "$MAIN_ACTIVITY"
+          grep -q 'settings.setAllowContentAccess(false)' "$MAIN_ACTIVITY"
+          grep -q 'settings.setAllowFileAccessFromFileURLs(false)' "$MAIN_ACTIVITY"
+          grep -q 'settings.setAllowUniversalAccessFromFileURLs(false)' "$MAIN_ACTIVITY"
+          grep -q 'settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW)' "$MAIN_ACTIVITY"
+          grep -q 'WebSettingsCompat.setSafeBrowsingEnabled(settings, true)' "$MAIN_ACTIVITY"
+          grep -q 'webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge")' "$MAIN_ACTIVITY"
+          grep -q 'webView.removeJavascriptInterface("AndroidBridge")' "$MAIN_ACTIVITY"
+          grep -q 'startActivity(new Intent(Intent.ACTION_VIEW, uri))' "$MAIN_ACTIVITY"
+          ! grep -q 'setAllowFileAccess(true)' "$MAIN_ACTIVITY"
+          ! grep -q 'setAllowContentAccess(true)' "$MAIN_ACTIVITY"
+          ! grep -q 'setAllowUniversalAccessFromFileURLs(true)' "$MAIN_ACTIVITY"
+          grep -q 'android:allowBackup="false"' "$MANIFEST"
+          grep -q 'android:usesCleartextTraffic="false"' "$MANIFEST"
+          SOURCE_SHA="$(sha256sum "$HTML" | awk '{print $1}')"
+          echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
+          CORE="app/src/main/assets/js/finance-core.js"
+          test -s "$CORE"
+          CORE_SHA="$(sha256sum "$CORE" | awk '{print $1}')"
+          echo "CORE_SHA=$CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/finance-core.js"></script>' "$HTML"
+          grep -q "const FinanceCore = window.SanadFinanceCore" "$HTML"
+          grep -q "FinanceCore.accountBalance(S, accountId)" "$HTML"
+          grep -q "FinanceCore.accountDebt(S, accountId)" "$HTML"
+          grep -q "FinanceCore.creditAvailable(S, accountId)" "$HTML"
+          grep -q "FinanceCore.suggestRate(fromCur,toCur,S.settings.lastFx,DEFAULT_FX)" "$HTML"
+          node --check "$CORE"
+          node app/src/test/js/finance-core.test.js
+          STATE_CORE="app/src/main/assets/js/state-core.js"
+          test -s "$STATE_CORE"
+          STATE_CORE_SHA="$(sha256sum "$STATE_CORE" | awk '{print $1}')"
+          echo "STATE_CORE_SHA=$STATE_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/state-core.js"></script>' "$HTML"
+          grep -q "const StateCore = window.SanadStateCore" "$HTML"
+          grep -q "StateCore.stateFingerprint(st)" "$HTML"
+          grep -q "StateCore.compareTxDesc(a,b)" "$HTML"
+          node --check "$STATE_CORE"
+          node app/src/test/js/state-core.test.js
+          STORAGE_CORE="app/src/main/assets/js/storage-core.js"
+          test -s "$STORAGE_CORE"
+          STORAGE_CORE_SHA="$(sha256sum "$STORAGE_CORE" | awk '{print $1}')"
+          echo "STORAGE_CORE_SHA=$STORAGE_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/storage-core.js"></script>' "$HTML"
+          grep -q "const StorageCore = window.SanadStorageCore" "$HTML"
+          grep -q "StorageCore.createStorage" "$HTML"
+          grep -q "Storage.resetConnection()" "$HTML"
+          ! grep -q "const IDBStorage =" "$HTML"
+          ! grep -q "const MemoryStorage =" "$HTML"
+          node --check "$STORAGE_CORE"
+          node app/src/test/js/storage-core.test.js
+          FEATURE_CORE="app/src/main/assets/js/feature-storage-core.js"
+          test -s "$FEATURE_CORE"
+          FEATURE_CORE_SHA="$(sha256sum "$FEATURE_CORE" | awk '{print $1}')"
+          echo "FEATURE_CORE_SHA=$FEATURE_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/feature-storage-core.js"></script>' "$HTML"
+          grep -q "const FeatureStorageCore = window.SanadFeatureStorageCore" "$HTML"
+          grep -q "FeatureStorageCore.createFeatureStorage" "$HTML"
+          grep -q "strictInitFailures: true" "$HTML"
+          grep -q "SanadExtStorage.mode==='error'" "$HTML"
+          grep -q "تخزين المرفقات غير متاح — لم يتم إرفاق الفاتورة" "$HTML"
+          grep -q "تعذر إنشاء نسخة كاملة — تخزين المرفقات غير متاح" "$HTML"
+          ! grep -q "memKV:new Map()" "$HTML"
+          ! grep -q "memReceipts:new Map()" "$HTML"
+          grep -q "strictInitFailures" "$FEATURE_CORE"
+          grep -q "this.mode==='error'" "$FEATURE_CORE"
+          node --check "$FEATURE_CORE"
+          node --check app/src/test/js/feature-storage-core.test.js
+          node app/src/test/js/feature-storage-core.test.js
+          BACKUP_CORE="app/src/main/assets/js/backup-core.js"
+          test -s "$BACKUP_CORE"
+          BACKUP_CORE_SHA="$(sha256sum "$BACKUP_CORE" | awk '{print $1}')"
+          echo "BACKUP_CORE_SHA=$BACKUP_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/backup-core.js"></script>' "$HTML"
+          grep -q "const BackupCore = window.SanadBackupCore" "$HTML"
+          grep -q "BackupCore.makeFinanceBackup" "$HTML"
+          grep -q "function verifyFinanceIntegrity" "$BACKUP_CORE"
+          grep -q "BackupCore.makeFullBackup" "$HTML"
+          grep -q "function validateFullEnvelope" "$BACKUP_CORE"
+          grep -q "BackupCore.parseJsonText" "$HTML"
+          grep -q "BackupCore.validateFinanceRestoreInput(parsed" "$HTML"
+          grep -q "function validateFinanceRestoreInput" "$BACKUP_CORE"
+          grep -q "BackupCore.prepareFullRestore" "$HTML"
+          grep -q "BackupCore.prepareFinanceRestore(parsed" "$HTML"
+          grep -q "prepareFinanceRestore" "$BACKUP_CORE"
+          node --check "$BACKUP_CORE"
+          node app/src/test/js/backup-core.test.js
+          SECURITY_CORE="app/src/main/assets/js/security-core.js"
+          test -s "$SECURITY_CORE"
+          SECURITY_CORE_SHA="$(sha256sum "$SECURITY_CORE" | awk '{print $1}')"
+          echo "SECURITY_CORE_SHA=$SECURITY_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/security-core.js"></script>' "$HTML"
+          grep -q "const SecurityCore = window.SanadSecurityCore" "$HTML"
+          grep -q "SecurityCore.createSecurityCore" "$HTML"
+          grep -q "SecurityCrypto.generateRecoveryCode" "$HTML"
+          grep -q "SecurityCrypto.recoveryDigest" "$HTML"
+          grep -q "SecurityCrypto.shouldRelockOnForeground" "$HTML"
+          grep -q "function shouldRelockOnForeground" "$SECURITY_CORE"
+          grep -q "function defaultConfig" "$SECURITY_CORE"
+          grep -q "function prepareInitialState" "$SECURITY_CORE"
+          grep -q "function unlockRoute" "$SECURITY_CORE"
+          grep -q "function shouldShowLockOverlay" "$SECURITY_CORE"
+          grep -q "SecurityCrypto.prepareInitialState" "$HTML"
+          grep -q "SecurityCrypto.unlockRoute" "$HTML"
+          grep -q "SecurityCrypto.shouldShowLockOverlay" "$HTML"
+          ! grep -q "const elapsed=Math.max(0,(Number(ts)||Date.now())-this.backgroundAt)" "$HTML"
+          ! grep -q "stored=await SanadExtStorage.get('security',null),base=" "$HTML"
+          ! grep -q "if(this.cfg.authMode==='android-device'||(!this.cfg.credentialId&&this.nativeAvailable()))" "$HTML"
+          ! grep -q "SanadSecurity.cfg.enabled&&!SanadSecurity.unlocked" "$HTML"
+          node --check "$SECURITY_CORE"
+          node app/src/test/js/security-core.test.js
+          SECURITY_ADAPTER="app/src/main/assets/js/security-adapter.js"
+          test -s "$SECURITY_ADAPTER"
+          SECURITY_ADAPTER_SHA="$(sha256sum "$SECURITY_ADAPTER" | awk '{print $1}')"
+          echo "SECURITY_ADAPTER_SHA=$SECURITY_ADAPTER_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/security-adapter.js"></script>' "$HTML"
+          grep -q "const SecurityAdapterCore = window.SanadSecurityAdapter" "$HTML"
+          grep -q "SecurityAdapterCore.createSecurityAdapter" "$HTML"
+          grep -q "SecurityAdapter.nativeAvailable()" "$HTML"
+          grep -q "SecurityAdapter.nativeAuth(reason,60000)" "$HTML"
+          grep -q "SecurityAdapter.markerEnabled(this.markerKey)" "$HTML"
+          grep -q "SecurityAdapter.setMarker(this.markerKey,on)" "$HTML"
+          grep -q "SecurityAdapter.webAuthnEnvironmentAvailable()" "$HTML"
+          grep -q "SecurityAdapter.getCredential" "$HTML"
+          grep -q "SecurityAdapter.createCredential" "$HTML"
+          node --check "$SECURITY_ADAPTER"
+          node app/src/test/js/security-adapter.test.js
+
+          RECEIPT_CORE="app/src/main/assets/js/receipt-core.js"
+          test -s "$RECEIPT_CORE"
+          RECEIPT_CORE_SHA="$(sha256sum "$RECEIPT_CORE" | awk '{print $1}')"
+          echo "RECEIPT_CORE_SHA=$RECEIPT_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/receipt-core.js"></script>' "$HTML"
+          grep -q "const ReceiptCore = window.SanadReceiptCore" "$HTML"
+          grep -q "ReceiptCore.validateFile(file)" "$HTML"
+          grep -q "ReceiptCore.compressionDimensions" "$HTML"
+          grep -q "ReceiptCore.makeMeta" "$HTML"
+          grep -q "ReceiptCore.currentTxId(S.form)" "$HTML"
+          grep -q "ReceiptCore.resolveAttachmentAfterSave(saveSucceeded,beforeIds,editId,S.transactions)" "$HTML"
+          grep -q "ReceiptCore.resolveAttachmentAfterSave(saved===true,ids,edit,S.transactions)" "$HTML"
+          grep -q "const saved=await _sanadCoreSaveTx()" "$HTML"
+          grep -q "const saved=await _sanadCoreSaveTransfer()" "$HTML"
+          ! grep -q "const targetId=edit||(added&&added.id)" "$HTML"
+          grep -q "ReceiptCore.createReceiptService" "$HTML"
+          grep -q "this.domain().attach(txId,pending)" "$HTML"
+          grep -q "this.domain().remove(S.form.id)" "$HTML"
+          grep -q "const ok=await this.domain().remove(S.form.id)" "$HTML"
+          grep -q "if(!ok){toast('تعذر حذف الفاتورة');return false;}" "$HTML"
+          grep -q "function currentTxId" "$RECEIPT_CORE"
+          grep -q "function resolveAttachmentTxId" "$RECEIPT_CORE"
+          grep -q "function resolveAttachmentAfterSave" "$RECEIPT_CORE"
+          grep -q "function createReceiptService" "$RECEIPT_CORE"
+          node --check "$RECEIPT_CORE"
+          node app/src/test/js/receipt-core.test.js
+          SCHEMA_REPAIR_CORE="app/src/main/assets/js/schema-repair-core.js"
+          test -s "$SCHEMA_REPAIR_CORE"
+          SCHEMA_REPAIR_CORE_SHA="$(sha256sum "$SCHEMA_REPAIR_CORE" | awk '{print $1}')"
+          echo "SCHEMA_REPAIR_CORE_SHA=$SCHEMA_REPAIR_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/schema-repair-core.js"></script>' "$HTML"
+          grep -q "const SchemaRepairCore = window.SanadSchemaRepairCore" "$HTML"
+          grep -q "SchemaRepairCore.createSchemaRepairCore" "$HTML"
+          node --check "$SCHEMA_REPAIR_CORE"
+          node app/src/test/js/schema-repair-core.test.js
+          STATE_MODEL_CORE="app/src/main/assets/js/state-model-core.js"
+          test -s "$STATE_MODEL_CORE"
+          STATE_MODEL_CORE_SHA="$(sha256sum "$STATE_MODEL_CORE" | awk '{print $1}')"
+          echo "STATE_MODEL_CORE_SHA=$STATE_MODEL_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/state-model-core.js"></script>' "$HTML"
+          grep -q "const StateModelCore = window.SanadStateModelCore" "$HTML"
+          grep -q "StateModelCore.createStateModel" "$HTML"
+          grep -q "StateModel.snapshotState(S)" "$HTML"
+          grep -q "StateModel.loadStateInto(S,state)" "$HTML"
+          node --check "$STATE_MODEL_CORE"
+          node app/src/test/js/state-model-core.test.js
+          I18N_CORE="app/src/main/assets/js/i18n-core.js"
+          test -s "$I18N_CORE"
+          I18N_CORE_SHA="$(sha256sum "$I18N_CORE" | awk '{print $1}')"
+          echo "I18N_CORE_SHA=$I18N_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/i18n-core.js"></script>' "$HTML"
+          grep -q "const I18nCore = window.SanadI18nCore" "$HTML"
+          grep -q "Object.assign(I18nCore.createI18nCore()" "$HTML"
+          grep -q "I18nCore.normalizeLanguage" "$HTML"
+          grep -q "I18nCore.directionForLanguage" "$HTML"
+          grep -q "I18nCore.isValidLanguage" "$HTML"
+          grep -q "function normalizeLanguage" "$I18N_CORE"
+          grep -q "function directionForLanguage" "$I18N_CORE"
+          grep -q "function isValidLanguage" "$I18N_CORE"
+          ! grep -q "const SanadI18n = {" "$HTML"
+          node --check "$I18N_CORE"
+          node app/src/test/js/i18n-core.test.js
+          THEME_CORE="app/src/main/assets/js/theme-core.js"
+          test -s "$THEME_CORE"
+          THEME_CORE_SHA="$(sha256sum "$THEME_CORE" | awk '{print $1}')"
+          echo "THEME_CORE_SHA=$THEME_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/theme-core.js"></script>' "$HTML"
+          grep -q "const ThemeCore = window.SanadThemeCore" "$HTML"
+          grep -q "ThemeCore.normalizeMode" "$HTML"
+          grep -q "ThemeCore.resolveMode" "$HTML"
+          grep -q "ThemeCore.metaThemeColor" "$HTML"
+          grep -q "ThemeCore.isValidMode" "$HTML"
+          node --check "$THEME_CORE"
+          node app/src/test/js/theme-core.test.js
+          SCHEMA_CORE="app/src/main/assets/js/schema-core.js"
+          test -s "$SCHEMA_CORE"
+          SCHEMA_CORE_SHA="$(sha256sum "$SCHEMA_CORE" | awk '{print $1}')"
+          echo "SCHEMA_CORE_SHA=$SCHEMA_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/schema-core.js"></script>' "$HTML"
+          grep -q "const SchemaCore = window.SanadSchemaCore" "$HTML"
+          grep -q "SchemaCore.createSchema" "$HTML"
+          ! grep -q "const Schema = {" "$HTML"
+          grep -q "schemaRepair:SchemaRepair" "$HTML"
+          grep -q "SchemaRepair.normalizeRepaymentFees(state)" "$SCHEMA_CORE"
+          grep -q "SchemaRepair.repairPrepaidOwnedAccounts(state)" "$SCHEMA_CORE"
+          grep -q "SchemaRepair.schemaAccountBalance(state, accountId)" "$SCHEMA_CORE"
+          grep -q "SchemaRepair.repairCreditArchiveConsistency(state)" "$SCHEMA_CORE"
+          node --check "$SCHEMA_CORE"
+          node app/src/test/js/schema-core.test.js
+          PERSISTENCE_CORE="app/src/main/assets/js/persistence-core.js"
+          test -s "$PERSISTENCE_CORE"
+          PERSISTENCE_CORE_SHA="$(sha256sum "$PERSISTENCE_CORE" | awk '{print $1}')"
+          echo "PERSISTENCE_CORE_SHA=$PERSISTENCE_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/persistence-core.js"></script>' "$HTML"
+          grep -q "const PersistenceCore = window.SanadPersistenceCore" "$HTML"
+          grep -q "PersistenceCore.createPersistenceService" "$HTML"
+          grep -q "PersistenceService.rotateVerifiedSnapshot" "$HTML"
+          grep -q "PersistenceService.verifiedWriteState" "$HTML"
+          grep -q "FinanceCore.capturePrepaidBalances(S)" "$HTML"
+          grep -q "FinanceCore.checkPrepaidInvariant(prepaidBefore,S)" "$HTML"
+          node --check "$PERSISTENCE_CORE"
+          node app/src/test/js/persistence-core.test.js
+          MUTATION_CORE="app/src/main/assets/js/mutation-core.js"
+          test -s "$MUTATION_CORE"
+          MUTATION_CORE_SHA="$(sha256sum "$MUTATION_CORE" | awk '{print $1}')"
+          echo "MUTATION_CORE_SHA=$MUTATION_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/mutation-core.js"></script>' "$HTML"
+          grep -q "const MutationCore = window.SanadMutationCore" "$HTML"
+          grep -q "MutationCore.createMutationService" "$HTML"
+          grep -q "return MutationService.run(mutateFn);" "$HTML"
+          grep -q "setMutationError: v => { _lastMutationError = v; }" "$HTML"
+          node --check "$MUTATION_CORE"
+          node app/src/test/js/mutation-core.test.js
+          REMINDER_CORE="app/src/main/assets/js/reminder-core.js"
+          test -s "$REMINDER_CORE"
+          REMINDER_CORE_SHA="$(sha256sum "$REMINDER_CORE" | awk '{print $1}')"
+          echo "REMINDER_CORE_SHA=$REMINDER_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/reminder-core.js"></script>' "$HTML"
+          grep -q "const ReminderCore = window.SanadReminderCore" "$HTML"
+          grep -q "ReminderCore.reminderDaysOf(r)" "$HTML"
+          grep -q "ReminderCore.daysUntilNextOccurrence(r,Date.now())" "$HTML"
+          grep -q "ReminderCore.nativeReminderSpecs(S.recurring" "$HTML"
+          grep -q "ReminderCore.dueNotifications(S.recurring" "$HTML"
+          node --check "$REMINDER_CORE"
+          node app/src/test/js/reminder-core.test.js
+          REPORT_CORE="app/src/main/assets/js/report-core.js"
+          test -s "$REPORT_CORE"
+          REPORT_CORE_SHA="$(sha256sum "$REPORT_CORE" | awk '{print $1}')"
+          echo "REPORT_CORE_SHA=$REPORT_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/report-core.js"></script>' "$HTML"
+          grep -q "const ReportCore = window.SanadReportCore" "$HTML"
+          grep -q "ReportCore.reportExpenseEntries(S" "$HTML"
+          grep -q "ReportCore.buildReportDataset(S" "$HTML"
+          grep -q "function getCategoryBudget" "$REPORT_CORE"
+          grep -q "function setCategoryBudget" "$REPORT_CORE"
+          grep -q "function getOverallLimit" "$REPORT_CORE"
+          grep -q "function setOverallLimit" "$REPORT_CORE"
+          grep -q "function evaluateBudgetAlerts" "$REPORT_CORE"
+          grep -q "function transferCurrencyTotals" "$REPORT_CORE"
+          grep -q "function creditPeriodActivity" "$REPORT_CORE"
+          grep -q "function categoryPieBuckets" "$REPORT_CORE"
+          grep -q "function distinctSourceTransactionCount" "$REPORT_CORE"
+          grep -q "ReportCore.getCategoryBudget(S.settings.categoryBudgets" "$HTML"
+          grep -q "ReportCore.setCategoryBudget(S.settings.categoryBudgets" "$HTML"
+          grep -q "ReportCore.getOverallLimit(S.settings.overallSpendingLimits" "$HTML"
+          grep -q "ReportCore.setOverallLimit(S.settings.overallSpendingLimits" "$HTML"
+          grep -q "ReportCore.evaluateBudgetAlerts(ds" "$HTML"
+          grep -q "ReportCore.categoryPieBuckets(categoryTotals)" "$HTML"
+          grep -q "ReportCore.categoryPieBuckets(ds.categoryByCur\[activeCur\]" "$HTML"
+          grep -q "ReportCore.distinctSourceTransactionCount(ds.expenses,activeCur)" "$HTML"
+          grep -q "ReportCore.transferCurrencyTotals(S,list,useFrom)" "$HTML"
+          grep -q "ReportCore.creditPeriodActivity(S,repAcc.id,rr)" "$HTML"
+          ! grep -q "purchases += Number(t.walletAmount" "$HTML"
+          ! grep -q "new Set(expEntriesForCur.map(e => e.sourceTxId)).size" "$HTML"
+          ! grep -q "S.settings.budgetAlerts\[key\]" "$HTML"
+          ! grep -q "const mb = S.settings.categoryBudgets\[month\]" "$HTML"
+          ! grep -q "const ol = S.settings.overallSpendingLimits\[month\]" "$HTML"
+          grep -q "ReportCore.computeBudgetStatus(spent,budget)" "$HTML"
+          node --check "$REPORT_CORE"
+          node --check app/src/test/js/report-core.test.js
+          node app/src/test/js/report-core.test.js
+
+          grep -q "const SANAD_V9_VERSION = '9.0.10'" "$HTML"
+          grep -q "_criticalMutationInFlight" "$HTML"
+          grep -q "reason:'busy'" "$HTML"
+          grep -q "relockAfterMs:30000" "$HTML"
+          grep -q "_autoPrompting:false" "$HTML"
+          grep -q "sanad-lock.auto-auth .lock-card" "$HTML"
+          grep -q "setTimeout(()=>this.unlock(true),80)" "$HTML"
+          grep -q "el.classList.add('auto-auth')" "$HTML"
+          grep -q "el.classList.remove('auto-auth')" "$HTML"
+          grep -q "window.sanadAppBackgrounded" "$HTML"
+          grep -q "window.sanadAppForegrounded" "$HTML"
+          grep -q "async function secureWipeAll()" "$HTML"
+          grep -q "Storage.secureWipe()" "$HTML"
+          grep -q "SanadExtStorage.secureWipe()" "$HTML"
+          grep -q "إعادة ضبط البيانات المالية" "$HTML"
+          grep -q "حذف SANAD بالكامل من الجهاز" "$HTML"
+          grep -q "syncNativeNotifications();applyTheme();render();return true;" "$HTML"
+          test -s app/src/main/java/com/sanad/v9test/NotificationTimeCalculator.java
+          test -s app/src/test/java/com/sanad/v9test/NotificationTimeCalculatorTest.java
+          grep -q "NotificationTimeCalculator.nextTrigger" app/src/main/java/com/sanad/v9test/NotificationScheduler.java
+          grep -q "ACTION_TIMEZONE_CHANGED" app/src/main/java/com/sanad/v9test/BootReceiver.java
+          grep -q "const SANAD_CLOUD_FAMILY_BETA_ENABLED = false" "$HTML"
+          grep -q "async replaceReceipts(records)" "$FEATURE_CORE"
+          grep -q "async pruneReceiptOrphans(validIds)" "$FEATURE_CORE"
+          grep -q "PBKDF2" "$HTML"
+          grep -q "SanadSecurity.pendingStart=true" "$HTML"
+          grep -q "beforeFinance=snapshotState()" "$HTML"
+          grep -q "async pruneMissingTransactions()" "$HTML"
+          ! grep -Eq "keyNum[[:space:]]*\(|#keypad|\.keypad|custom.?keypad" "$HTML"
+          ! grep -Eq "sanad_(splash|logo|app_icon)\.webp" "$HTML"
+          grep -q 'id="sanadSplashMark"' "$HTML"
+          grep -q "function hideSanadBootSplash" "$HTML"
+          grep -q "window.__sanadSplashBorn" "$HTML"
+          grep -q "SanadI18n.watch()" "$HTML"
+          grep -q "'أضف حساب':'Add account'" "$I18N_CORE"
+          grep -q "'أضف حسابًا':'Add account'" "$I18N_CORE"
+          grep -q "'أضف حساباً':'Add account'" "$I18N_CORE"
+          grep -q "'بدون':'None'" "$I18N_CORE"
+          grep -q "'— بدون —':'— None —'" "$I18N_CORE"
+          grep -q "'لا يوجد مديونية':'No debt'" "$I18N_CORE"
+          grep -q "'لا توجد مديونية':'No debt'" "$I18N_CORE"
+          grep -q "يمكنك ترك المبلغ 0 لربط حساب التمويل بدون تسجيل شحن أولي" "$HTML"
+          grep -q "if(bal>0&&fundingAcc.currency!==cardCur)" "$HTML"
+          grep -q "prepaidFundingMode==='transfer'&&prepaidFundingSourceId&&bal>0" "$HTML"
+          ! grep -q "if(bal<=0){ toast('أدخل مبلغ الشحن')" "$HTML"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          h=Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
+          i18n=Path("app/src/main/assets/js/i18n-core.js").read_text(encoding="utf-8")
+          tx=h[h.index("function renderTxSheet(){"):h.index("function dispAmount",h.index("function renderTxSheet(){"))]
+          expected=["sourceArea","cat-scroll","native-amount-input","sanadReceiptQuickMount","tx-main-date","adv-details"]
+          pos=[tx.index(x) for x in expected]
+          assert all(x >= 0 for x in pos)
+          assert pos==sorted(pos), ("transaction order",list(zip(expected,pos)))
+
+          tr=h[h.index("function renderTransferSheet(){"):h.index("function setTransferMode",h.index("function renderTransferSheet(){"))]
+          ui=tr[tr.index("  openSheet("):]
+          expected2=["<label>من حساب</label>","<label>إلى</label>","amountSection","sanadReceiptQuickMount","tx-main-date","adv-details"]
+          pos2=[ui.index(x) for x in expected2]
+          assert all(x >= 0 for x in pos2)
+          assert pos2==sorted(pos2), ("transfer order",list(zip(expected2,pos2)))
+
+          splash=h[h.index('id="sanadBootSplash"'):h.index('<input type="file"',h.index('id="sanadBootSplash"'))]
+          assert 'data:image/' not in splash
+          assert 'id="sanadSplashMark"' in splash
+          assert 'SANAD' in splash
+          assert '.webp' not in splash
+
+          card=h[h.index("async function saveCard"):h.index("async function archiveInstrument",h.index("async function saveCard"))]
+          assert "defaultTopupAccountId: isPrepaid ? prepaidFundingSourceId : null" in card
+          assert "prepaidFundingMode==='transfer'&&prepaidFundingSourceId&&bal>0" in card
+          assert "if(bal<=0)" not in card
+
+          required={
+            "أضف حساب":"Add account",
+            "أضف حسابًا":"Add account",
+            "أضف حساباً":"Add account",
+            "بدون":"None",
+            "— بدون —":"— None —",
+            "لا يوجد مديونية":"No debt",
+            "لا توجد مديونية":"No debt",
+            "يمكنك ترك المبلغ 0 لربط حساب التمويل بدون تسجيل شحن أولي.":"You can leave the amount at 0 to link the funding account without recording an initial top-up.",
+            "حساباتك في كل بلد":"Your accounts in every country",
+            "التالي":"Next",
+            "تخطي":"Skip",
+            "لا يوجد أشخاص بعد":"No people yet",
+            "إضافة شخص":"Add person",
+            "لا يوجد فرق":"No difference",
+            "أضف حساباً أولاً للسداد":"Add an account first for repayment",
+            "أضف حسابًا يمكن الشحن منه أولاً":"Add an account that can fund the top-up first",
+          }
+          for ar,en in required.items():
+              assert repr(ar)+":"+repr(en) in i18n, (ar,en)
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
+          h=Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
+          finance=h.index('<script src="js/finance-core.js"></script>')
+          state=h.index('<script src="js/state-core.js"></script>')
+          storage=h.index('<script src="js/storage-core.js"></script>')
+          feature=h.index('<script src="js/feature-storage-core.js"></script>')
+          backup=h.index('<script src="js/backup-core.js"></script>')
+          security=h.index('<script src="js/security-core.js"></script>')
+          security_adapter=h.index('<script src="js/security-adapter.js"></script>')
+          receipt=h.index('<script src="js/receipt-core.js"></script>')
+          schema_repair=h.index('<script src="js/schema-repair-core.js"></script>')
+          state_model=h.index('<script src="js/state-model-core.js"></script>')
+          i18n=h.index('<script src="js/i18n-core.js"></script>')
+          theme=h.index('<script src="js/theme-core.js"></script>')
+          schema=h.index('<script src="js/schema-core.js"></script>')
+          persistence=h.index('<script src="js/persistence-core.js"></script>')
+          mutation=h.index('<script src="js/mutation-core.js"></script>')
+          reminder=h.index('<script src="js/reminder-core.js"></script>')
+          report=h.index('<script src="js/report-core.js"></script>')
+          inline=h.index('<script>', report)
+          bind=h.index('const FinanceCore = window.SanadFinanceCore', inline)
+          state_bind=h.index('const StateCore = window.SanadStateCore', inline)
+          storage_bind=h.index('const StorageCore = window.SanadStorageCore', inline)
+          feature_bind=h.index('const FeatureStorageCore = window.SanadFeatureStorageCore', inline)
+          backup_bind=h.index('const BackupCore = window.SanadBackupCore', inline)
+          security_bind=h.index('const SecurityCore = window.SanadSecurityCore', inline)
+          security_adapter_bind=h.index('const SecurityAdapterCore = window.SanadSecurityAdapter', inline)
+          receipt_bind=h.index('const ReceiptCore = window.SanadReceiptCore', inline)
+          schema_repair_bind=h.index('const SchemaRepairCore = window.SanadSchemaRepairCore', inline)
+          state_model_bind=h.index('const StateModelCore = window.SanadStateModelCore', inline)
+          i18n_bind=h.index('const I18nCore = window.SanadI18nCore', inline)
+          theme_bind=h.index('const ThemeCore = window.SanadThemeCore', inline)
+          schema_bind=h.index('const SchemaCore = window.SanadSchemaCore', inline)
+          persistence_bind=h.index('const PersistenceCore = window.SanadPersistenceCore', inline)
+          mutation_bind=h.index('const MutationCore = window.SanadMutationCore', inline)
+          reminder_bind=h.index('const ReminderCore = window.SanadReminderCore', inline)
+          report_bind=h.index('const ReportCore = window.SanadReportCore', inline)
+          assert finance < state < storage < feature < backup < security < security_adapter < receipt < schema_repair < state_model < i18n < theme < schema < persistence < mutation < reminder < report < inline < bind < state_bind < storage_bind < feature_bind < backup_bind < security_bind < security_adapter_bind < receipt_bind < schema_repair_bind < state_model_bind < i18n_bind < theme_bind < schema_bind < persistence_bind < mutation_bind < reminder_bind < report_bind
+          assert "accountBalance(accountId){ return FinanceCore.accountBalance(S, accountId); }" in h
+          assert "creditAvailable(accountId){ return FinanceCore.creditAvailable(S, accountId); }" in h
+          security_ui=h[h.index("const SanadSecurity = {"):h.index("window.sanadDeviceAuthResult")]
+          assert "localStorage.getItem" not in security_ui
+          assert "localStorage.setItem" not in security_ui
+          assert "SecurityAdapter.markerEnabled" in security_ui
+          assert "SecurityAdapter.setMarker" in security_ui
+          receipt_ui=h[h.index("const SanadReceipts = {"):h.index("const SanadSecurity = {")]
+          assert "ReceiptCore.createReceiptService" in receipt_ui
+          assert "SanadExtStorage.getReceipt" not in receipt_ui
+          assert "SanadExtStorage.putReceipt" not in receipt_ui
+          assert "SanadExtStorage.delReceipt" not in receipt_ui
+          assert "SanadCloud.markReceiptDirty" in receipt_ui
+          PY
+
+          python3 - <<'PY'
+          import pathlib,re
+          html=pathlib.Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
+          scripts=re.findall(r"<script[^>]*>(.*?)</script>",html,re.S)
+          assert scripts
+          pathlib.Path("/tmp/sanad-v9010.js").write_text("\n".join(scripts),encoding="utf-8")
+          PY
+          for i in $(seq 1 10); do node --check /tmp/sanad-v9010.js >/dev/null; done
+          echo "V9.0.10 source gates passed 10x"
+
+      - name: JavaScript core regression tests
+        run: |
+          node --check app/src/main/assets/js/finance-core.js
+          node app/src/test/js/finance-core.test.js
+          node --check app/src/main/assets/js/state-core.js
+          node app/src/test/js/state-core.test.js
+          node --check app/src/main/assets/js/storage-core.js
+          node app/src/test/js/storage-core.test.js
+          node --check app/src/main/assets/js/feature-storage-core.js
+          node app/src/test/js/feature-storage-core.test.js
+          node --check app/src/main/assets/js/backup-core.js
+          node app/src/test/js/backup-core.test.js
+          node --check app/src/main/assets/js/security-core.js
+          node app/src/test/js/security-core.test.js
+          node --check app/src/main/assets/js/security-adapter.js
+          node app/src/test/js/security-adapter.test.js
+          node --check app/src/main/assets/js/receipt-core.js
+          node app/src/test/js/receipt-core.test.js
+          node --check app/src/main/assets/js/schema-repair-core.js
+          node app/src/test/js/schema-repair-core.test.js
+          node --check app/src/main/assets/js/state-model-core.js
+          node app/src/test/js/state-model-core.test.js
+          node --check app/src/main/assets/js/i18n-core.js
+          node app/src/test/js/i18n-core.test.js
+          node --check app/src/main/assets/js/theme-core.js
+          node app/src/test/js/theme-core.test.js
+          node --check app/src/main/assets/js/schema-core.js
+          node app/src/test/js/schema-core.test.js
+          node --check app/src/main/assets/js/persistence-core.js
+          node app/src/test/js/persistence-core.test.js
+          node --check app/src/main/assets/js/mutation-core.js
+          node app/src/test/js/mutation-core.test.js
+          node --check app/src/main/assets/js/reminder-core.js
+          node app/src/test/js/reminder-core.test.js
+          node --check app/src/main/assets/js/report-core.js
+          node app/src/test/js/report-core.test.js
+
+      - name: JVM regression tests
+        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
+
+      - name: Android lint
+        run: gradle --no-daemon --stacktrace :app:lintDebug
+
+      - name: Build debug APK
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify built APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          cp "$APK" "SANAD-V9.0.10-REFACTOR-A13.apk"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging "$APK" | tee apk-badging.txt
+          "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
+          grep -q "package: name='com.sanad.v9test'" apk-badging.txt
+          grep -q "versionCode='91000'" apk-badging.txt
+          grep -q "versionName='9.0.10-auto-unlock-rc'" apk-badging.txt
+          grep -q "application-label:'SANAD — سند'" apk-badging.txt
+          grep -q "android.permission.INTERNET" apk-permissions.txt
+          grep -q "android.permission.POST_NOTIFICATIONS" apk-permissions.txt
+          grep -q "android.permission.USE_BIOMETRIC" apk-permissions.txt
+          grep -q "android.permission.RECEIVE_BOOT_COMPLETED" apk-permissions.txt
+          ! grep -q "android.permission.READ_SMS" apk-permissions.txt
+          ! grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
+          ! grep -q "android.permission.CAMERA" apk-permissions.txt
+          ! grep -q "android.permission.READ_EXTERNAL_STORAGE" apk-permissions.txt
+          ! grep -q "android.permission.WRITE_EXTERNAL_STORAGE" apk-permissions.txt
+          EMBEDDED_SHA="$(unzip -p "$APK" assets/index.html | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_SHA" = "$SOURCE_SHA"
+          EMBEDDED_CORE_SHA="$(unzip -p "$APK" assets/js/finance-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_CORE_SHA" = "$CORE_SHA"
+          EMBEDDED_STATE_CORE_SHA="$(unzip -p "$APK" assets/js/state-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_STATE_CORE_SHA" = "$STATE_CORE_SHA"
+          EMBEDDED_STORAGE_CORE_SHA="$(unzip -p "$APK" assets/js/storage-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_STORAGE_CORE_SHA" = "$STORAGE_CORE_SHA"
+          EMBEDDED_FEATURE_CORE_SHA="$(unzip -p "$APK" assets/js/feature-storage-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_FEATURE_CORE_SHA" = "$FEATURE_CORE_SHA"
+          EMBEDDED_BACKUP_CORE_SHA="$(unzip -p "$APK" assets/js/backup-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_BACKUP_CORE_SHA" = "$BACKUP_CORE_SHA"
+          EMBEDDED_SECURITY_CORE_SHA="$(unzip -p "$APK" assets/js/security-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_SECURITY_CORE_SHA" = "$SECURITY_CORE_SHA"
+          EMBEDDED_SECURITY_ADAPTER_SHA="$(unzip -p "$APK" assets/js/security-adapter.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_SECURITY_ADAPTER_SHA" = "$SECURITY_ADAPTER_SHA"
+          EMBEDDED_RECEIPT_CORE_SHA="$(unzip -p "$APK" assets/js/receipt-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_RECEIPT_CORE_SHA" = "$RECEIPT_CORE_SHA"
+          EMBEDDED_SCHEMA_REPAIR_CORE_SHA="$(unzip -p "$APK" assets/js/schema-repair-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_SCHEMA_REPAIR_CORE_SHA" = "$SCHEMA_REPAIR_CORE_SHA"
+          EMBEDDED_STATE_MODEL_CORE_SHA="$(unzip -p "$APK" assets/js/state-model-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_STATE_MODEL_CORE_SHA" = "$STATE_MODEL_CORE_SHA"
+          EMBEDDED_I18N_CORE_SHA="$(unzip -p "$APK" assets/js/i18n-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_I18N_CORE_SHA" = "$I18N_CORE_SHA"
+          EMBEDDED_THEME_CORE_SHA="$(unzip -p "$APK" assets/js/theme-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_THEME_CORE_SHA" = "$THEME_CORE_SHA"
+          EMBEDDED_SCHEMA_CORE_SHA="$(unzip -p "$APK" assets/js/schema-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_SCHEMA_CORE_SHA" = "$SCHEMA_CORE_SHA"
+          EMBEDDED_PERSISTENCE_CORE_SHA="$(unzip -p "$APK" assets/js/persistence-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_PERSISTENCE_CORE_SHA" = "$PERSISTENCE_CORE_SHA"
+          EMBEDDED_MUTATION_CORE_SHA="$(unzip -p "$APK" assets/js/mutation-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_MUTATION_CORE_SHA" = "$MUTATION_CORE_SHA"
+          EMBEDDED_REMINDER_CORE_SHA="$(unzip -p "$APK" assets/js/reminder-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_REMINDER_CORE_SHA" = "$REMINDER_CORE_SHA"
+          EMBEDDED_REPORT_CORE_SHA="$(unzip -p "$APK" assets/js/report-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_REPORT_CORE_SHA" = "$REPORT_CORE_SHA"
+          ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
+          for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
+          echo "APK archive integrity passed 5x"
+          sha256sum "SANAD-V9.0.10-REFACTOR-A13.apk" | tee apk-sha256.txt
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-V9.0.10-REFACTOR-A13
+          path: |
+            SANAD-V9.0.10-REFACTOR-A13.apk
+            apk-sha256.txt
+            apk-badging.txt
+            apk-permissions.txt
+          if-no-files-found: error
+          retention-days: 30
