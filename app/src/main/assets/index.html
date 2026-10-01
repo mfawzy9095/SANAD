@@ -7716,7 +7716,14 @@ const SanadTheme = {
 };
 
 const SanadReceipts = {
-  pending:null, objectUrls:new Set(),
+  pending:null, objectUrls:new Set(), _domain:null,
+  domain(){
+    if(!this._domain)this._domain=ReceiptCore.createReceiptService({
+      storage:SanadExtStorage,
+      markDirty:(txId,deleted)=>SanadCloud.markReceiptDirty(txId,deleted)
+    });
+    return this._domain;
+  },
   ensureInput(){
     let input=document.getElementById('sanadReceiptInput');
     if(!input){ input=document.createElement('input');input.id='sanadReceiptInput';input.type='file';input.accept='image/*';input.setAttribute('capture','environment');input.hidden=true;document.body.appendChild(input);input.addEventListener('change',e=>this.handleFile(e.target.files&&e.target.files[0])); }
@@ -7748,7 +7755,7 @@ const SanadReceipts = {
     if(bmp.close)bmp.close();
     return await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('canvas encode failed')),'image/jpeg',0.78));
   },
-  async currentRecord(){const id=ReceiptCore.currentTxId(S.form);return id?SanadExtStorage.getReceipt(id):null;},
+  async currentRecord(){const id=ReceiptCore.currentTxId(S.form);return this.domain().get(id);},
   injectTxControls(){
     if(!S.form||!['tx','transfer'].includes(S.form._sheet))return; const mount=document.getElementById('sanadReceiptQuickMount')||document.querySelector('#sheet .adv-body');if(!mount||mount.querySelector('[data-sanad-receipt]'))return;
     const wrap=document.createElement('div');wrap.className='field sanad-receipt-field quick';wrap.setAttribute('data-sanad-receipt','1');
@@ -7757,7 +7764,7 @@ const SanadReceipts = {
   },
   async refreshControls(){
     const box=document.getElementById('sanadReceiptBox'),state=document.getElementById('sanadReceiptState');if(!box||!state)return;
-    let rec=this.pending; if(!rec&&S.form&&S.form.id)rec=await SanadExtStorage.getReceipt(S.form.id);
+    let rec=this.pending; if(!rec&&S.form&&S.form.id)rec=await this.domain().get(S.form.id);
     const old=box.querySelector('.receipt-preview'); if(old)old.remove(); const del=box.querySelector('[data-sanad-act="remove-receipt"]');if(del)del.remove();
     if(rec&&rec.blob){
       state.textContent='فاتورة مرفقة · '+ReceiptCore.sizeLabel(rec.blob.size); const url=URL.createObjectURL(rec.blob);this.objectUrls.add(url);
@@ -7768,22 +7775,22 @@ const SanadReceipts = {
   },
   async removeCurrent(){
     if(this.pending){this.pending=null;this.refreshControls();return;}
-    if(S.form&&S.form.id){await SanadExtStorage.delReceipt(S.form.id);await SanadCloud.markReceiptDirty(S.form.id,true);this.refreshControls();toast('تم حذف الفاتورة');}
+    if(S.form&&S.form.id){await this.domain().remove(S.form.id);this.refreshControls();toast('تم حذف الفاتورة');}
   },
   async attachAfterSave(beforeIds,editId,pending){
     if(!pending||!pending.blob)return;
     const txId=ReceiptCore.resolveAttachmentTxId(beforeIds,editId,S.transactions);
     if(!txId)return;
-    const ok=await SanadExtStorage.putReceipt(txId,pending.blob,pending.meta); if(ok){await SanadCloud.markReceiptDirty(txId,false); this.pending=null;}
+    const ok=await this.domain().attach(txId,pending); if(ok){this.pending=null;}
   },
   async injectDetails(txId){
     const body=document.querySelector('#sheet .sheet-body');if(!body||body.querySelector('[data-receipt-details]'))return;
-    const rec=await SanadExtStorage.getReceipt(txId); if(!rec||!rec.blob)return;
+    const rec=await this.domain().get(txId); if(!rec||!rec.blob)return;
     const url=URL.createObjectURL(rec.blob);this.objectUrls.add(url);const d=document.createElement('div');d.className='card receipt-detail-card';d.setAttribute('data-receipt-details','1');
     d.innerHTML='<div class="receipt-detail-head"><b>🧾 فاتورة مرفقة</b><button type="button" class="btn text" data-sanad-act="view-receipt" data-tx-id="'+esc(txId)+'">عرض</button></div><img src="'+url+'" alt="Receipt" class="receipt-detail-img">';
     body.insertBefore(d,body.querySelector('.btn.primary')||body.lastChild);SanadI18n.apply(d);
   },
-  async view(txId){const rec=await SanadExtStorage.getReceipt(txId);if(!rec||!rec.blob)return;const url=URL.createObjectURL(rec.blob);this.objectUrls.add(url);openSheet('<div class="sheet-head"><button type="button" class="close" data-act="close-sheet">✕</button><h2>فاتورة مرفقة</h2><div style="width:36px"></div></div><div class="sheet-body"><img class="receipt-full" src="'+url+'" alt="Receipt"></div>','receipt-view');}
+  async view(txId){const rec=await this.domain().get(txId);if(!rec||!rec.blob)return;const url=URL.createObjectURL(rec.blob);this.objectUrls.add(url);openSheet('<div class="sheet-head"><button type="button" class="close" data-act="close-sheet">✕</button><h2>فاتورة مرفقة</h2><div style="width:36px"></div></div><div class="sheet-body"><img class="receipt-full" src="'+url+'" alt="Receipt"></div>','receipt-view');}
 };
 
 const SanadSecurity = {
