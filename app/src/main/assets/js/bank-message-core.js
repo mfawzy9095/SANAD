@@ -83,6 +83,15 @@
     if(!candidateRef)return false;const c=normalizeRef(candidateRef),p=normalizeRef(parsedRef||'');if(p&&c===p)return true;const cs=suffix(c);
     if(parsedSuffix&&cs&&parsedSuffix===cs)return true;if(p&&c.length>=2&&p.endsWith(c))return true;return false;
   }
+  function accountRefs(account){
+    if(!account)return [];
+    const out=[];
+    if(Array.isArray(account.bankRefs))out.push(...account.bankRefs);
+    if(account.bankRef)out.push(account.bankRef);
+    if(account.accountRef)out.push(account.accountRef);
+    if(account.accountLast4)out.push(account.accountLast4);
+    return Array.from(new Set(out.map(normalizeRef).filter(Boolean)));
+  }
   function resolveRoute(parsed,state){
     const institutions=Array.isArray(state&&state.institutions)?state.institutions:[],accounts=Array.isArray(state&&state.accounts)?state.accounts:[],instruments=Array.isArray(state&&state.paymentInstruments)?state.paymentInstruments:[];
     const bankInstIds=new Set(institutions.filter(i=>!parsed.bankId||institutionBankId(i)===parsed.bankId).map(i=>i.id));
@@ -93,15 +102,29 @@
       if(parsed.bankId){const filtered=cards.filter(i=>bankInstIds.has(i.institutionId)||bankInstIds.has((accounts.find(a=>a.id===i.accountId)||{}).institutionId));if(filtered.length)cards=filtered;}
       if(cards.length===1)instrument=cards[0];if(instrument)account=accounts.find(a=>a.id===instrument.accountId)||null;
     }
-    if(parsed.accountRef||parsed.accountSuffix){const matches=activeAccounts.filter(a=>refMatches(a.bankRef||a.accountRef||a.accountLast4,parsed.accountRef,parsed.accountSuffix));if(matches.length===1)fromAccount=matches[0];}
+    if(parsed.accountRef||parsed.accountSuffix){
+      const matches=activeAccounts.filter(a=>accountRefs(a).some(ref=>refMatches(ref,parsed.accountRef,parsed.accountSuffix)));
+      if(matches.length===1)fromAccount=matches[0];
+    }
     if(!fromAccount&&activeAccounts.length===1)fromAccount=activeAccounts[0];
     if(parsed.kind==='purchase'){if(account)return {status:'routed',account,instrument,confidence:instrument?0.99:0.80};if(fromAccount)return {status:'routed',account:fromAccount,instrument:null,confidence:0.75};return {status:'needs-review',reason:'payment-source-not-found',confidence:0};}
     if(parsed.kind==='deposit'||parsed.kind==='salary'){if(fromAccount)return {status:'routed',account:fromAccount,instrument:null,confidence:parsed.accountRef?0.95:0.78};return {status:'needs-review',reason:'account-not-found',confidence:0};}
     if(parsed.kind==='card_repayment'){targetAccount=account;if(fromAccount&&targetAccount&&targetAccount.type==='credit')return {status:'routed',fromAccount,targetAccount,instrument,confidence:0.99};return {status:'needs-review',reason:'repayment-route-not-found',fromAccount,targetAccount,instrument,confidence:0};}
-    if(parsed.kind==='outgoing_transfer'){if(fromAccount)return {status:'needs-review',reason:'transfer-destination-required',fromAccount,confidence:0.90};return {status:'needs-review',reason:'transfer-source-not-found',confidence:0};}
+    if(parsed.kind==='outgoing_transfer'){
+      if(fromAccount)return {status:'routed',fromAccount,confidence:parsed.accountRef?0.97:0.80};
+      return {status:'needs-review',reason:'transfer-source-not-found',confidence:0};
+    }
     return {status:'needs-review',reason:'unsupported-kind',confidence:0};
   }
-  function dedupeKey(parsed){return [parsed.bankId||'bank?',parsed.kind||'kind?',parsed.currency||'AED',Number(parsed.amount||0).toFixed(2),parsed.cardLast4||parsed.accountRef||parsed.accountSuffix||'source?',String(parsed.merchant||'').toLowerCase().replace(/\s+/g,' ').trim()].join('|');}
+  function dedupeKey(parsed){
+    let timeKey='time?';
+    const ts=Number(parsed&&parsed.postedAt);
+    if(Number.isFinite(ts)&&ts>0){
+      try{timeKey=new Date(ts).toISOString().slice(0,16);}catch(_){}
+    }
+    const eventKey=parsed&&parsed.eventId?('event:'+String(parsed.eventId)):timeKey;
+    return [eventKey,parsed.bankId||'bank?',parsed.kind||'kind?',parsed.currency||'AED',Number(parsed.amount||0).toFixed(2),parsed.cardLast4||parsed.accountRef||parsed.accountSuffix||'source?',String(parsed.merchant||'').toLowerCase().replace(/\s+/g,' ').trim()].join('|');
+  }
   function buildTransaction(parsed,route,options){
     const opts=options||{},date=opts.date||new Date(parsed.postedAt||Date.now()).toISOString().slice(0,10),id=typeof opts.uid==='function'?opts.uid('t'):('bank_'+Date.now()),key=dedupeKey(parsed);
     if(!route||route.status!=='routed')return {ok:false,reason:(route&&route.reason)||'route-required'};
@@ -113,6 +136,10 @@
     if(parsed.kind==='card_repayment'){
       const from=route.fromAccount,to=route.targetAccount;if(!from||!to)return {ok:false,reason:'repayment-route-required'};if(from.currency!==parsed.currency||to.currency!==parsed.currency)return {ok:false,reason:'fx-review-required'};
       return {ok:true,transaction:{id,type:'transfer',fromAccountId:from.id,fromAmount:parsed.amount,fromCurrency:from.currency,fromCountry:from.country,toAccountId:to.id,toAmount:parsed.amount,toCurrency:to.currency,toCountry:to.country,fxRate:1,fee:0,note:'سداد بطاقة '+(parsed.cardLast4||''),tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null}};
+    }
+    if(parsed.kind==='outgoing_transfer'){
+      const from=route.fromAccount;if(!from)return {ok:false,reason:'transfer-source-required'};if(from.currency!==parsed.currency)return {ok:false,reason:'fx-review-required'};
+      return {ok:true,transaction:{id,type:'external_transfer',fromAccountId:from.id,fromAmount:parsed.amount,fromCurrency:from.currency,fromCountry:from.country,beneficiaryId:null,receivedAmount:parsed.amount,receivedCurrency:parsed.currency,fxRate:1,fee:0,note:'تحويل بنكي',tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null}};
     }
     return {ok:false,reason:'manual-review-required'};
   }

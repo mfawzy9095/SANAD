@@ -767,6 +767,8 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/mutation-core.js"></script>
 <script src="js/reminder-core.js"></script>
 <script src="js/report-core.js"></script>
+<script src="js/uae-bank-registry-core.js"></script>
+<script src="js/bank-message-core.js"></script>
 <script>
 /* =========================================================
    SANAD — Architecture Refactor
@@ -791,6 +793,8 @@ const PersistenceCore = window.SanadPersistenceCore;
 const MutationCore = window.SanadMutationCore;
 const ReminderCore = window.SanadReminderCore;
 const ReportCore = window.SanadReportCore;
+const UaeBankRegistryCore = window.SanadUaeBankRegistryCore;
+const BankMessageCore = window.SanadBankMessageCore;
 if (!FinanceCore) throw new Error('SANAD finance core failed to load');
 if (!StateCore) throw new Error('SANAD state core failed to load');
 if (!StorageCore) throw new Error('SANAD storage core failed to load');
@@ -808,6 +812,8 @@ if (!PersistenceCore) throw new Error('SANAD persistence core failed to load');
 if (!MutationCore) throw new Error('SANAD mutation core failed to load');
 if (!ReminderCore) throw new Error('SANAD reminder core failed to load');
 if (!ReportCore) throw new Error('SANAD report core failed to load');
+if (!UaeBankRegistryCore) throw new Error('SANAD UAE bank registry failed to load');
+if (!BankMessageCore) throw new Error('SANAD bank message core failed to load');
 
 const SchemaRepair = SchemaRepairCore.createSchemaRepairCore({financeCore:FinanceCore});
 
@@ -1165,6 +1171,31 @@ const Finance = {
   getInstrument(id){ return S.paymentInstruments.find(i => i.id === id) || null; },
   getInstitution(id){ return S.institutions.find(i => i.id === id) || null; },
   getBeneficiary(id){ return S.beneficiaries.find(b => b.id === id) || null; },
+
+  registeredBankId(inst){
+    if (!inst) return null;
+    if (inst.bankRegistryId && UaeBankRegistryCore.get(inst.bankRegistryId)) return inst.bankRegistryId;
+    const hit = UaeBankRegistryCore.detect(inst.name || '');
+    return hit ? hit.bank.id : null;
+  },
+  findRegisteredBank(bankId,country){
+    if (!bankId) return null;
+    const c = country || 'UAE';
+    return S.institutions.find(i => i.country === c && this.registeredBankId(i) === bankId) || null;
+  },
+  ensureRegisteredBank(bankId,country){
+    const bank = UaeBankRegistryCore.get(bankId);
+    if (!bank) return null;
+    const c = country || 'UAE';
+    const existing = this.findRegisteredBank(bankId,c);
+    if (existing){
+      if (!existing.bankRegistryId) existing.bankRegistryId = bankId;
+      return existing.id;
+    }
+    const id = uid('inst');
+    S.institutions.push({id,name:bank.name,country:c,type:'bank',bankRegistryId:bankId});
+    return id;
+  },
 
   findInstitution(name,country){
     if (!name) return null;
@@ -4678,6 +4709,33 @@ function openCardTypePicker(){
   );
 }
 
+function bankRegistryOptions(selectedId){
+  return '<option value="">— اختر البنك من سجل المصرف المركزي —</option>' +
+    UaeBankRegistryCore.list().map(b =>
+      '<option value="' + esc(b.id) + '"' + (selectedId === b.id ? ' selected' : '') + '>' + esc(b.name) + '</option>'
+    ).join('');
+}
+function parseBankRefsInput(value){
+  return Array.from(new Set(String(value || '').split(/[\n,;]+/).map(v => v.trim()).filter(Boolean))).slice(0,8);
+}
+function accountBankRefsText(account){
+  if (!account) return '';
+  const refs = Array.isArray(account.bankRefs) ? account.bankRefs : (account.bankRef ? [account.bankRef] : []);
+  return refs.join(', ');
+}
+function refreshOfficialBankField(kind,country){
+  const isCard = kind === 'card';
+  const wrap = document.getElementById(isCard ? 'cardBankRegistryWrap' : 'wBankRegistryWrap');
+  const sel = document.getElementById(isCard ? 'cardBankRegistry' : 'wBankRegistry');
+  const refs = document.getElementById('wBankRefsWrap');
+  if (wrap) wrap.hidden = country !== 'UAE';
+  if (refs && !isCard) refs.hidden = country !== 'UAE';
+  if (sel && country === 'UAE'){
+    const current = sel.value || '';
+    sel.innerHTML = bankRegistryOptions(current);
+  }
+}
+
 function openAccountSheet(id, presetType, preserve){
   if (!canWrite()){ toast('وضع القراءة فقط'); return; }
   const isEdit = !!id;
@@ -4716,6 +4774,10 @@ function openAccountSheet(id, presetType, preserve){
   const institutions = S.institutions.filter(i => i.country === data.country);
   const instOptions = '<option value="">— بدون —</option>' + institutions.map(i =>
     '<option value="' + i.id + '"' + (data.institutionId === i.id ? ' selected' : '') + '>' + esc(i.name) + '</option>').join('');
+  const currentInstitution = data.institutionId ? Finance.getInstitution(data.institutionId) : null;
+  const selectedBankRegistryId = currentInstitution ? Finance.registeredBankId(currentInstitution) : null;
+  const officialBankOptions = bankRegistryOptions(selectedBankRegistryId);
+  const bankRefsValue = accountBankRefsText(data);
   const icons = (isDebt ? DEBT_ICONS : ACCOUNT_ICONS).map(ic =>
     '<div class="icon-opt ' + (data.icon === ic ? 'on' : '') + '" data-wallet-ic="' + ic + '">' + ic + '</div>').join('');
   const colors = PALETTE.map(p =>
@@ -4795,10 +4857,16 @@ function openAccountSheet(id, presetType, preserve){
       '<div class="field"><label>اسم الحساب</label><input type="text" id="wName" maxlength="30" value="' + esc(data.name) + '" placeholder="ADCB Current"></div>' +
       '<div class="field"><label>البلد</label><div class="country-picker">' + countryOpts + '</div>' +
         '<input type="hidden" id="wCountry" value="' + data.country + '"></div>' +
-      '<div class="field"><label>البنك / المؤسسة</label>' +
+      '<div class="field" id="wBankRegistryWrap"' + (data.country === 'UAE' ? '' : ' hidden') + '><label>البنك في الإمارات</label>' +
+        '<select id="wBankRegistry">' + officialBankOptions + '</select>' +
+        '<div class="field-hint">القائمة من سجل البنوك المرخصة لدى مصرف الإمارات المركزي.</div></div>' +
+      '<div class="field"><label>مؤسسة مخصصة (اختياري)</label>' +
         '<select id="wInst">' + instOptions + '</select>' +
-        '<input type="text" id="wInstName" placeholder="أو اكتب اسم جديد" maxlength="40" style="margin-top:8px">' +
-        '<div class="field-hint">اتركه فاضي إذا لا تريد ربطه بجهة معينة.</div></div>' +
+        '<input type="text" id="wInstName" placeholder="جهة أخرى غير موجودة بالقائمة" maxlength="40" style="margin-top:8px">' +
+        '<div class="field-hint">لو اخترت بنكًا رسميًا بالأعلى، له الأولوية.</div></div>' +
+      '<div class="field" id="wBankRefsWrap"' + (data.country === 'UAE' ? '' : ' hidden') + '><label>مراجع الحساب في رسائل البنك (اختياري)</label>' +
+        '<input type="text" id="wBankRefs" maxlength="140" value="' + esc(bankRefsValue) + '" placeholder="مثال: 1801, 012XXX50XXX01">' +
+        '<div class="field-hint">اكتب آخر أرقام أو الشكل المقنّع الذي يظهر في رسائل البنك. يمكن إضافة أكثر من مرجع بفاصلة.</div></div>' +
       '<div class="field"><label>النوع</label><select id="wType" ' + (typeSelectDisabled ? 'disabled' : '') + '>' +
         allowedTypes.map(t => '<option value="' + t.id + '"' + (data.type === t.id ? ' selected' : '') + '>' + t.icon + ' ' + t.name + '</option>').join('') +
       '</select>' + (hasTx ? '<div class="field-hint" style="color:var(--warn)">🔒 مقفل لأن بالحساب معاملات.</div>' : '') + lockHint + '</div>' +
@@ -4841,6 +4909,7 @@ async function saveAccount(id){
   const country = document.getElementById('wCountry').value || S.activeCountry;
   const i = document.getElementById('wIco').value || '🏦';
   const c = document.getElementById('wCol').value || '#00695C';
+  const bankRefs = parseBankRefsInput((document.getElementById('wBankRefs') || {}).value || '');
   if (!name){ toast('أدخل اسم الحساب'); return; }
   if (type === 'credit'){ toast('بطاقات الائتمان تُنشأ من قسم البطاقات'); return; }
   if (id && hasLinkedDebitCards(id)){
@@ -4898,8 +4967,11 @@ async function saveAccount(id){
     let institutionId = null;
     const instEl = document.getElementById('wInst');
     institutionId = instEl ? (instEl.value || null) : null;
-    const newInstName = (document.getElementById('wInstName').value || '').trim();
-    if (newInstName) institutionId = Finance.ensureInstitution(newInstName, country, type === 'ewallet' ? 'wallet_provider' : 'bank');
+    const officialEl = document.getElementById('wBankRegistry');
+    const officialBankId = officialEl && country === 'UAE' ? (officialEl.value || null) : null;
+    const newInstName = ((document.getElementById('wInstName') || {}).value || '').trim();
+    if (officialBankId) institutionId = Finance.ensureRegisteredBank(officialBankId, country);
+    else if (newInstName) institutionId = Finance.ensureInstitution(newInstName, country, type === 'ewallet' ? 'wallet_provider' : 'bank');
     if (institutionId){
       const inst = Finance.getInstitution(institutionId);
       if (inst && inst.country !== country){ institutionId = null; }
@@ -4912,6 +4984,8 @@ async function saveAccount(id){
       a.name = name; a.type = type;
       a.currency = hasTx ? a.currency : cur;
       a.country = country; a.institutionId = institutionId;
+      a.bankRefs = bankRefs.slice();
+      if (bankRefs.length === 1) a.bankRef = bankRefs[0]; else delete a.bankRef;
       a.icon = i; a.color = c;
       if (!hasTx) a.openingBalance = openingBalance;
       if (isLiab && !hasTx) a.openingDebt = openingDebt;
@@ -4930,6 +5004,7 @@ async function saveAccount(id){
         id: savedId, institutionId, country, name, type, currency: cur,
         openingBalance: (type==='cash'&&cashFundingMode==='transfer') ? 0 : openingBalance, openingDebt, creditLimit: 0,
         defaultRepaymentAccountId: null,
+        bankRefs: bankRefs.slice(),
         icon: i, color: c, archived: false,
         creditor: isDebt ? creditor : '',
         dueDate: isDebt ? dueDate : null,
@@ -5696,6 +5771,9 @@ function openInstrumentSheet(id, presetType, preserve){
   const institutions = S.institutions.filter(i => i.country === data.country);
   const instOptions = '<option value="">— بدون —</option>' + institutions.map(i =>
     '<option value="' + i.id + '"' + (data.institutionId === i.id ? ' selected' : '') + '>' + esc(i.name) + '</option>').join('');
+  const cardCurrentInstitution = data.institutionId ? Finance.getInstitution(data.institutionId) : null;
+  const cardSelectedBankRegistryId = cardCurrentInstitution ? Finance.registeredBankId(cardCurrentInstitution) : null;
+  const cardOfficialBankOptions = bankRegistryOptions(cardSelectedBankRegistryId);
   /* V8.8.4.3 FIX 5: defaultRepaymentAccountId belongs to the linked CREDIT ACCOUNT */
   const linkedCreditAccForRepay = isCredit && isEdit && data.accountId ? Finance.getAccount(data.accountId) : null;
   const effectiveRepayId = linkedCreditAccForRepay ? (linkedCreditAccForRepay.defaultRepaymentAccountId || null) : null;
@@ -5787,9 +5865,11 @@ function openInstrumentSheet(id, presetType, preserve){
       (isDebit ? linkedField : '') +
       (showCountryPicker ? '<div class="field"><label>البلد</label><div class="country-picker">' + countryOpts + '</div>' +
         '<input type="hidden" id="cardCountry" value="' + data.country + '"></div>' : '') +
-      (showInstField ? '<div class="field"><label>البنك / المؤسسة</label>' +
-        '<select id="cardInst">' + instOptions + '</select>' +
-        '<input type="text" id="cardInstName" placeholder="أو اكتب اسم جديد" maxlength="40" style="margin-top:8px"></div>' : '') +
+      (showInstField ? '<div class="field" id="cardBankRegistryWrap"' + (data.country === 'UAE' ? '' : ' hidden') + '><label>البنك في الإمارات</label>' +
+        '<select id="cardBankRegistry">' + cardOfficialBankOptions + '</select>' +
+        '<div class="field-hint">القائمة الرسمية للبنوك المرخصة؛ تستخدم أيضًا لتوجيه رسائل البنك.</div></div>' +
+        '<div class="field"><label>مؤسسة مخصصة (اختياري)</label><select id="cardInst">' + instOptions + '</select>' +
+        '<input type="text" id="cardInstName" placeholder="جهة أخرى غير موجودة بالقائمة" maxlength="40" style="margin-top:8px"></div>' : '') +
       amountFields +
       '<div class="field"><label>آخر 4 أرقام (اختياري)</label>' +
         '<input type="text" id="cardLast4" maxlength="4" inputmode="numeric" value="' + esc(data.last4 || '') + '" placeholder="1234"></div>' +
@@ -5911,7 +5991,10 @@ async function saveCard(id, presetType){
     if (isCredit && repayId && accountId && repayId === accountId) repayId = null;
     const instNameEl = document.getElementById('cardInstName');
     const newInstName = instNameEl && instNameEl.value ? (instNameEl.value || '').trim() : '';
-    if (newInstName && !isDebit) institutionId = Finance.ensureInstitution(newInstName, country, 'bank');
+    const officialEl = document.getElementById('cardBankRegistry');
+    const officialBankId = officialEl && country === 'UAE' ? (officialEl.value || null) : null;
+    if (officialBankId && !isDebit) institutionId = Finance.ensureRegisteredBank(officialBankId, country);
+    else if (newInstName && !isDebit) institutionId = Finance.ensureInstitution(newInstName, country, 'bank');
     if (institutionId && !isDebit){
       const inst = Finance.getInstitution(institutionId);
       if (inst && inst.country !== country){ institutionId = null; }
@@ -6870,6 +6953,7 @@ document.addEventListener('click', e => {
         const insts = S.institutions.filter(i => i.country === newCountry);
         instSel.innerHTML = '<option value="">— بدون —</option>' + insts.map(i => '<option value="' + i.id + '">' + esc(i.name) + '</option>').join('');
       }
+      refreshOfficialBankField('account', cOpt.dataset.walletCountry);
       return;
     }
     const ccOpt = t.closest('[data-card-country]');
@@ -6883,6 +6967,7 @@ document.addEventListener('click', e => {
         const insts = S.institutions.filter(i => i.country === newCountry);
         instSel.innerHTML = '<option value="">— بدون —</option>' + insts.map(i => '<option value="' + i.id + '">' + esc(i.name) + '</option>').join('');
       }
+      refreshOfficialBankField('card', ccOpt.dataset.cardCountry);
       return;
     }
     const wIc = t.closest('[data-wallet-ic]');
@@ -8045,14 +8130,115 @@ const SanadFullBackup = {
   async importFile(file){if(!file)return false;let data;try{data=BackupCore.parseJsonText(await file.text());}catch(_){toast('الملف ليس JSON صالح');return false;}return this.importData(data,true);}
 };
 
+const SanadBankInbox = {
+  items:[],
+  supported(){
+    try{
+      return !!(window.AndroidBridge &&
+        typeof AndroidBridge.bankNotificationAccessEnabled === 'function' &&
+        typeof AndroidBridge.openBankNotificationAccessSettings === 'function' &&
+        typeof AndroidBridge.getPendingBankNotifications === 'function' &&
+        typeof AndroidBridge.acknowledgeBankNotifications === 'function');
+    }catch(_){return false;}
+  },
+  accessEnabled(){try{return this.supported() && !!AndroidBridge.bankNotificationAccessEnabled();}catch(_){return false;}},
+  ack(ids){if(!ids||!ids.length||!this.supported())return;try{AndroidBridge.acknowledgeBankNotifications(JSON.stringify(ids));}catch(_){}},
+  async refresh(){
+    if(!this.supported()){this.items=[];return [];}
+    let native=[];
+    try{native=JSON.parse(AndroidBridge.getPendingBankNotifications()||'[]');}catch(_){native=[];}
+    if(!Array.isArray(native))native=[];
+    const ignored=[];
+    this.items=native.map(n=>{
+      const parsed=BankMessageCore.parse(n);
+      if(parsed&&parsed.ignored){ignored.push(n.id);return null;}
+      const route=parsed&&parsed.recognized?BankMessageCore.resolveRoute(parsed,S):null;
+      return {native:n,parsed,route};
+    }).filter(Boolean);
+    if(ignored.length)this.ack(ignored);
+    return this.items;
+  },
+  pendingCount(){return this.items.length;},
+  kindLabel(kind){
+    return {purchase:'شراء',salary:'راتب',deposit:'إيداع',card_repayment:'سداد بطاقة',outgoing_transfer:'تحويل خارج الحساب'}[kind]||'عملية بنكية';
+  },
+  routeLabel(item){
+    const r=item.route,p=item.parsed;
+    if(!p||!p.recognized)return 'لم يتم التعرف على الصيغة — لا يتم الحفظ';
+    if(!r||r.status!=='routed')return 'يحتاج ربط الحساب/البطاقة';
+    if(p.kind==='card_repayment')return 'من '+esc(r.fromAccount.name)+' إلى '+esc(r.targetAccount.name);
+    if(p.kind==='outgoing_transfer')return 'من '+esc(r.fromAccount.name);
+    return (r.instrument?esc(r.instrument.name)+' · ':'')+esc(r.account.name);
+  },
+  settingsHtml(){
+    const supported=this.supported(),enabled=this.accessEnabled(),count=this.pendingCount();
+    return '<div class="sec"><h2>رسائل وعمليات البنك</h2></div><div class="list">' +
+      '<div class="list-item" data-sanad-act="bank-access"><div class="li-ico">🏦</div><div class="li-body"><b>الوصول لإشعارات البنك</b><span>' +
+        (!supported?'غير متاح على هذه النسخة':(enabled?'مفعّل · قراءة محلية فقط':'غير مفعّل · اضغط للتفعيل')) +
+      '</span></div><div class="li-arrow">›</div></div>' +
+      '<div class="list-item" data-sanad-act="bank-inbox"><div class="li-ico">📥</div><div class="li-body"><b>مراجعة العمليات البنكية</b><span>' +
+        (count?count+' عملية في الانتظار':'لا توجد عمليات في الانتظار') +
+      '</span></div><div class="li-arrow">›</div></div></div>';
+  },
+  async openAccess(){if(!this.supported()){toast('الميزة متاحة على تطبيق Android فقط');return;}try{AndroidBridge.openBankNotificationAccessSettings();}catch(_){toast('تعذر فتح إعدادات الوصول');}},
+  async open(){
+    await this.refresh();
+    const enabled=this.accessEnabled();
+    const rows=this.items.map(item=>{
+      const n=item.native,p=item.parsed||{},r=item.route;
+      const bank=p.bankId?UaeBankRegistryCore.get(p.bankId):null;
+      const amount=p.recognized?amtFull(p.amount,p.currency):'—';
+      const merchant=p.merchant?'<div style="font-size:12px;color:var(--text-2);margin-top:3px">'+esc(p.merchant)+'</div>':'';
+      const source=this.routeLabel(item);
+      const canApprove=!!(p.recognized&&r&&r.status==='routed');
+      return '<div class="card" style="padding:14px;margin-bottom:10px">' +
+        '<div style="display:flex;justify-content:space-between;gap:10px"><div><b>' + esc(bank?bank.name:(n.title||'إشعار بنكي')) + '</b>' +
+        '<div style="font-size:12px;color:var(--text-2);margin-top:3px">' + esc(p.recognized?this.kindLabel(p.kind):'صيغة غير معروفة') + '</div></div>' +
+        '<b class="amt-val">' + amount + '</b></div>' + merchant +
+        '<div style="font-size:12px;margin-top:8px;color:'+(canApprove?'var(--success)':'var(--warn)')+'">' + source + '</div>' +
+        '<div style="font-size:11px;color:var(--text-3);margin-top:8px;direction:auto;white-space:normal">' + esc(String(n.text||'').slice(0,260)) + '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:12px">' +
+          (canApprove?'<button type="button" class="btn primary" data-sanad-act="bank-approve" data-id="'+esc(n.id)+'" style="margin:0;flex:1">إضافة</button>':'') +
+          '<button type="button" class="btn" data-sanad-act="bank-dismiss" data-id="'+esc(n.id)+'" style="margin:0;flex:1">تجاهل</button>' +
+        '</div></div>';
+    }).join('');
+    openSheet('<div class="sheet-head"><button type="button" class="close" data-act="close-sheet">✕</button><h2>عمليات البنك</h2><button type="button" class="close" data-sanad-act="bank-refresh" title="تحديث">↻</button></div>' +
+      '<div class="sheet-body">' +
+      (!enabled?'<div class="help-box warn"><span class="hi">🔔</span><div class="ht"><b>الوصول غير مفعّل</b>فعّل Notification Access لكي يلتقط SANAD إشعارات العمليات الجديدة.</div></div>':'') +
+      (rows||'<div class="empty"><div class="em">🏦</div><p>لا توجد عمليات بنكية في الانتظار</p></div>') +
+      '</div>','bank-inbox');
+  },
+  async approve(id){
+    const item=this.items.find(x=>String(x.native.id)===String(id));
+    if(!item){await this.open();return;}
+    const parsed=item.parsed,route=BankMessageCore.resolveRoute(parsed,S);
+    const built=BankMessageCore.buildTransaction(parsed,route,{uid});
+    if(!built.ok){toast('العملية تحتاج مراجعة أو ربط حساب');return;}
+    const tx=built.transaction;
+    const duplicate=S.transactions.some(t =>
+      (tx.bankImportEventId && t.bankImportEventId===tx.bankImportEventId) ||
+      (tx.bankImportKey && t.bankImportKey===tx.bankImportKey)
+    );
+    if(duplicate){this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
+    const result=await commitCriticalMutation(async()=>{S.transactions.push(tx);return true;});
+    if(!result.ok){render();toast('تعذر إضافة العملية — لم يتم تغيير البيانات');return;}
+    this.ack([item.native.id]);
+    await this.refresh();
+    render();
+    await this.open();
+    toast('تمت إضافة العملية البنكية');
+  },
+  async dismiss(id){this.ack([id]);await this.refresh();await this.open();}
+};
+
 const SanadV9 = {
   initialized:false,
   async bootstrap(){await SanadExtStorage.init();await Promise.all([SanadSecurity.init(),SanadFamily.init(),SanadCloud.init().catch(e=>console.warn(e))]);SanadTheme.init();SanadI18n.watch();this.ensureGlobalInputs();this.initialized=true;},
   ensureGlobalInputs(){SanadReceipts.ensureInput();},
-  settingsHtml(){const lang=S.settings.language==='en'?'en':'ar',mode=SanadTheme.mode(),sec=SanadSecurity.cfg.enabled?'مفعّل':'غير مفعّل',langDesc=lang==='en'?'Arabic / English':'العربية / الإنجليزية',enLabel=lang==='en'?'English':'الإنجليزية';return '<div class="sec"><h2>اللغة والمظهر</h2></div><div class="card feature-card"><div class="feature-row"><div><b>🌐 اللغة</b><span>'+langDesc+'</span></div><div class="seg"><button type="button" class="'+(lang==='ar'?'on':'')+'" data-sanad-act="lang" data-value="ar">العربية</button><button type="button" class="'+(lang==='en'?'on':'')+'" data-sanad-act="lang" data-value="en">'+enLabel+'</button></div></div><div class="feature-row"><div><b>🎨 المظهر</b><span>فاتح، داكن أو حسب الجهاز</span></div><div class="seg"><button type="button" class="'+(mode==='light'?'on':'')+'" data-sanad-act="theme" data-value="light">☀️</button><button type="button" class="'+(mode==='dark'?'on':'')+'" data-sanad-act="theme" data-value="dark">🌙</button><button type="button" class="'+(mode==='system'?'on':'')+'" data-sanad-act="theme" data-value="system">◐</button></div></div></div>'+'<div class="sec"><h2>الأمان والخصوصية</h2></div><div class="list"><div class="list-item" data-sanad-act="toggle-security"><div class="li-ico">🔐</div><div class="li-body"><b>قفل بالبصمة / الجهاز</b><span>'+sec+(SanadSecurity.supported()?'':' · يحتاج HTTPS')+'</span></div><div class="li-arrow">›</div></div></div>'+'<div class="sec"><h2>السحابة والعائلة</h2></div><div class="list"><div class="list-item" aria-disabled="true"><div class="li-ico">☁️</div><div class="li-body"><b>مؤجل إلى V9.1</b><span>معطّل في النسخة المحلية المستقرة</span></div></div></div>'+'<div class="sec"><h2>نسخة احتياطية كاملة</h2></div><button type="button" class="btn" data-sanad-act="full-export">📦 تصدير كامل مع الفواتير</button><button type="button" class="btn" data-sanad-act="full-import">📥 استيراد نسخة كاملة</button>';},
+  settingsHtml(){const lang=S.settings.language==='en'?'en':'ar',mode=SanadTheme.mode(),sec=SanadSecurity.cfg.enabled?'مفعّل':'غير مفعّل',langDesc=lang==='en'?'Arabic / English':'العربية / الإنجليزية',enLabel=lang==='en'?'English':'الإنجليزية';return '<div class="sec"><h2>اللغة والمظهر</h2></div><div class="card feature-card"><div class="feature-row"><div><b>🌐 اللغة</b><span>'+langDesc+'</span></div><div class="seg"><button type="button" class="'+(lang==='ar'?'on':'')+'" data-sanad-act="lang" data-value="ar">العربية</button><button type="button" class="'+(lang==='en'?'on':'')+'" data-sanad-act="lang" data-value="en">'+enLabel+'</button></div></div><div class="feature-row"><div><b>🎨 المظهر</b><span>فاتح، داكن أو حسب الجهاز</span></div><div class="seg"><button type="button" class="'+(mode==='light'?'on':'')+'" data-sanad-act="theme" data-value="light">☀️</button><button type="button" class="'+(mode==='dark'?'on':'')+'" data-sanad-act="theme" data-value="dark">🌙</button><button type="button" class="'+(mode==='system'?'on':'')+'" data-sanad-act="theme" data-value="system">◐</button></div></div></div>'+'<div class="sec"><h2>الأمان والخصوصية</h2></div><div class="list"><div class="list-item" data-sanad-act="toggle-security"><div class="li-ico">🔐</div><div class="li-body"><b>قفل بالبصمة / الجهاز</b><span>'+sec+(SanadSecurity.supported()?'':' · يحتاج HTTPS')+'</span></div><div class="li-arrow">›</div></div></div>'+SanadBankInbox.settingsHtml()+'<div class="sec"><h2>السحابة والعائلة</h2></div><div class="list"><div class="list-item" aria-disabled="true"><div class="li-ico">☁️</div><div class="li-body"><b>مؤجل إلى V9.1</b><span>معطّل في النسخة المحلية المستقرة</span></div></div></div>'+'<div class="sec"><h2>نسخة احتياطية كاملة</h2></div><button type="button" class="btn" data-sanad-act="full-export">📦 تصدير كامل مع الفواتير</button><button type="button" class="btn" data-sanad-act="full-import">📥 استيراد نسخة كاملة</button>';},
   async setLanguage(lang){if(!I18nCore.isValidLanguage(lang)||!canWrite())return;const prev=S.settings.language;S.settings.language=lang;const ok=await persist();if(!ok){S.settings.language=prev;return;}render();requestAnimationFrame(()=>SanadI18n.apply(document));},
-  async afterStart(fromUnlock=false){SanadTheme.apply();SanadI18n.apply();if(SanadExtStorage.mode==='error')toast('تنبيه: تخزين المرفقات غير متاح مؤقتاً');const validIds=new Set(S.transactions.map(t=>t.id));await SanadExtStorage.pruneReceiptOrphans(validIds);await SanadFamily.pruneMissingTransactions();if(SecurityCrypto.shouldShowLockOverlay({enabled:SanadSecurity.cfg.enabled,unlocked:SanadSecurity.unlocked})){SanadSecurity.show();return;}hideSanadBootSplash();},
-  async click(el){const a=el.dataset.sanadAct,v=el.dataset.value;if(a==='lang')return this.setLanguage(v);if(a==='theme')return SanadTheme.set(v);if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable();if(a==='unlock')return SanadSecurity.unlock();if(a==='recovery-unlock')return SanadSecurity.recovery();if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;}if(a==='remove-receipt')return SanadReceipts.removeCurrent();if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);if(a==='firebase-config')return SanadCloud.openConfig();if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||'');if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle();if(a==='sync-now')return SanadCloud.syncNow();if(a==='verify-phone')return SanadCloud.verifyPhoneSheet();if(a==='send-phone-code')return SanadCloud.sendPhoneCode();if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();if(a==='open-family')return SanadFamily.open();if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||'');if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||'');if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();if(a==='full-export')return SanadFullBackup.export();if(a==='full-import')return SanadFullBackup.importPicker();}
+  async afterStart(fromUnlock=false){SanadTheme.apply();SanadI18n.apply();if(SanadExtStorage.mode==='error')toast('تنبيه: تخزين المرفقات غير متاح مؤقتاً');const validIds=new Set(S.transactions.map(t=>t.id));await SanadExtStorage.pruneReceiptOrphans(validIds);await SanadFamily.pruneMissingTransactions();if(SecurityCrypto.shouldShowLockOverlay({enabled:SanadSecurity.cfg.enabled,unlocked:SanadSecurity.unlocked})){SanadSecurity.show();return;}await SanadBankInbox.refresh();hideSanadBootSplash();},
+  async click(el){const a=el.dataset.sanadAct,v=el.dataset.value;if(a==='lang')return this.setLanguage(v);if(a==='theme')return SanadTheme.set(v);if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable();if(a==='unlock')return SanadSecurity.unlock();if(a==='recovery-unlock')return SanadSecurity.recovery();if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;}if(a==='remove-receipt')return SanadReceipts.removeCurrent();if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);if(a==='firebase-config')return SanadCloud.openConfig();if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||'');if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle();if(a==='sync-now')return SanadCloud.syncNow();if(a==='verify-phone')return SanadCloud.verifyPhoneSheet();if(a==='send-phone-code')return SanadCloud.sendPhoneCode();if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();if(a==='open-family')return SanadFamily.open();if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||'');if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||'');if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();if(a==='bank-access')return SanadBankInbox.openAccess();if(a==='bank-inbox')return SanadBankInbox.open();if(a==='bank-refresh')return SanadBankInbox.open();if(a==='bank-approve')return SanadBankInbox.approve(el.dataset.id);if(a==='bank-dismiss')return SanadBankInbox.dismiss(el.dataset.id);if(a==='full-export')return SanadFullBackup.export();if(a==='full-import')return SanadFullBackup.importPicker();}
 };
 
 /* ===== non-destructive wrappers around the stable V8.9.1 core ===== */

@@ -16,7 +16,7 @@ for(const [label,text,kind,amt,last4] of samples){
 }
 assert.strictEqual(P.parse({text:'يوجد لديك دفعة بطاقة تتطلب موافقتك. الرجاء تسجيل الدخول إلى تطبيق بنك الإمارات دبي الوطني والانتقال إلى قسم الأنشطة للتفويض.'}).reason,'authorization-pending');
 assert.strictEqual(P.parse({text:'عميلنا MOHAMED ABDELRAHMAN FAWZY، تم استبدال NOL Payment كعملية 153.00 على بطاقة MC TITANIUM التي تنتهي بـ 4021 بنجاح.'}).reason,'rewards-redemption');
-const state={institutions:[{id:'i1',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd'}],accounts:[{id:'bank',country:'UAE',currency:'AED',type:'bank',institutionId:'i1',bankRef:'01',archived:false},{id:'credit',country:'UAE',currency:'AED',type:'credit',institutionId:'i1',archived:false}],paymentInstruments:[{id:'c4021',accountId:'credit',institutionId:'i1',country:'UAE',type:'credit_card',last4:'4021',archived:false},{id:'d3993',accountId:'bank',institutionId:'i1',country:'UAE',type:'debit_card',last4:'3993',archived:false}]};
+const state={institutions:[{id:'i1',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd'}],accounts:[{id:'bank',country:'UAE',currency:'AED',type:'bank',institutionId:'i1',bankRefs:['1801','012XXX50XXX01'],archived:false},{id:'credit',country:'UAE',currency:'AED',type:'credit',institutionId:'i1',archived:false}],paymentInstruments:[{id:'c4021',accountId:'credit',institutionId:'i1',country:'UAE',type:'credit_card',last4:'4021',archived:false},{id:'d3993',accountId:'bank',institutionId:'i1',country:'UAE',type:'debit_card',last4:'3993',archived:false}]};
 const purchase=P.parse({id:'e1',postedAt:1000,text:samples[0][1]}),purchaseRoute=P.resolveRoute(purchase,state);
 assert.strictEqual(purchaseRoute.status,'routed');assert.strictEqual(purchaseRoute.account.id,'credit');assert.strictEqual(purchaseRoute.instrument.id,'c4021');
 const tx=P.buildTransaction(purchase,purchaseRoute,{date:'2026-10-01',uid:()=> 't1'});
@@ -28,5 +28,8 @@ assert.strictEqual(rr.fromAccount.id,'bank');assert.strictEqual(rr.targetAccount
 const rtx=P.buildTransaction(repay,rr,{date:'2026-10-01',uid:()=> 't3'});
 assert.strictEqual(rtx.transaction.type,'transfer');assert.strictEqual(rtx.transaction.fromAccountId,'bank');assert.strictEqual(rtx.transaction.toAccountId,'credit');
 const out=P.parse({id:'e4',postedAt:1000,text:samples[1][1]}),or=P.resolveRoute(out,state);
-assert.strictEqual(or.status,'needs-review');assert.strictEqual(or.reason,'transfer-destination-required');
+assert.strictEqual(or.status,'routed');assert.strictEqual(or.fromAccount.id,'bank');
+const otx=P.buildTransaction(out,or,{date:'2026-10-01',uid:()=> 't4'});
+assert.strictEqual(otx.ok,true);assert.strictEqual(otx.transaction.type,'external_transfer');assert.strictEqual(otx.transaction.fromAccountId,'bank');assert.strictEqual(otx.transaction.fromAmount,160);
+assert.ok(P.dedupeKey(out).startsWith('event:e4|'));
 console.log('bank message parser regression tests: PASS');
