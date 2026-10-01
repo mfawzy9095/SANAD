@@ -185,4 +185,76 @@ function state(){
   assert.deepStrictEqual(strictError.validationErrors,['strict failure']);
 })();
 
+(function v9010Compatibility(){
+  function legacyStableStringify(obj){
+    if(obj===null||obj===undefined)return JSON.stringify(obj);
+    if(typeof obj!=='object')return JSON.stringify(obj);
+    if(Array.isArray(obj)){
+      const allHaveId=obj.length>0&&obj.every(x=>x&&typeof x==='object'&&'id' in x);
+      const arr=allHaveId?[...obj].sort((a,b)=>String(a.id).localeCompare(String(b.id))):obj;
+      return '['+arr.map(legacyStableStringify).join(',')+']';
+    }
+    const keys=Object.keys(obj).sort();
+    return '{'+keys.map(k=>JSON.stringify(k)+':'+legacyStableStringify(obj[k])).join(',')+'}';
+  }
+  function v9010Fingerprint(st){
+    return legacyStableStringify({
+      schemaVersion:st.schemaVersion,
+      institutions:st.institutions||[],
+      accounts:st.accounts||[],
+      paymentInstruments:st.paymentInstruments||[],
+      transactions:st.transactions||[],
+      beneficiaries:st.beneficiaries||[],
+      categories:st.categories||{},
+      tags:st.tags||[],
+      recurring:st.recurring||[],
+      settings:st.settings||{}
+    });
+  }
+
+  const s=state();
+  assert.strictEqual(State.stateFingerprint(s),v9010Fingerprint(s));
+
+  const oldFinance=Object.assign({
+    schemaVersion:16,
+    exportedAt:'2026-10-01T01:30:00.000Z',
+    integrity:{version:1,fingerprint:v9010Fingerprint(s)}
+  },JSON.parse(JSON.stringify(s)));
+  const financeCheck=B.validateFinanceRestoreInput(oldFinance,{
+    fingerprint:State.stateFingerprint,
+    validateForImport:()=>[]
+  });
+  assert.strictEqual(financeCheck.ok,true);
+  const financePrepared=B.prepareFinanceRestore(oldFinance,{
+    migrate:x=>JSON.parse(JSON.stringify(x)),
+    validateStateStrict:()=>[]
+  });
+  assert.strictEqual(financePrepared.schemaVersion,16);
+  assert.strictEqual(financePrepared.transactions[0].id,'t1');
+
+  const oldFull={
+    format:'SANAD_FULL_BACKUP',
+    version:1,
+    appVersion:'9.0.10',
+    exportedAt:'2026-10-01T01:30:00.000Z',
+    finance:Object.assign({},JSON.parse(JSON.stringify(s)),{
+      integrity:{version:1,fingerprint:v9010Fingerprint(s)}
+    }),
+    features:{
+      family:{id:null,name:'',members:[],sharedTxIds:[],pendingUnshareIds:[]},
+      syncMeta:{dirty:true},
+      firebaseConfig:null
+    },
+    receipts:[{txId:'t1',meta:{},data:'data:image/jpeg;base64,AA=='}]
+  };
+  const fullPrepared=B.prepareFullRestore(oldFull,{
+    fingerprint:State.stateFingerprint,
+    migrate:x=>JSON.parse(JSON.stringify(x)),
+    validateStateStrict:()=>[]
+  });
+  assert.strictEqual(fullPrepared.migrated.schemaVersion,16);
+  assert.strictEqual(fullPrepared.receiptDescriptors.length,1);
+  assert.strictEqual(fullPrepared.receiptDescriptors[0].txId,'t1');
+})();
+
 console.log('backup-core regression tests: PASS');
