@@ -85,6 +85,18 @@ jobs:
           grep -q "StateCore.compareTxDesc(a,b)" "$HTML"
           node --check "$STATE_CORE"
           node app/src/test/js/state-core.test.js
+          STORAGE_CORE="app/src/main/assets/js/storage-core.js"
+          test -s "$STORAGE_CORE"
+          STORAGE_CORE_SHA="$(sha256sum "$STORAGE_CORE" | awk '{print $1}')"
+          echo "STORAGE_CORE_SHA=$STORAGE_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/storage-core.js"></script>' "$HTML"
+          grep -q "const StorageCore = window.SanadStorageCore" "$HTML"
+          grep -q "StorageCore.createStorage" "$HTML"
+          grep -q "Storage.resetConnection()" "$HTML"
+          ! grep -q "const IDBStorage =" "$HTML"
+          ! grep -q "const MemoryStorage =" "$HTML"
+          node --check "$STORAGE_CORE"
+          node app/src/test/js/storage-core.test.js
 
           grep -q "const SANAD_V9_VERSION = '9.0.10'" "$HTML"
           grep -q "_criticalMutationInFlight" "$HTML"
@@ -186,10 +198,12 @@ jobs:
           h=Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
           finance=h.index('<script src="js/finance-core.js"></script>')
           state=h.index('<script src="js/state-core.js"></script>')
-          inline=h.index('<script>', state)
+          storage=h.index('<script src="js/storage-core.js"></script>')
+          inline=h.index('<script>', storage)
           bind=h.index('const FinanceCore = window.SanadFinanceCore', inline)
           state_bind=h.index('const StateCore = window.SanadStateCore', inline)
-          assert finance < state < inline < bind < state_bind
+          storage_bind=h.index('const StorageCore = window.SanadStorageCore', inline)
+          assert finance < state < storage < inline < bind < state_bind < storage_bind
           assert "accountBalance(accountId){ return FinanceCore.accountBalance(S, accountId); }" in h
           assert "creditAvailable(accountId){ return FinanceCore.creditAvailable(S, accountId); }" in h
           PY
@@ -210,6 +224,8 @@ jobs:
           node app/src/test/js/finance-core.test.js
           node --check app/src/main/assets/js/state-core.js
           node app/src/test/js/state-core.test.js
+          node --check app/src/main/assets/js/storage-core.js
+          node app/src/test/js/storage-core.test.js
 
       - name: JVM regression tests
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
@@ -226,7 +242,7 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.10-REFACTOR-A1.apk"
+          cp "$APK" "SANAD-V9.0.10-REFACTOR-A2.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
@@ -249,17 +265,19 @@ jobs:
           test "$EMBEDDED_CORE_SHA" = "$CORE_SHA"
           EMBEDDED_STATE_CORE_SHA="$(unzip -p "$APK" assets/js/state-core.js | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_STATE_CORE_SHA" = "$STATE_CORE_SHA"
+          EMBEDDED_STORAGE_CORE_SHA="$(unzip -p "$APK" assets/js/storage-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_STORAGE_CORE_SHA" = "$STORAGE_CORE_SHA"
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          sha256sum "SANAD-V9.0.10-REFACTOR-A1.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.0.10-REFACTOR-A2.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.10-REFACTOR-A1
+          name: SANAD-V9.0.10-REFACTOR-A2
           path: |
-            SANAD-V9.0.10-REFACTOR-A1.apk
+            SANAD-V9.0.10-REFACTOR-A2.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
