@@ -6368,13 +6368,23 @@ async function importData(file){
     }
 
     let migrated = null;
-    try { migrated = Schema.migrate(parsed); }
-    catch(e){ toast('فشل ترقية البيانات: ' + (e.message || e)); return; }
-    if (!migrated){ toast('فشل ترقية البيانات'); return; }
-    const strictErrors = Schema.validateStateStrict(migrated);
-    if (strictErrors.length){
-      await dialog({emoji:'❌', title:'النسخة تحتوي بيانات مالية غير صالحة', msg: strictErrors.slice(0,8).join('\n'), okText:'حسناً', primary:true, hideCancel:true});
-      return;
+    try {
+      migrated = BackupCore.prepareFinanceRestore(parsed,{
+        migrate:Schema.migrate,
+        validateStateStrict:Schema.validateStateStrict
+      });
+    } catch(e){
+      if (e && e.message === 'migration-failed'){
+        const cause = e.cause;
+        toast(cause ? 'فشل ترقية البيانات: ' + (cause.message || cause) : 'فشل ترقية البيانات');
+        return;
+      }
+      if (e && e.message === 'schema-invalid'){
+        const strictErrors = Array.isArray(e.validationErrors) ? e.validationErrors : [];
+        await dialog({emoji:'❌', title:'النسخة تحتوي بيانات مالية غير صالحة', msg: strictErrors.slice(0,8).join('\n'), okText:'حسناً', primary:true, hideCancel:true});
+        return;
+      }
+      throw e;
     }
 
     loadStateInto(migrated);

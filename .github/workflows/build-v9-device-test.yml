@@ -120,6 +120,7 @@ jobs:
           grep -q "function validateFullEnvelope" "$BACKUP_CORE"
           grep -q "BackupCore.parseJsonText" "$HTML"
           grep -q "BackupCore.prepareFullRestore" "$HTML"
+          grep -q "BackupCore.prepareFinanceRestore(parsed" "$HTML"
           grep -q "prepareFinanceRestore" "$BACKUP_CORE"
           node --check "$BACKUP_CORE"
           node app/src/test/js/backup-core.test.js

@@ -118,4 +118,35 @@ function state(){
   assert.deepStrictEqual(schemaError.validationErrors,['bad-state']);
 })();
 
+(function financeRestorePreparation(){
+  const s=state();
+  const prepared=B.prepareFinanceRestore(s,{
+    migrate:x=>Object.assign({},x,{schemaVersion:17}),
+    validateStateStrict:()=>[]
+  });
+  assert.strictEqual(prepared.schemaVersion,17);
+
+  let migrationError=null;
+  try{
+    B.prepareFinanceRestore(s,{
+      migrate:()=>{throw new Error('migration detail');},
+      validateStateStrict:()=>[]
+    });
+  }catch(e){migrationError=e;}
+  assert(migrationError);
+  assert.strictEqual(migrationError.message,'migration-failed');
+  assert.strictEqual(migrationError.cause.message,'migration detail');
+
+  let strictError=null;
+  try{
+    B.prepareFinanceRestore(s,{
+      migrate:x=>x,
+      validateStateStrict:()=>['strict failure']
+    });
+  }catch(e){strictError=e;}
+  assert(strictError);
+  assert.strictEqual(strictError.message,'schema-invalid');
+  assert.deepStrictEqual(strictError.validationErrors,['strict failure']);
+})();
+
 console.log('backup-core regression tests: PASS');
