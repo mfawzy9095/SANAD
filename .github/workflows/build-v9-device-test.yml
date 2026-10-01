@@ -143,9 +143,11 @@ jobs:
           grep -q "function shouldShowLockOverlay" "$SECURITY_CORE"
           grep -q "SecurityCrypto.prepareInitialState" "$HTML"
           grep -q "SecurityCrypto.unlockRoute" "$HTML"
+          grep -q "SecurityCrypto.shouldShowLockOverlay" "$HTML"
           ! grep -q "const elapsed=Math.max(0,(Number(ts)||Date.now())-this.backgroundAt)" "$HTML"
           ! grep -q "stored=await SanadExtStorage.get('security',null),base=" "$HTML"
           ! grep -q "if(this.cfg.authMode==='android-device'||(!this.cfg.credentialId&&this.nativeAvailable()))" "$HTML"
+          ! grep -q "SanadSecurity.cfg.enabled&&!SanadSecurity.unlocked" "$HTML"
           node --check "$SECURITY_CORE"
           node app/src/test/js/security-core.test.js
           SECURITY_ADAPTER="app/src/main/assets/js/security-adapter.js"
