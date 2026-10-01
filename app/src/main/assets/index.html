@@ -1348,62 +1348,13 @@ const Finance = {
     const country = ctx.country || S.activeCountry;
     const month = ctx.month || ymKey(new Date());
     const ds = this.buildReportDataset({country, period:'month', month});
-
-    const evaluated = [];
-
-    /* Overall limits — iterate configured budgets, not spending keys */
-    const overallByCur = (S.settings.overallSpendingLimits[month]
-      && S.settings.overallSpendingLimits[month][country]) || {};
-    Object.entries(overallByCur).forEach(([cur, limit]) => {
-      const lim = Number(limit) || 0;
-      if (lim <= 0) return;
-      const spent = ds.spendingByCur[cur] || 0;
-      const st = this.computeBudgetStatus(spent, lim);
-      evaluated.push({type:'overall', month, country, currency:cur,
-        level:st.level, spent, limit:lim, pct:st.pct});
+    return ReportCore.evaluateBudgetAlerts(ds,{
+      month,
+      country,
+      overallSpendingLimits:S.settings.overallSpendingLimits,
+      categoryBudgets:S.settings.categoryBudgets,
+      budgetAlerts:S.settings.budgetAlerts
     });
-
-    /* Category budgets — iterate configured budgets, not spent categories */
-    const catByCur = (S.settings.categoryBudgets[month]
-      && S.settings.categoryBudgets[month][country]) || {};
-    Object.entries(catByCur).forEach(([cur, cats]) => {
-      Object.entries(cats || {}).forEach(([catId, limit]) => {
-        const lim = Number(limit) || 0;
-        if (lim <= 0) return;
-        const spent = (ds.categoryByCur[cur] && ds.categoryByCur[cur][catId]) || 0;
-        const st = this.computeBudgetStatus(spent, lim);
-        evaluated.push({type:'category', month, country, currency:cur, category:catId,
-          level:st.level, spent, limit:lim, pct:st.pct});
-      });
-    });
-
-    const newAlerts = [];
-    for (const al of evaluated){
-      const key = al.type + '|' + al.month + '|' + al.country + '|' + al.currency + '|' + (al.category || '_');
-      const stored = S.settings.budgetAlerts[key] || {warned80:false, warned95:false, warned100:false};
-
-      /* Re-arm: reset flags that are above the current level */
-      const pct = al.pct || 0;
-      if (pct < 80){
-        stored.warned80 = false;
-        stored.warned95 = false;
-        stored.warned100 = false;
-      } else if (pct < 95){
-        stored.warned95 = false;
-        stored.warned100 = false;
-      } else if (pct < 100){
-        stored.warned100 = false;
-      }
-
-      let trigger = false;
-      if (al.level === 'warn' && !stored.warned80){ stored.warned80 = true; trigger = true; }
-      else if (al.level === 'strong' && !stored.warned95){ stored.warned80 = true; stored.warned95 = true; trigger = true; }
-      else if (al.level === 'over' && !stored.warned100){ stored.warned80 = true; stored.warned95 = true; stored.warned100 = true; trigger = true; }
-
-      S.settings.budgetAlerts[key] = stored;
-      if (trigger) newAlerts.push(al);
-    }
-    return newAlerts;
   }
 };
 
