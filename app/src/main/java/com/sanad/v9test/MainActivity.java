@@ -424,8 +424,8 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void clearBankNotifications() {
-            BankNotificationStore.clear(MainActivity.this);
+        public boolean clearBankNotifications() {
+            return BankNotificationStore.clear(MainActivity.this);
         }
 
         @JavascriptInterface

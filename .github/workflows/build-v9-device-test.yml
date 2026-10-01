@@ -564,8 +564,11 @@ jobs:
           grep -q "const BankMessageCore = window.SanadBankMessageCore" "app/src/main/assets/index.html"
           grep -q "bankNotificationAccessEnabled" "app/src/main/java/com/sanad/v9test/MainActivity.java"
           grep -q "getPendingBankNotifications" "app/src/main/java/com/sanad/v9test/MainActivity.java"
+          grep -q "public boolean clearBankNotifications()" "app/src/main/java/com/sanad/v9test/MainActivity.java"
           grep -q "BankNotificationListener" "app/src/main/AndroidManifest.xml"
           ! grep -q 'android.permission.READ_SMS' "app/src/main/AndroidManifest.xml"
+          ! grep -q 'android.service.notification.disabled_filter_types' "app/src/main/AndroidManifest.xml"
+          grep -q "bankInboxOk = !!AndroidBridge.clearBankNotifications()" "app/src/main/assets/index.html"
           node --check app/src/main/assets/js/report-core.js
           node app/src/test/js/report-core.test.js
           node --check "$BANK_REGISTRY_CORE"

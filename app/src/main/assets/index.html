@@ -4758,6 +4758,8 @@ function openAccountSheet(id, presetType, preserve){
     if (preserve.currency) data.currency = preserve.currency;
     if (preserve.i) data.icon = preserve.i;
     if (preserve.c) data.color = preserve.c;
+    if (preserve.institutionId !== undefined) data.institutionId = preserve.institutionId;
+    if (Array.isArray(preserve.bankRefs)) data.bankRefs = preserve.bankRefs.slice();
   }
   data.type = type;
   const hasTx = isEdit && hasAccountHistory(id);
@@ -4775,7 +4777,9 @@ function openAccountSheet(id, presetType, preserve){
   const instOptions = '<option value="">— بدون —</option>' + institutions.map(i =>
     '<option value="' + i.id + '"' + (data.institutionId === i.id ? ' selected' : '') + '>' + esc(i.name) + '</option>').join('');
   const currentInstitution = data.institutionId ? Finance.getInstitution(data.institutionId) : null;
-  const selectedBankRegistryId = currentInstitution ? Finance.registeredBankId(currentInstitution) : null;
+  const selectedBankRegistryId = preserve && preserve.bankRegistryId
+    ? preserve.bankRegistryId
+    : (currentInstitution ? Finance.registeredBankId(currentInstitution) : null);
   const officialBankOptions = bankRegistryOptions(selectedBankRegistryId);
   const bankRefsValue = accountBankRefsText(data);
   const icons = (isDebt ? DEBT_ICONS : ACCOUNT_ICONS).map(ic =>
@@ -4862,7 +4866,7 @@ function openAccountSheet(id, presetType, preserve){
         '<div class="field-hint">القائمة من سجل البنوك المرخصة لدى مصرف الإمارات المركزي.</div></div>' +
       '<div class="field"><label>مؤسسة مخصصة (اختياري)</label>' +
         '<select id="wInst">' + instOptions + '</select>' +
-        '<input type="text" id="wInstName" placeholder="جهة أخرى غير موجودة بالقائمة" maxlength="40" style="margin-top:8px">' +
+        '<input type="text" id="wInstName" value="' + esc((preserve && preserve.institutionName) || '') + '" placeholder="جهة أخرى غير موجودة بالقائمة" maxlength="40" style="margin-top:8px">' +
         '<div class="field-hint">لو اخترت بنكًا رسميًا بالأعلى، له الأولوية.</div></div>' +
       '<div class="field" id="wBankRefsWrap"' + (data.country === 'UAE' ? '' : ' hidden') + '><label>مراجع الحساب في رسائل البنك (اختياري)</label>' +
         '<input type="text" id="wBankRefs" maxlength="140" value="' + esc(bankRefsValue) + '" placeholder="مثال: 1801, 012XXX50XXX01">' +
@@ -4896,7 +4900,11 @@ function captureAccountSheetValues(){
     country: (document.getElementById('wCountry') || {}).value || S.activeCountry,
     currency: (document.getElementById('wCur') || {}).value || 'AED',
     i: (document.getElementById('wIco') || {}).value || '🏦',
-    c: (document.getElementById('wCol') || {}).value || '#00695C'
+    c: (document.getElementById('wCol') || {}).value || '#00695C',
+    institutionId: (document.getElementById('wInst') || {}).value || null,
+    bankRegistryId: (document.getElementById('wBankRegistry') || {}).value || null,
+    bankRefs: parseBankRefsInput((document.getElementById('wBankRefs') || {}).value || ''),
+    institutionName: ((document.getElementById('wInstName') || {}).value || '').trim()
   };
 }
 async function saveAccount(id){
@@ -6484,11 +6492,17 @@ async function secureWipeAll(){
   if (!authorized){ toast('لم يتم التحقق — لم يبدأ الحذف'); return; }
 
   try { if (androidNotificationBridge()) AndroidBridge.cancelNotifications(); } catch(_){}
+  let bankInboxOk = true;
+  try {
+    if (window.AndroidBridge && typeof AndroidBridge.clearBankNotifications === 'function'){
+      bankInboxOk = !!AndroidBridge.clearBankNotifications();
+    }
+  } catch(_){ bankInboxOk = false; }
   const featureOk = await SanadExtStorage.secureWipe();
   const financeOk = await Storage.secureWipe();
   try { localStorage.removeItem(SanadSecurity.markerKey); } catch(_){}
 
-  if (featureOk && financeOk){
+  if (featureOk && financeOk && bankInboxOk){
     try { location.reload(); } catch(_){}
     return;
   }
@@ -8229,6 +8243,16 @@ const SanadBankInbox = {
     toast('تمت إضافة العملية البنكية');
   },
   async dismiss(id){this.ack([id]);await this.refresh();await this.open();}
+};
+
+const _sanadBankBaseForeground = window.sanadAppForegrounded;
+window.sanadAppForegrounded = function(ts){
+  try{if(typeof _sanadBankBaseForeground === 'function')_sanadBankBaseForeground(ts);}catch(_){}
+  try{
+    SanadBankInbox.refresh().then(()=>{
+      if(S.ready && S.tab === 'settings') render();
+    });
+  }catch(_){}
 };
 
 const SanadV9 = {

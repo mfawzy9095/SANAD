@@ -106,9 +106,10 @@ public final class BankNotificationStore {
         write(context, next);
     }
 
-    public static synchronized void clear(Context context) {
-        if (context == null) return;
-        prefs(context).edit().remove(KEY).apply();
+    public static synchronized boolean clear(Context context) {
+        if (context == null) return false;
+        boolean committed = prefs(context).edit().remove(KEY).commit();
+        return committed && read(context).length() == 0;
     }
 
     private static JSONArray read(Context context) {
