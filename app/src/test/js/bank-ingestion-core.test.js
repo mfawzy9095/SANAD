@@ -17,6 +17,18 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.transaction.accountId,'a1');
 }
 
+// Any already-registered card can auto-route by exact last4 even without a bank adapter.
+{
+  const p=P.parse({id:'generic1',postedAt:1500,text:'Purchase AED 20.00 at FRESH CRAFT MINI MART on your card ending 9999'});
+  assert.strictEqual(p.confidence,0.72);
+  assert.strictEqual(p.category,'grocery');
+  const s={institutions:[{id:'custom',name:'My Bank',country:'UAE'}],accounts:[{id:'a9999',institutionId:'custom',country:'UAE',name:'My card',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:1000,archived:false}],paymentInstruments:[{id:'c9999',accountId:'a9999',institutionId:'custom',country:'UAE',type:'credit_card',last4:'9999',archived:false}],transactions:[]};
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.reason,'exact-route');
+  assert.strictEqual(plan.transaction.instrumentId,'c9999');
+}
+
 // New credit card can be discovered without inventing a credit limit.
 {
   const p=P.parse({id:'n2',postedAt:2000,title:'Emirates Islamic',text:'عملية دفع ببطاقة الائتمان المنتهية بالرقم: 0308 لدى: FRESH CRAFT MINI MART, DUBAI المبلغ: AED 2.50 التاريخ: 01/10/2026, 06:44 الحد المتوفر: 457.04 AED'});
@@ -77,6 +89,16 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   const plan=I.plan(p,empty(),{uid});
   assert.strictEqual(plan.action,'review');
   assert.strictEqual(plan.reason,'transfer-source-not-found');
+}
+
+// An exact account reference can safely route a generic credit/deposit message.
+{
+  const p=P.parse({id:'generic2',postedAt:5500,text:'Your account 1234 was credited AED 50.00'});
+  assert.strictEqual(p.kind,'deposit');
+  const s={institutions:[{id:'custom2',name:'Another Bank',country:'UAE'}],accounts:[{id:'bank1234',institutionId:'custom2',country:'UAE',name:'Current',type:'bank',currency:'AED',openingBalance:100,openingDebt:0,creditLimit:0,bankRefs:['1234'],archived:false}],paymentInstruments:[],transactions:[]};
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.transaction.accountId,'bank1234');
 }
 
 // Unknown source cannot auto-create a financial account/card.

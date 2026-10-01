@@ -69,4 +69,12 @@ const duWithdrawalRoute=P.resolveRoute(duWithdrawal,duState);assert.strictEqual(
 const duLegacyState={institutions:[],accounts:[{id:'du-old',name:'du Pay',country:'UAE',currency:'AED',type:'ewallet',institutionId:null,archived:false}],paymentInstruments:[]};
 assert.strictEqual(P.resolveRoute(duDeposit,duLegacyState).account.id,'du-old');
 
+const genericKnown=P.parse({id:'g1',text:'Purchase AED 20.00 at FRESH CRAFT MINI MART on your card ending 9999'});
+assert.strictEqual(genericKnown.recognized,true);
+assert.strictEqual(genericKnown.kind,'purchase');
+assert.strictEqual(genericKnown.cardLast4,'9999');
+assert.strictEqual(genericKnown.merchant,'FRESH CRAFT MINI MART');
+assert.strictEqual(genericKnown.category,'grocery');
+assert.strictEqual(genericKnown.confidence,0.72);
+
 console.log('bank message parser regression tests: PASS');

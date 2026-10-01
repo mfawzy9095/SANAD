@@ -153,9 +153,12 @@
   function autoEligible(parsed,route){
     if(!parsed||!parsed.recognized)return {ok:false,reason:'unrecognized'};
     if(parsed.ignored)return {ok:false,reason:parsed.reason||'ignored'};
-    if(Number(parsed.confidence||0)<0.95)return {ok:false,reason:'low-confidence'};
     if(!route||route.status!=='routed')return {ok:false,reason:(route&&route.reason)||'route-required'};
     if(Number(route.confidence||0)<0.90)return {ok:false,reason:'route-confidence-low'};
+    const exactInstrument=!!(route.instrument&&parsed.cardLast4&&String(route.instrument.last4||'')===String(parsed.cardLast4));
+    const exactAccountRef=!!(parsed.accountRef&&Number(route.confidence||0)>=0.95);
+    const minParsedConfidence=exactInstrument?0.70:(exactAccountRef?0.74:0.95);
+    if(Number(parsed.confidence||0)<minParsedConfidence)return {ok:false,reason:'low-confidence'};
     if(parsed.cardLast4&&parsed.cardType&&['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)&&!route.instrument)return {ok:false,reason:'instrument-missing'};
     if((num(parsed.fee)||0)+(num(parsed.vat)||0)>0)return {ok:false,reason:'fee-review-required'};
     if(parsed.kind==='cash_withdrawal'&&!route.targetAccount)return {ok:false,reason:'cash-destination-required'};
@@ -183,6 +186,7 @@
     }
 
     const create={institutions:[],accounts:[],instruments:[]};
+    if(Number(parsed.confidence||0)<0.95)return {action:'review',reason:'low-confidence',confidence:Number(parsed.confidence||0)};
     if(!parsed.bankId&&!parsed.providerId)return {action:'review',reason:'source-not-identified',confidence:0};
 
     let institution=findInstitution(draft,parsed);

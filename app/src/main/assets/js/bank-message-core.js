@@ -125,7 +125,11 @@
     if(/credit\s+card|بطاق\S*\s+الائتمان/i.test(x))cardType='credit_card';
     else if(/debit\s+card|بطاق\S*\s+الخصم/i.test(x))cardType='debit_card';
     else if(providerId&&card)cardType='wallet_card';
-    const base={bankId,providerId,amount:value,currency,cardLast4:card,cardType,accountRef:acc?normalizeRef(acc):null};
+    let merchant='';
+    let mm=x.match(/\bat\s+(.+?)(?=\s+(?:on\s+your|using|your\s+available|available\s+balance|transaction\s+id|amount\b)|$)/i);
+    if(!mm)mm=x.match(/لدى\s+(.+?)(?=\s+(?:باستخدام|المبلغ|الرصيد|التاريخ)|$)/i);
+    if(mm)merchant=mm[1].replace(/\s+/g,' ').trim();
+    const base={bankId,providerId,amount:value,currency,cardLast4:card,cardType,accountRef:acc?normalizeRef(acc):null,merchant};
     if(/salary|payroll|راتب/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'salary',direction:'credit',category:'salary',confidence:sourceKnown?0.90:0.76}),input,raw);
     if(/refund|refunded|reversal|reversed|استرداد|مرتجع/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'refund',direction:'credit',category:'other',confidence:sourceKnown?0.90:0.75}),input,raw);
     if(/recharge|mobile\s+top.?up|airtime|شحن\s+رصيد/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'mobile_recharge',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);
@@ -133,7 +137,7 @@
     if(/cash\s+withdraw|withdrawn|atm|سحب\s+نقد/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'cash_withdrawal',direction:'debit',category:'other',confidence:sourceKnown?0.90:0.75}),input,raw);
     if(/deposit|credited|ايداع|اودع/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'deposit',direction:'credit',category:'other',confidence:sourceKnown?0.88:0.75}),input,raw);
     if(/transfer.+to|sent\s+to|transferred\s+to|تحويل.+الى|تحويل.+إلى/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'outgoing_transfer',direction:'debit',category:'externalTransfer',confidence:sourceKnown?0.88:0.74}),input,raw);
-    if(/purchase|pos|شراء|merchant|paid\s+at/.test(x.toLowerCase())&&card)return result(Object.assign(base,{kind:'purchase',direction:'debit',category:'other',confidence:sourceKnown?0.86:0.72}),input,raw);
+    if(/purchase|pos|شراء|merchant|paid\s+at/.test(x.toLowerCase())&&card)return result(Object.assign(base,{kind:'purchase',direction:'debit',category:categoryForMerchant(merchant),confidence:sourceKnown?0.86:0.72}),input,raw);
     return null;
   }
   function parse(input){
