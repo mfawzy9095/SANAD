@@ -17,6 +17,21 @@
       return host&&host.AndroidBridge;
     }
 
+    function markerEnabled(key){
+      try{return !!(host&&host.localStorage&&host.localStorage.getItem(String(key))==='1');}
+      catch(_){return false;}
+    }
+
+    function setMarker(key,on){
+      try{
+        if(!host||!host.localStorage)return false;
+        host.localStorage.setItem(String(key),on?'1':'0');
+        return true;
+      }catch(_){
+        return false;
+      }
+    }
+
     function nativeAvailable(){
       try{
         const b=bridge();
@@ -83,6 +98,8 @@
     }
 
     return Object.freeze({
+      markerEnabled,
+      setMarker,
       nativeAvailable,
       nativeResult,
       nativeAuth,

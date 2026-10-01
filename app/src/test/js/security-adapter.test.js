@@ -13,10 +13,15 @@ const Adapter=require('../../main/assets/js/security-adapter.js');
     supportsDeviceAuth(){calls.push(['supports']);return true;},
     authenticateDevice(reason){calls.push(['auth',reason]);}
   };
+  const markerMap=new Map();
   const host={
     AndroidBridge:bridge,
     isSecureContext:true,
     PublicKeyCredential:function(){},
+    localStorage:{
+      getItem(key){return markerMap.has(key)?markerMap.get(key):null;},
+      setItem(key,value){markerMap.set(key,String(value));}
+    },
     setTimeout(fn,ms){timers.push([fn,ms]);return timers.length;}
   };
   const A=Adapter.createSecurityAdapter({
@@ -25,6 +30,12 @@ const Adapter=require('../../main/assets/js/security-adapter.js');
     crypto:{subtle:{}},
     setTimeout:host.setTimeout
   });
+
+  assert.strictEqual(A.markerEnabled('lock'),false);
+  assert.strictEqual(A.setMarker('lock',true),true);
+  assert.strictEqual(A.markerEnabled('lock'),true);
+  assert.strictEqual(A.setMarker('lock',false),true);
+  assert.strictEqual(A.markerEnabled('lock'),false);
 
   assert.strictEqual(A.nativeAvailable(),true);
   assert.strictEqual(A.webAuthnEnvironmentAvailable(),true);
@@ -59,6 +70,8 @@ const Adapter=require('../../main/assets/js/security-adapter.js');
     crypto:null,
     setTimeout:()=>{}
   });
+  assert.strictEqual(unavailable.markerEnabled('lock'),false);
+  assert.strictEqual(unavailable.setMarker('lock',true),false);
   assert.strictEqual(unavailable.nativeAvailable(),false);
   assert.strictEqual(await unavailable.nativeAuth('x'),false);
   assert.strictEqual(unavailable.webAuthnEnvironmentAvailable(),false);
