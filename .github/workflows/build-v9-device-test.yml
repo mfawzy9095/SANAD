@@ -188,6 +188,19 @@ jobs:
           grep -q "SchemaRepair.repairCreditArchiveConsistency(state)" "$SCHEMA_CORE"
           node --check "$SCHEMA_CORE"
           node app/src/test/js/schema-core.test.js
+          PERSISTENCE_CORE="app/src/main/assets/js/persistence-core.js"
+          test -s "$PERSISTENCE_CORE"
+          PERSISTENCE_CORE_SHA="$(sha256sum "$PERSISTENCE_CORE" | awk '{print $1}')"
+          echo "PERSISTENCE_CORE_SHA=$PERSISTENCE_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/persistence-core.js"></script>' "$HTML"
+          grep -q "const PersistenceCore = window.SanadPersistenceCore" "$HTML"
+          grep -q "PersistenceCore.createPersistenceService" "$HTML"
+          grep -q "PersistenceService.rotateVerifiedSnapshot" "$HTML"
+          grep -q "PersistenceService.verifiedWriteState" "$HTML"
+          grep -q "FinanceCore.capturePrepaidBalances(S)" "$HTML"
+          grep -q "FinanceCore.checkPrepaidInvariant(prepaidBefore,S)" "$HTML"
+          node --check "$PERSISTENCE_CORE"
+          node app/src/test/js/persistence-core.test.js
 
           grep -q "const SANAD_V9_VERSION = '9.0.10'" "$HTML"
           grep -q "_criticalMutationInFlight" "$HTML"
@@ -299,7 +312,8 @@ jobs:
           state_model=h.index('<script src="js/state-model-core.js"></script>')
           i18n=h.index('<script src="js/i18n-core.js"></script>')
           schema=h.index('<script src="js/schema-core.js"></script>')
-          inline=h.index('<script>', schema)
+          persistence=h.index('<script src="js/persistence-core.js"></script>')
+          inline=h.index('<script>', persistence)
           bind=h.index('const FinanceCore = window.SanadFinanceCore', inline)
           state_bind=h.index('const StateCore = window.SanadStateCore', inline)
           storage_bind=h.index('const StorageCore = window.SanadStorageCore', inline)
@@ -311,7 +325,8 @@ jobs:
           state_model_bind=h.index('const StateModelCore = window.SanadStateModelCore', inline)
           i18n_bind=h.index('const I18nCore = window.SanadI18nCore', inline)
           schema_bind=h.index('const SchemaCore = window.SanadSchemaCore', inline)
-          assert finance < state < storage < feature < backup < security < receipt < schema_repair < state_model < i18n < schema < inline < bind < state_bind < storage_bind < feature_bind < backup_bind < security_bind < receipt_bind < schema_repair_bind < state_model_bind < i18n_bind < schema_bind
+          persistence_bind=h.index('const PersistenceCore = window.SanadPersistenceCore', inline)
+          assert finance < state < storage < feature < backup < security < receipt < schema_repair < state_model < i18n < schema < persistence < inline < bind < state_bind < storage_bind < feature_bind < backup_bind < security_bind < receipt_bind < schema_repair_bind < state_model_bind < i18n_bind < schema_bind < persistence_bind
           assert "accountBalance(accountId){ return FinanceCore.accountBalance(S, accountId); }" in h
           assert "creditAvailable(accountId){ return FinanceCore.creditAvailable(S, accountId); }" in h
           PY
@@ -350,6 +365,8 @@ jobs:
           node app/src/test/js/i18n-core.test.js
           node --check app/src/main/assets/js/schema-core.js
           node app/src/test/js/schema-core.test.js
+          node --check app/src/main/assets/js/persistence-core.js
+          node app/src/test/js/persistence-core.test.js
 
       - name: JVM regression tests
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
@@ -366,7 +383,7 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.10-REFACTOR-A9.apk"
+          cp "$APK" "SANAD-V9.0.10-REFACTOR-A10.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
@@ -407,17 +424,19 @@ jobs:
           test "$EMBEDDED_I18N_CORE_SHA" = "$I18N_CORE_SHA"
           EMBEDDED_SCHEMA_CORE_SHA="$(unzip -p "$APK" assets/js/schema-core.js | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_SCHEMA_CORE_SHA" = "$SCHEMA_CORE_SHA"
+          EMBEDDED_PERSISTENCE_CORE_SHA="$(unzip -p "$APK" assets/js/persistence-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_PERSISTENCE_CORE_SHA" = "$PERSISTENCE_CORE_SHA"
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          sha256sum "SANAD-V9.0.10-REFACTOR-A9.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.0.10-REFACTOR-A10.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.10-REFACTOR-A9
+          name: SANAD-V9.0.10-REFACTOR-A10
           path: |
-            SANAD-V9.0.10-REFACTOR-A9.apk
+            SANAD-V9.0.10-REFACTOR-A10.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
