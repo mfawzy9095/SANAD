@@ -761,6 +761,7 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/schema-repair-core.js"></script>
 <script src="js/state-model-core.js"></script>
 <script src="js/i18n-core.js"></script>
+<script src="js/theme-core.js"></script>
 <script src="js/schema-core.js"></script>
 <script src="js/persistence-core.js"></script>
 <script src="js/mutation-core.js"></script>
@@ -784,6 +785,7 @@ const ReceiptCore = window.SanadReceiptCore;
 const SchemaRepairCore = window.SanadSchemaRepairCore;
 const StateModelCore = window.SanadStateModelCore;
 const I18nCore = window.SanadI18nCore;
+const ThemeCore = window.SanadThemeCore;
 const SchemaCore = window.SanadSchemaCore;
 const PersistenceCore = window.SanadPersistenceCore;
 const MutationCore = window.SanadMutationCore;
@@ -800,6 +802,7 @@ if (!ReceiptCore) throw new Error('SANAD receipt core failed to load');
 if (!SchemaRepairCore) throw new Error('SANAD schema repair core failed to load');
 if (!StateModelCore) throw new Error('SANAD state model core failed to load');
 if (!I18nCore) throw new Error('SANAD i18n core failed to load');
+if (!ThemeCore) throw new Error('SANAD theme core failed to load');
 if (!SchemaCore) throw new Error('SANAD schema core failed to load');
 if (!PersistenceCore) throw new Error('SANAD persistence core failed to load');
 if (!MutationCore) throw new Error('SANAD mutation core failed to load');
@@ -7711,17 +7714,20 @@ const SanadI18n = Object.assign(I18nCore.createI18nCore(), {
 
 const SanadTheme = {
   media:null,
-  mode(){const m=S.settings&&S.settings.theme;return ['light','dark','system'].includes(m)?m:'light';},
-  resolved(){const m=this.mode(); if(m!=='system')return m; return window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';},
+  mode(){return ThemeCore.normalizeMode(S.settings&&S.settings.theme);},
+  resolved(){
+    const prefersDark=!!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
+    return ThemeCore.resolveMode(this.mode(),prefersDark);
+  },
   apply(){
     const t=this.resolved(); document.documentElement.setAttribute('data-theme',t);
-    const m=document.getElementById('metaTheme'); if(m)m.setAttribute('content',t==='dark'?'#0B1110':'#F6F9F8');
+    const m=document.getElementById('metaTheme'); if(m)m.setAttribute('content',ThemeCore.metaThemeColor(t));
     document.documentElement.style.colorScheme=t;
   },
   init(){
     if(window.matchMedia){ this.media=matchMedia('(prefers-color-scheme: dark)'); const cb=()=>{if(this.mode()==='system'){this.apply();render();}}; try{this.media.addEventListener('change',cb);}catch(_){try{this.media.addListener(cb);}catch(__){}} }
   },
-  async set(mode){ if(!['light','dark','system'].includes(mode)||!canWrite())return; const prev=S.settings.theme;S.settings.theme=mode; const ok=await persist(); if(!ok){S.settings.theme=prev;toast('تعذر الحفظ');return;} this.apply();render(); }
+  async set(mode){ if(!ThemeCore.isValidMode(mode)||!canWrite())return; const prev=S.settings.theme;S.settings.theme=mode; const ok=await persist(); if(!ok){S.settings.theme=prev;toast('تعذر الحفظ');return;} this.apply();render(); }
 };
 
 const SanadReceipts = {

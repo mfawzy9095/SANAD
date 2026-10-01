@@ -208,6 +208,14 @@ jobs:
           node app/src/test/js/i18n-core.test.js
           THEME_CORE="app/src/main/assets/js/theme-core.js"
           test -s "$THEME_CORE"
+          THEME_CORE_SHA="$(sha256sum "$THEME_CORE" | awk '{print $1}')"
+          echo "THEME_CORE_SHA=$THEME_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/theme-core.js"></script>' "$HTML"
+          grep -q "const ThemeCore = window.SanadThemeCore" "$HTML"
+          grep -q "ThemeCore.normalizeMode" "$HTML"
+          grep -q "ThemeCore.resolveMode" "$HTML"
+          grep -q "ThemeCore.metaThemeColor" "$HTML"
+          grep -q "ThemeCore.isValidMode" "$HTML"
           node --check "$THEME_CORE"
           node app/src/test/js/theme-core.test.js
           SCHEMA_CORE="app/src/main/assets/js/schema-core.js"
@@ -383,6 +391,7 @@ jobs:
           schema_repair=h.index('<script src="js/schema-repair-core.js"></script>')
           state_model=h.index('<script src="js/state-model-core.js"></script>')
           i18n=h.index('<script src="js/i18n-core.js"></script>')
+          theme=h.index('<script src="js/theme-core.js"></script>')
           schema=h.index('<script src="js/schema-core.js"></script>')
           persistence=h.index('<script src="js/persistence-core.js"></script>')
           mutation=h.index('<script src="js/mutation-core.js"></script>')
@@ -400,12 +409,13 @@ jobs:
           schema_repair_bind=h.index('const SchemaRepairCore = window.SanadSchemaRepairCore', inline)
           state_model_bind=h.index('const StateModelCore = window.SanadStateModelCore', inline)
           i18n_bind=h.index('const I18nCore = window.SanadI18nCore', inline)
+          theme_bind=h.index('const ThemeCore = window.SanadThemeCore', inline)
           schema_bind=h.index('const SchemaCore = window.SanadSchemaCore', inline)
           persistence_bind=h.index('const PersistenceCore = window.SanadPersistenceCore', inline)
           mutation_bind=h.index('const MutationCore = window.SanadMutationCore', inline)
           reminder_bind=h.index('const ReminderCore = window.SanadReminderCore', inline)
           report_bind=h.index('const ReportCore = window.SanadReportCore', inline)
-          assert finance < state < storage < feature < backup < security < security_adapter < receipt < schema_repair < state_model < i18n < schema < persistence < mutation < reminder < report < inline < bind < state_bind < storage_bind < feature_bind < backup_bind < security_bind < security_adapter_bind < receipt_bind < schema_repair_bind < state_model_bind < i18n_bind < schema_bind < persistence_bind < mutation_bind < reminder_bind < report_bind
+          assert finance < state < storage < feature < backup < security < security_adapter < receipt < schema_repair < state_model < i18n < theme < schema < persistence < mutation < reminder < report < inline < bind < state_bind < storage_bind < feature_bind < backup_bind < security_bind < security_adapter_bind < receipt_bind < schema_repair_bind < state_model_bind < i18n_bind < theme_bind < schema_bind < persistence_bind < mutation_bind < reminder_bind < report_bind
           assert "accountBalance(accountId){ return FinanceCore.accountBalance(S, accountId); }" in h
           assert "creditAvailable(accountId){ return FinanceCore.creditAvailable(S, accountId); }" in h
           security_ui=h[h.index("const SanadSecurity = {"):h.index("window.sanadDeviceAuthResult")]
@@ -524,6 +534,8 @@ jobs:
           test "$EMBEDDED_STATE_MODEL_CORE_SHA" = "$STATE_MODEL_CORE_SHA"
           EMBEDDED_I18N_CORE_SHA="$(unzip -p "$APK" assets/js/i18n-core.js | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_I18N_CORE_SHA" = "$I18N_CORE_SHA"
+          EMBEDDED_THEME_CORE_SHA="$(unzip -p "$APK" assets/js/theme-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_THEME_CORE_SHA" = "$THEME_CORE_SHA"
           EMBEDDED_SCHEMA_CORE_SHA="$(unzip -p "$APK" assets/js/schema-core.js | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_SCHEMA_CORE_SHA" = "$SCHEMA_CORE_SHA"
           EMBEDDED_PERSISTENCE_CORE_SHA="$(unzip -p "$APK" assets/js/persistence-core.js | sha256sum | awk '{print $1}')"
