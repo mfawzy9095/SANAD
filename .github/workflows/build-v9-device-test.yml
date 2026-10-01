@@ -106,7 +106,10 @@ jobs:
           grep -q "FeatureStorageCore.createFeatureStorage" "$HTML"
           ! grep -q "memKV:new Map()" "$HTML"
           ! grep -q "memReceipts:new Map()" "$HTML"
+          grep -q "strictInitFailures" "$FEATURE_CORE"
+          grep -q "this.mode==='error'" "$FEATURE_CORE"
           node --check "$FEATURE_CORE"
+          node --check app/src/test/js/feature-storage-core.test.js
           node app/src/test/js/feature-storage-core.test.js
           BACKUP_CORE="app/src/main/assets/js/backup-core.js"
           test -s "$BACKUP_CORE"

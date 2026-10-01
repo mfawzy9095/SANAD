@@ -13,17 +13,24 @@
     const clone=typeof opts.deepClone==='function'?opts.deepClone:fallbackClone;
     const getIndexedDB=typeof opts.getIndexedDB==='function'?opts.getIndexedDB:function(){return typeof indexedDB!=='undefined'?indexedDB:null;};
     const warn=typeof opts.warn==='function'?opts.warn:function(){};
+    const strictInitFailures=!!opts.strictInitFailures;
 
     return {
       db:null,
       mode:'memory',
       memKV:new Map(),
       memReceipts:new Map(),
+      error:null,
 
       async init(){
         let idb=null;
-        try{idb=getIndexedDB();}catch(e){warn('SANAD feature DB fallback:',e);this.mode='memory';return {mode:this.mode};}
-        if(!idb){this.mode='memory';return {mode:this.mode};}
+        try{idb=getIndexedDB();}catch(e){
+          warn('SANAD feature DB fallback:',e);
+          this.db=null;this.error=e;
+          if(strictInitFailures){this.mode='error';return {mode:this.mode,error:e};}
+          this.mode='memory';return {mode:this.mode};
+        }
+        if(!idb){this.db=null;this.error=null;this.mode='memory';return {mode:this.mode};}
         try{
           this.db=await new Promise((resolve,reject)=>{
             let req;
@@ -37,16 +44,18 @@
             req.onerror=()=>reject(req.error||new Error('feature db open failed'));
             req.onblocked=()=>reject(new Error('feature db blocked'));
           });
-          this.mode='idb';
+          this.mode='idb';this.error=null;
         }catch(e){
           warn('SANAD feature DB fallback:',e);
-          this.db=null;
+          this.db=null;this.error=e;
+          if(strictInitFailures){this.mode='error';return {mode:this.mode,error:e};}
           this.mode='memory';
         }
         return {mode:this.mode};
       },
 
       async get(key,fallback=null){
+        if(this.mode==='error')return fallback;
         if(this.mode!=='idb'||!this.db)return this.memKV.has(key)?clone(this.memKV.get(key)):fallback;
         try{
           return await new Promise((resolve,reject)=>{
@@ -59,6 +68,7 @@
       },
 
       async set(key,value){
+        if(this.mode==='error')return false;
         if(this.mode!=='idb'||!this.db){this.memKV.set(key,clone(value));return true;}
         try{
           return await new Promise((resolve,reject)=>{
@@ -72,6 +82,7 @@
       },
 
       async del(key){
+        if(this.mode==='error')return false;
         if(this.mode!=='idb'||!this.db){this.memKV.delete(key);return true;}
         try{
           return await new Promise((resolve,reject)=>{
@@ -84,7 +95,7 @@
       },
 
       async putReceipt(txId,blob,meta){
-        if(!txId||!blob)return false;
+        if(this.mode==='error'||!txId||!blob)return false;
         const rec={txId,blob,meta:Object.assign({updatedAt:Date.now()},meta||{})};
         if(this.mode!=='idb'||!this.db){this.memReceipts.set(txId,rec);return true;}
         try{
@@ -98,6 +109,7 @@
       },
 
       async getReceipt(txId){
+        if(this.mode==='error')return null;
         if(this.mode!=='idb'||!this.db)return this.memReceipts.get(txId)||null;
         try{
           return await new Promise((resolve,reject)=>{
@@ -110,6 +122,7 @@
       },
 
       async delReceipt(txId){
+        if(this.mode==='error')return false;
         if(this.mode!=='idb'||!this.db){this.memReceipts.delete(txId);return true;}
         try{
           return await new Promise((resolve,reject)=>{
@@ -122,6 +135,7 @@
       },
 
       async listReceipts(){
+        if(this.mode==='error')return [];
         if(this.mode!=='idb'||!this.db)return Array.from(this.memReceipts.values());
         try{
           return await new Promise((resolve,reject)=>{
@@ -134,6 +148,7 @@
       },
 
       async replaceReceipts(records){
+        if(this.mode==='error')return false;
         records=Array.isArray(records)?records:[];
         if(this.mode!=='idb'||!this.db){
           const next=new Map();
@@ -161,6 +176,7 @@
       },
 
       async pruneReceiptOrphans(validIds){
+        if(this.mode==='error')return 0;
         const valid=validIds instanceof Set?validIds:new Set(validIds||[]);
         const all=await this.listReceipts();
         let removed=0;
@@ -173,6 +189,7 @@
       },
 
       async secureWipe(){
+        if(this.mode==='error')return false;
         this.memKV.clear();
         this.memReceipts.clear();
         if(this.mode!=='idb'||!this.db){this.db=null;this.mode='memory';return true;}
