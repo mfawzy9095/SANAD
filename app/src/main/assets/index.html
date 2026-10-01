@@ -763,6 +763,7 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/schema-core.js"></script>
 <script src="js/persistence-core.js"></script>
 <script src="js/mutation-core.js"></script>
+<script src="js/reminder-core.js"></script>
 <script>
 /* =========================================================
    SANAD — Architecture Refactor
@@ -783,6 +784,7 @@ const I18nCore = window.SanadI18nCore;
 const SchemaCore = window.SanadSchemaCore;
 const PersistenceCore = window.SanadPersistenceCore;
 const MutationCore = window.SanadMutationCore;
+const ReminderCore = window.SanadReminderCore;
 if (!FinanceCore) throw new Error('SANAD finance core failed to load');
 if (!StateCore) throw new Error('SANAD state core failed to load');
 if (!StorageCore) throw new Error('SANAD storage core failed to load');
@@ -796,6 +798,7 @@ if (!I18nCore) throw new Error('SANAD i18n core failed to load');
 if (!SchemaCore) throw new Error('SANAD schema core failed to load');
 if (!PersistenceCore) throw new Error('SANAD persistence core failed to load');
 if (!MutationCore) throw new Error('SANAD mutation core failed to load');
+if (!ReminderCore) throw new Error('SANAD reminder core failed to load');
 
 const SchemaRepair = SchemaRepairCore.createSchemaRepairCore({financeCore:FinanceCore});
 
@@ -913,7 +916,7 @@ function accountTypeInfo(id){ return ACCOUNT_TYPES.find(t => t.id === id) || ACC
 function instrumentTypeInfo(id){ return INSTRUMENT_TYPES.find(t => t.id === id) || INSTRUMENT_TYPES[0]; }
 function isAssetAccount(a){ return a && accountTypeInfo(a.type).asset === true; }
 function isLiabilityAccount(a){ return a && accountTypeInfo(a.type).asset === false; }
-function remDaysOf(r){ if (r.reminderDays === 0) return 0; const n = Number(r.reminderDays); return isFinite(n) ? n : 3; }
+function remDaysOf(r){ return ReminderCore.reminderDaysOf(r); }
 
 function hexToRgb(hex){
   hex = String(hex || '#00695C').replace('#','');
@@ -2082,17 +2085,7 @@ function viewHome(){
 }
 
 function daysUntilNextOccurrence(r){
-  const today = new Date(); today.setHours(0,0,0,0);
-  const day = Math.min(28, Math.max(1, Number(r.day) || 1));
-  if (r.frequency === 'yearly'){
-    const m = Math.min(11, Math.max(0, Number(r.month) || 0));
-    let target = new Date(today.getFullYear(), m, day);
-    if (target < today) target = new Date(today.getFullYear()+1, m, day);
-    return Math.round((target - today) / 86400000);
-  }
-  const target = new Date(today.getFullYear(), today.getMonth(), day);
-  if (target < today) target.setMonth(target.getMonth() + 1);
-  return Math.round((target - today) / 86400000);
+  return ReminderCore.daysUntilNextOccurrence(r,Date.now());
 }
 function getDueOccurrences(r, now){
   const out = [];
@@ -6737,10 +6730,11 @@ async function requestNotifications(){
   try { const p = await Notification.requestPermission(); return p === 'granted'; } catch(e){ return false; }
 }
 function nativeReminderSpecs(){
-  return S.recurring.filter(r=>r&&r.active&&isRecurringSourceValid(r)).map(r=>{
-    const cur=r.currency||'EGP';
-    const body=S.settings.hideAmounts?'المبلغ مخفي':(fmt(r.amount)+' '+Finance.curSymbol(cur));
-    return {id:String(r.id),title:String(r.name||'SANAD'),body,frequency:r.frequency==='yearly'?'yearly':'monthly',day:Math.min(28,Math.max(1,Number(r.day)||1)),month:Math.min(11,Math.max(0,Number(r.month)||0)),reminderDays:Math.min(30,Math.max(0,remDaysOf(r)))};
+  return ReminderCore.nativeReminderSpecs(S.recurring,{
+    hideAmounts:!!S.settings.hideAmounts,
+    isValidSource:isRecurringSourceValid,
+    formatAmount:fmt,
+    currencySymbol:cur=>Finance.curSymbol(cur)
   });
 }
 function syncNativeNotifications(){
@@ -6760,19 +6754,14 @@ function showNotification(id, title, body){
 /* Respect hideAmounts in notifications */
 function checkReminders(){
   syncNativeNotifications();
-  for (const r of S.recurring){
-    if (!r.active) continue;
-    if (!isRecurringSourceValid(r)) continue;
-    const d = daysUntilNextOccurrence(r);
-    if (d >= 0 && d <= remDaysOf(r)){
-      const when = d === 0 ? 'اليوم' : d === 1 ? 'غداً' : 'بعد ' + d + ' أيام';
-      const cur = r.currency || 'EGP';
-      const body = S.settings.hideAmounts
-        ? (r.name + ' ' + when + ' — مبلغ مخفي')
-        : (fmt(r.amount) + ' ' + Finance.curSymbol(cur));
-      showNotification(r.id, r.name + ' ' + when, body);
-    }
-  }
+  const due=ReminderCore.dueNotifications(S.recurring,{
+    now:Date.now(),
+    hideAmounts:!!S.settings.hideAmounts,
+    isValidSource:isRecurringSourceValid,
+    formatAmount:fmt,
+    currencySymbol:cur=>Finance.curSymbol(cur)
+  });
+  for(const n of due)showNotification(n.id,n.title,n.body);
 }
 function getIconUrl(){
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#00695C"/><stop offset="1" stop-color="#26A69A"/></linearGradient></defs><rect width="192" height="192" rx="44" fill="url(#g)"/><text x="96" y="128" font-size="96" text-anchor="middle">💰</text></svg>';
