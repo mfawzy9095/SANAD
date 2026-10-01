@@ -7840,7 +7840,14 @@ const SanadSecurity = {
     if(!(SecurityAdapter.webAuthnEnvironmentAvailable()&&this.cfg.credentialId))return false;
     try{const cred=await SecurityAdapter.getCredential({challenge:this.random(),allowCredentials:[{type:'public-key',id:this.unb64(this.cfg.credentialId)}],timeout:60000,userVerification:'required'});return !!cred;}catch(_){return false;}
   },
-  async init(){const marker=this.markerEnabled(),stored=await SanadExtStorage.get('security',null),base={enabled:false,authMode:null,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(stored&&typeof stored==='object'){this.cfg=Object.assign(base,stored);this.setMarker(!!this.cfg.enabled);}else if(marker){this.cfg=Object.assign(base,{enabled:true,storageUnavailable:true});}else this.cfg=base;this.unlocked=!this.cfg.enabled;this.pendingStart=false;},
+  async init(){
+    const marker=this.markerEnabled(),stored=await SanadExtStorage.get('security',null);
+    const prepared=SecurityCrypto.prepareInitialState({markerEnabled:marker,stored});
+    this.cfg=prepared.config;
+    if(stored&&typeof stored==='object')this.setMarker(prepared.markerValue);
+    this.unlocked=prepared.unlocked;
+    this.pendingStart=prepared.pendingStart;
+  },
   ensureOverlay(){let el=document.getElementById('sanadLock');if(el)return el;el=document.createElement('div');el.id='sanadLock';el.className='sanad-lock';el.hidden=true;el.innerHTML='<div class="lock-card"><div class="lock-logo">س</div><h2>SANAD · سند</h2><p>التطبيق مقفول لحماية خصوصيتك.</p><button type="button" class="btn primary" data-sanad-act="unlock">🔐 فتح بالبصمة / قفل الجهاز</button><button type="button" class="btn text" data-sanad-act="recovery-unlock">استخدام رمز الاسترداد</button><div class="lock-note">لا يتم حفظ أو إرسال بيانات بصمتك إلى SANAD.</div></div>';document.body.appendChild(el);return el;},
   show(){
     if(!this.cfg.enabled)return;

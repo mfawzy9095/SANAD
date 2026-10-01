@@ -140,7 +140,9 @@ jobs:
           grep -q "function defaultConfig" "$SECURITY_CORE"
           grep -q "function prepareInitialState" "$SECURITY_CORE"
           grep -q "function unlockRoute" "$SECURITY_CORE"
+          grep -q "SecurityCrypto.prepareInitialState" "$HTML"
           ! grep -q "const elapsed=Math.max(0,(Number(ts)||Date.now())-this.backgroundAt)" "$HTML"
+          ! grep -q "stored=await SanadExtStorage.get('security',null),base=" "$HTML"
           node --check "$SECURITY_CORE"
           node app/src/test/js/security-core.test.js
           SECURITY_ADAPTER="app/src/main/assets/js/security-adapter.js"
