@@ -199,10 +199,15 @@
       categoryByCur[e.currency][e.category]=(categoryByCur[e.currency][e.category]||0)+e.amount;
     });
     incomes.forEach(e=>{incomeByCur[e.currency]=(incomeByCur[e.currency]||0)+e.amount;});
-    return Object.assign({},o,{
+    return {
+      country:o.country,
+      period:o.period,
+      accountId:o.accountId,
+      currency:o.currency,
+      month:o.month,
       expenses,incomes,transfers,spendingByCur,incomeByCur,categoryByCur,
       chartBuckets:chartBuckets(o.period,expenses,o.month,o.now)
-    });
+    };
   }
 
   function computeBudgetStatus(spent,budget){
