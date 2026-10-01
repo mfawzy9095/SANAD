@@ -754,6 +754,7 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/state-core.js"></script>
 <script src="js/storage-core.js"></script>
 <script src="js/feature-storage-core.js"></script>
+<script src="js/backup-core.js"></script>
 <script>
 /* =========================================================
    SANAD — Architecture Refactor
@@ -765,10 +766,12 @@ const FinanceCore = window.SanadFinanceCore;
 const StateCore = window.SanadStateCore;
 const StorageCore = window.SanadStorageCore;
 const FeatureStorageCore = window.SanadFeatureStorageCore;
+const BackupCore = window.SanadBackupCore;
 if (!FinanceCore) throw new Error('SANAD finance core failed to load');
 if (!StateCore) throw new Error('SANAD state core failed to load');
 if (!StorageCore) throw new Error('SANAD storage core failed to load');
 if (!FeatureStorageCore) throw new Error('SANAD feature storage core failed to load');
+if (!BackupCore) throw new Error('SANAD backup core failed to load');
 
 const CURRENCIES = {
   EGP:{code:'EGP',symbol:'ج.م',name:'جنيه مصري',flag:'🇪🇬'},
@@ -7456,12 +7459,11 @@ async function exportData(){
     await dialog({emoji:'❌', title:'تعذر إنشاء نسخة احتياطية', msg:'تم منع التصدير لأن البيانات الحالية لم تجتز فحص السلامة.\n' + integrityErrors.slice(0,6).join('\n'), okText:'حسناً', primary:true, hideCancel:true});
     return;
   }
-  const data = {
-    schemaVersion: SCHEMA_VERSION,
-    exportedAt: new Date().toISOString(),
-    integrity:{version:1, fingerprint:stateFingerprint(state)},
-    ...state
-  };
+  const data = BackupCore.makeFinanceBackup(state,{
+    schemaVersion:SCHEMA_VERSION,
+    exportedAt:new Date().toISOString(),
+    fingerprint:stateFingerprint
+  });
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -7476,12 +7478,10 @@ async function importData(file){
     let parsed;
     try { parsed = JSON.parse(r.result); }
     catch(e){ toast('الملف ليس JSON صالح'); return; }
-    if (parsed && parsed.integrity && parsed.integrity.fingerprint){
-      const actualFp = stateFingerprint(parsed);
-      if (actualFp !== parsed.integrity.fingerprint){
-        await dialog({emoji:'❌', title:'النسخة الاحتياطية تالفة', msg:'بصمة سلامة الملف لا تطابق محتواه. لم يتم استيراد أي بيانات.', okText:'حسناً', primary:true, hideCancel:true});
-        return;
-      }
+    const integrityCheck = BackupCore.verifyFinanceIntegrity(parsed,stateFingerprint);
+    if (!integrityCheck.ok){
+      await dialog({emoji:'❌', title:'النسخة الاحتياطية تالفة', msg:'بصمة سلامة الملف لا تطابق محتواه. لم يتم استيراد أي بيانات.', okText:'حسناً', primary:true, hideCancel:true});
+      return;
     }
     let errors = [];
     try { errors = Schema.validateForImport(parsed); }
@@ -9275,11 +9275,79 @@ const SanadFamily = {
 };
 
 const SanadFullBackup = {
-  async blobToDataURL(blob){return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});},
-  dataURLToBlob(data){if(typeof data!=='string'||!/^data:image\/(?:jpeg|png|webp);base64,/i.test(data))throw new Error('invalid receipt data');const [h,b]=data.split(','),mime=(h.match(/data:([^;]+)/)||[])[1]||'';const bin=atob(b||'');if(bin.length>20*1024*1024)throw new Error('receipt too large');const a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:mime});},
-  async export(){const state=snapshotState(),errs=Schema.validateStateStrict(state);if(errs.length){toast('تم منع التصدير: بيانات غير صالحة');return;}const validIds=new Set(state.transactions.map(t=>t.id)),receipts=await SanadExtStorage.listReceipts(),packed=[];for(const r of receipts){if(!r||!r.blob||!validIds.has(r.txId))continue;packed.push({txId:r.txId,meta:r.meta||{},data:await this.blobToDataURL(r.blob)});}const features={family:SanadFamily.state,syncMeta:Object.assign({},SanadCloud.meta,{dirty:true}),firebaseConfig:SanadCloud.config||null};delete features.syncMeta.receiptDirty;const payload={format:'SANAD_FULL_BACKUP',version:1,appVersion:SANAD_V9_VERSION,exportedAt:new Date().toISOString(),finance:{...state,integrity:{version:1,fingerprint:stateFingerprint(state)}},features,receipts:packed};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sanad-full-backup-'+isoToday()+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},3000);toast('تم التصدير');},
-  importPicker(){let i=document.getElementById('sanadFullImport');if(!i){i=document.createElement('input');i.type='file';i.accept='.json,application/json';i.id='sanadFullImport';i.hidden=true;document.body.appendChild(i);i.addEventListener('change',()=>this.importFile(i.files&&i.files[0]));}i.value='';i.click();},
-  prepare(data){if(!data||data.format!=='SANAD_FULL_BACKUP'||Number(data.version)!==1||!data.finance)throw new Error('not-full-backup');const fp=data.finance.integrity&&data.finance.integrity.fingerprint;if(!fp||typeof fp!=='string')throw new Error('missing-integrity');if(stateFingerprint(data.finance)!==fp)throw new Error('fingerprint-mismatch');let migrated;try{migrated=Schema.migrate(data.finance);}catch(_){throw new Error('migration-failed');}const errs=Schema.validateStateStrict(migrated);if(errs.length)throw new Error('schema-invalid:'+errs.slice(0,3).join('|'));const validIds=new Set(migrated.transactions.map(t=>t.id)),seen=new Set(),receipts=[];if(!Array.isArray(data.receipts||[]))throw new Error('receipts-invalid');for(const r of (data.receipts||[])){if(!r||typeof r.txId!=='string'||!r.txId||!validIds.has(r.txId)||seen.has(r.txId)||typeof r.data!=='string')throw new Error('receipt-invalid');const blob=this.dataURLToBlob(r.data);if(!/^image\//.test(blob.type))throw new Error('receipt-type');seen.add(r.txId);receipts.push({txId:r.txId,blob,meta:Object.assign({updatedAt:Date.now()},r.meta||{})});}return {migrated,receipts};},
+  async blobToDataURL(blob){
+    return await new Promise((resolve,reject)=>{
+      const r=new FileReader();
+      r.onload=()=>resolve(r.result);
+      r.onerror=()=>reject(r.error);
+      r.readAsDataURL(blob);
+    });
+  },
+  dataURLToBlob(data){
+    if(typeof data!=='string'||!/^data:image\/(?:jpeg|png|webp);base64,/i.test(data))throw new Error('invalid receipt data');
+    const [h,b]=data.split(','),mime=(h.match(/data:([^;]+)/)||[])[1]||'';
+    const bin=atob(b||'');
+    if(bin.length>20*1024*1024)throw new Error('receipt too large');
+    const a=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);
+    return new Blob([a],{type:mime});
+  },
+  async export(){
+    const state=snapshotState(),errs=Schema.validateStateStrict(state);
+    if(errs.length){toast('تم منع التصدير: بيانات غير صالحة');return;}
+    const validIds=new Set(state.transactions.map(t=>t.id));
+    const receipts=await SanadExtStorage.listReceipts(),packed=[];
+    for(const r of receipts){
+      if(!r||!r.blob||!validIds.has(r.txId))continue;
+      packed.push({txId:r.txId,meta:r.meta||{},data:await this.blobToDataURL(r.blob)});
+    }
+    const features={
+      family:SanadFamily.state,
+      syncMeta:Object.assign({},SanadCloud.meta,{dirty:true}),
+      firebaseConfig:SanadCloud.config||null
+    };
+    delete features.syncMeta.receiptDirty;
+    const payload=BackupCore.makeFullBackup({
+      state,
+      appVersion:SANAD_V9_VERSION,
+      exportedAt:new Date().toISOString(),
+      fingerprint:stateFingerprint,
+      features,
+      receipts:packed
+    });
+    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='sanad-full-backup-'+isoToday()+'.json';
+    document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},3000);
+    toast('تم التصدير');
+  },
+  importPicker(){
+    let i=document.getElementById('sanadFullImport');
+    if(!i){
+      i=document.createElement('input');
+      i.type='file';i.accept='.json,application/json';i.id='sanadFullImport';i.hidden=true;
+      document.body.appendChild(i);
+      i.addEventListener('change',()=>this.importFile(i.files&&i.files[0]));
+    }
+    i.value='';i.click();
+  },
+  prepare(data){
+    const envelope=BackupCore.validateFullEnvelope(data,stateFingerprint);
+    let migrated;
+    try{migrated=Schema.migrate(envelope.finance);}catch(_){throw new Error('migration-failed');}
+    const errs=Schema.validateStateStrict(migrated);
+    if(errs.length)throw new Error('schema-invalid:'+errs.slice(0,3).join('|'));
+    const validIds=new Set(migrated.transactions.map(t=>t.id));
+    const descriptors=BackupCore.validateReceiptDescriptors(envelope.receipts,validIds);
+    const receipts=[];
+    for(const r of descriptors){
+      const blob=this.dataURLToBlob(r.data);
+      if(!/^image\//.test(blob.type))throw new Error('receipt-type');
+      receipts.push({txId:r.txId,blob,meta:Object.assign({updatedAt:Date.now()},r.meta||{})});
+    }
+    return {migrated,receipts};
+  },
   async importData(data,ask=true){
     let prepared;try{prepared=this.prepare(data);}catch(e){const code=e&&e.message||'';if(code==='fingerprint-mismatch')toast('النسخة تالفة — بصمة السلامة غير مطابقة');else if(code==='not-full-backup')toast('ليست نسخة SANAD كاملة');else if(code==='migration-failed')toast('النسخة غير متوافقة');else toast('تم رفض النسخة لحماية البيانات');return false;}
     if(ask){const ok=await dialog({emoji:'📦',title:'استيراد نسخة كاملة',msg:'سيتم استبدال البيانات المالية والمرفقات المحلية الحالية.',okText:'استيراد'});if(!ok)return false;}
