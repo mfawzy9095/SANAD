@@ -203,6 +203,10 @@ jobs:
           ! grep -q "const SanadI18n = {" "$HTML"
           node --check "$I18N_CORE"
           node app/src/test/js/i18n-core.test.js
+          THEME_CORE="app/src/main/assets/js/theme-core.js"
+          test -s "$THEME_CORE"
+          node --check "$THEME_CORE"
+          node app/src/test/js/theme-core.test.js
           SCHEMA_CORE="app/src/main/assets/js/schema-core.js"
           test -s "$SCHEMA_CORE"
           SCHEMA_CORE_SHA="$(sha256sum "$SCHEMA_CORE" | awk '{print $1}')"
@@ -448,6 +452,8 @@ jobs:
           node app/src/test/js/state-model-core.test.js
           node --check app/src/main/assets/js/i18n-core.js
           node app/src/test/js/i18n-core.test.js
+          node --check app/src/main/assets/js/theme-core.js
+          node app/src/test/js/theme-core.test.js
           node --check app/src/main/assets/js/schema-core.js
           node app/src/test/js/schema-core.test.js
           node --check app/src/main/assets/js/persistence-core.js
