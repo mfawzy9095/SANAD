@@ -41,6 +41,11 @@ const R=require('../../main/assets/js/receipt-core.js');
   assert.strictEqual(R.resolveAttachmentTxId(new Set(['old']),7,txs),7);
   assert.strictEqual(R.resolveAttachmentTxId(new Set(['old','new']),null,txs),null);
   assert.strictEqual(R.resolveAttachmentTxId(['old'],null,txs),'new');
+  assert.strictEqual(R.resolveAttachmentAfterSave(false,new Set(['old']),'edit-1',txs),null);
+  assert.strictEqual(R.resolveAttachmentAfterSave(undefined,new Set(['old']),'edit-1',txs),null);
+  assert.strictEqual(R.resolveAttachmentAfterSave(true,new Set(['old']),'edit-1',txs),'edit-1');
+  assert.strictEqual(R.resolveAttachmentAfterSave(true,new Set(['old']),null,txs),'new');
+  assert.strictEqual(R.resolveAttachmentAfterSave(false,new Set(['old']),null,txs),null);
 })();
 
 (async function receiptService(){

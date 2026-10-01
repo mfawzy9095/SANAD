@@ -56,6 +56,11 @@
     return found?found.id:null;
   }
 
+  function resolveAttachmentAfterSave(saveSucceeded,beforeIds,editId,transactions){
+    if(saveSucceeded!==true)return null;
+    return resolveAttachmentTxId(beforeIds,editId,transactions);
+  }
+
   function createReceiptService(options){
     const opts=options||{};
     const storage=opts.storage;
@@ -92,6 +97,7 @@
     sizeLabel,
     currentTxId,
     resolveAttachmentTxId,
+    resolveAttachmentAfterSave,
     createReceiptService
   });
 });

@@ -183,6 +183,7 @@ jobs:
           grep -q "this.domain().remove(S.form.id)" "$HTML"
           grep -q "function currentTxId" "$RECEIPT_CORE"
           grep -q "function resolveAttachmentTxId" "$RECEIPT_CORE"
+          grep -q "function resolveAttachmentAfterSave" "$RECEIPT_CORE"
           grep -q "function createReceiptService" "$RECEIPT_CORE"
           node --check "$RECEIPT_CORE"
           node app/src/test/js/receipt-core.test.js
