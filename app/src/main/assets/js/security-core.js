@@ -89,6 +89,52 @@
       return elapsed>=(threshold||0);
     }
 
+    function defaultConfig(){
+      return {
+        enabled:false,
+        authMode:null,
+        credentialId:null,
+        recoveryHash:null,
+        recoverySalt:null,
+        recoveryKdf:null,
+        recoveryIterations:0,
+        storageUnavailable:false
+      };
+    }
+
+    function prepareInitialState(options){
+      const o=options||{};
+      const marker=!!o.markerEnabled;
+      const stored=o.stored;
+      let config;
+      let markerValue=false;
+      if(stored&&typeof stored==='object'){
+        config=Object.assign(defaultConfig(),stored);
+        markerValue=!!config.enabled;
+      }else if(marker){
+        config=Object.assign(defaultConfig(),{enabled:true,storageUnavailable:true});
+        markerValue=true;
+      }else{
+        config=defaultConfig();
+      }
+      return {
+        config,
+        markerValue,
+        unlocked:!config.enabled,
+        pendingStart:false
+      };
+    }
+
+    function unlockRoute(options){
+      const o=options||{};
+      if(!o.enabled)return 'disabled';
+      const nativeAvailable=!!o.nativeAvailable;
+      if(o.authMode==='android-device'||(!o.credentialId&&nativeAvailable)){
+        return nativeAvailable?'native':'native-unavailable';
+      }
+      return o.webAuthnEnvironmentAvailable?'webauthn':'webauthn-unavailable';
+    }
+
     return Object.freeze({
       b64,
       unb64,
@@ -98,7 +144,10 @@
       generateRecoveryCode,
       hash,
       recoveryDigest,
-      shouldRelockOnForeground
+      shouldRelockOnForeground,
+      defaultConfig,
+      prepareInitialState,
+      unlockRoute
     });
   }
 

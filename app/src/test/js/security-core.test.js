@@ -49,5 +49,59 @@ const Core=require('../../main/assets/js/security-core.js');
     enabled:true,unlocked:true,backgroundAt:5000,now:4000,relockAfterMs:30000
   }),false);
 
+  const defaults=S.defaultConfig();
+  assert.deepStrictEqual(defaults,{
+    enabled:false,
+    authMode:null,
+    credentialId:null,
+    recoveryHash:null,
+    recoverySalt:null,
+    recoveryKdf:null,
+    recoveryIterations:0,
+    storageUnavailable:false
+  });
+
+  const storedInit=S.prepareInitialState({
+    markerEnabled:false,
+    stored:{enabled:true,authMode:'android-device',recoveryIterations:210000}
+  });
+  assert.strictEqual(storedInit.config.enabled,true);
+  assert.strictEqual(storedInit.config.authMode,'android-device');
+  assert.strictEqual(storedInit.config.storageUnavailable,false);
+  assert.strictEqual(storedInit.markerValue,true);
+  assert.strictEqual(storedInit.unlocked,false);
+  assert.strictEqual(storedInit.pendingStart,false);
+
+  const markerOnly=S.prepareInitialState({markerEnabled:true,stored:null});
+  assert.strictEqual(markerOnly.config.enabled,true);
+  assert.strictEqual(markerOnly.config.storageUnavailable,true);
+  assert.strictEqual(markerOnly.markerValue,true);
+  assert.strictEqual(markerOnly.unlocked,false);
+
+  const clean=S.prepareInitialState({markerEnabled:false,stored:null});
+  assert.deepStrictEqual(clean.config,S.defaultConfig());
+  assert.strictEqual(clean.markerValue,false);
+  assert.strictEqual(clean.unlocked,true);
+
+  assert.strictEqual(S.unlockRoute({enabled:false}),'disabled');
+  assert.strictEqual(S.unlockRoute({
+    enabled:true,authMode:'android-device',credentialId:null,nativeAvailable:true,webAuthnEnvironmentAvailable:true
+  }),'native');
+  assert.strictEqual(S.unlockRoute({
+    enabled:true,authMode:'android-device',credentialId:null,nativeAvailable:false,webAuthnEnvironmentAvailable:true
+  }),'native-unavailable');
+  assert.strictEqual(S.unlockRoute({
+    enabled:true,authMode:'webauthn',credentialId:'cred',nativeAvailable:false,webAuthnEnvironmentAvailable:true
+  }),'webauthn');
+  assert.strictEqual(S.unlockRoute({
+    enabled:true,authMode:'webauthn',credentialId:'cred',nativeAvailable:false,webAuthnEnvironmentAvailable:false
+  }),'webauthn-unavailable');
+  assert.strictEqual(S.unlockRoute({
+    enabled:true,authMode:null,credentialId:null,nativeAvailable:true,webAuthnEnvironmentAvailable:true
+  }),'native');
+  assert.strictEqual(S.unlockRoute({
+    enabled:true,authMode:null,credentialId:null,nativeAvailable:false,webAuthnEnvironmentAvailable:true
+  }),'webauthn');
+
   console.log('security-core regression tests: PASS');
 })().catch(e=>{console.error(e);process.exit(1);});
