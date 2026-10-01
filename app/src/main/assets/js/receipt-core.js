@@ -74,7 +74,8 @@
       },
       async remove(txId){
         if(!txId)return false;
-        await storage.delReceipt(txId);
+        const ok=await storage.delReceipt(txId);
+        if(!ok)return false;
         await markDirty(txId,true);
         return true;
       },

@@ -78,6 +78,15 @@ const R=require('../../main/assets/js/receipt-core.js');
   assert.strictEqual(await service.attach(null,pending),false);
   assert.strictEqual(await service.remove(null),false);
 
+  const failedRemove=R.createReceiptService({
+    storage:Object.assign({},storage,{delReceipt:async()=>false}),
+    markDirty:async(id,deleted)=>{dirty.push([id,deleted]);}
+  });
+  const beforeRemoveDirty=dirty.length;
+  assert.strictEqual(await failedRemove.remove('t1'),false);
+  assert.strictEqual(dirty.length,beforeRemoveDirty);
+  assert.strictEqual(records.has('t1'),true);
+
   const failed=R.createReceiptService({
     storage:Object.assign({},storage,{putReceipt:async()=>false}),
     markDirty:async(id,deleted)=>{dirty.push([id,deleted]);}
