@@ -752,6 +752,7 @@ window.__sanadSplashBorn=performance.now();
 
 <script src="js/finance-core.js"></script>
 <script src="js/state-core.js"></script>
+<script src="js/storage-core.js"></script>
 <script>
 /* =========================================================
    SANAD — Architecture Refactor
@@ -761,8 +762,10 @@ window.__sanadSplashBorn=performance.now();
 
 const FinanceCore = window.SanadFinanceCore;
 const StateCore = window.SanadStateCore;
+const StorageCore = window.SanadStorageCore;
 if (!FinanceCore) throw new Error('SANAD finance core failed to load');
 if (!StateCore) throw new Error('SANAD state core failed to load');
+if (!StorageCore) throw new Error('SANAD storage core failed to load');
 
 const CURRENCIES = {
   EGP:{code:'EGP',symbol:'ج.م',name:'جنيه مصري',flag:'🇪🇬'},
@@ -918,170 +921,12 @@ function isPreviewDeniedError(err){
 function stableStringify(obj){ return StateCore.stableStringify(obj); }
 function stateFingerprint(st){ return StateCore.stateFingerprint(st); }
 
-const IDBStorage = {
-  _db:null,
-  open(){
-    if (this._db) return Promise.resolve(this._db);
-    return new Promise((res,rej) => {
-      let r;
-      try { r = indexedDB.open(DB_NAME,1); }
-      catch(e){ rej(e); return; }
-      r.onupgradeneeded = e => {
-        const d = e.target.result;
-        if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta',{keyPath:'k'});
-      };
-      r.onsuccess = e => { this._db = e.target.result; res(this._db); };
-      r.onerror = () => rej(r.error || new Error('idb open error'));
-      r.onblocked = () => rej(new Error('idb blocked'));
-    });
-  },
-  async readState(){
-    try {
-      const db = await this.open();
-      return await new Promise(resolve => {
-        let done = false;
-        try {
-          const tx = db.transaction('meta','readonly');
-          const r = tx.objectStore('meta').get('state');
-          r.onsuccess = () => { if (!done){ done = true; resolve({ok:true,state:r.result ? r.result.v : null}); } };
-          r.onerror = () => { if (!done){ done = true; resolve({ok:false,reason:'corrupted',error:r.error}); } };
-          tx.onabort = () => { if (!done){ done = true; resolve({ok:false,reason:'corrupted',error:new Error('tx aborted')}); } };
-        } catch(e){ if (!done){ done = true; resolve({ok:false,reason:'corrupted',error:e}); } }
-      });
-    } catch(e){ return {ok:false,reason:'unavailable',error:e}; }
-  },
-  async writeState(state){
-    try {
-      const db = await this.open();
-      return await new Promise(resolve => {
-        let done = false;
-        try {
-          const tx = db.transaction('meta','readwrite');
-          tx.objectStore('meta').put({k:'state',v:state,ts:Date.now()});
-          tx.oncomplete = () => { if (!done){ done = true; resolve(true); } };
-          tx.onerror = () => { if (!done){ done = true; resolve(false); } };
-          tx.onabort = () => { if (!done){ done = true; resolve(false); } };
-        } catch(e){ if (!done){ done = true; resolve(false); } }
-      });
-    } catch(e){ return false; }
-  },
-  async writeSnapshot(name,state){
-    try {
-      const db = await this.open();
-      return await new Promise(resolve => {
-        try {
-          const tx = db.transaction('meta','readwrite');
-          tx.objectStore('meta').put({k:'snap_'+name,v:state,ts:Date.now()});
-          tx.oncomplete = () => resolve(true);
-          tx.onerror = () => resolve(false);
-          tx.onabort = () => resolve(false);
-        } catch(e){ resolve(false); }
-      });
-    } catch(e){ return false; }
-  },
-  async readSnapshot(name){
-    try {
-      const db = await this.open();
-      return await new Promise(resolve => {
-        try {
-          const r = db.transaction('meta','readonly').objectStore('meta').get('snap_'+name);
-          r.onsuccess = () => resolve(r.result ? r.result.v : null);
-          r.onerror = () => resolve(null);
-        } catch(e){ resolve(null); }
-      });
-    } catch(e){ return null; }
-  },
-  async listSnapshots(){
-    try {
-      const db = await this.open();
-      return await new Promise(resolve => {
-        try {
-          const r = db.transaction('meta','readonly').objectStore('meta').getAll();
-          r.onsuccess = () => {
-            const all = r.result || [];
-            const snaps = all.filter(x => x.k && x.k.startsWith('snap_'))
-              .map(x => ({name:x.k.replace('snap_',''),ts:x.ts}))
-              .sort((a,b) => (b.ts||0)-(a.ts||0));
-            resolve(snaps);
-          };
-          r.onerror = () => resolve([]);
-        } catch(e){ resolve([]); }
-      });
-    } catch(e){ return []; }
-  },
-  async rotateSnapshot(currentState){
-    try {
-      const s2 = await this.readSnapshot('2');
-      const s1 = await this.readSnapshot('1');
-      if (s2) await this.writeSnapshot('3',s2);
-      if (s1) await this.writeSnapshot('2',s1);
-      await this.writeSnapshot('1',currentState);
-      return true;
-    } catch(e){ return false; }
-  }
-};
-
-const MemoryStorage = {
-  _state:null,_snaps:{},
-  _reset(){ this._state = null; this._snaps = {}; },
-  async readState(){ return {ok:true,state:this._state}; },
-  async writeState(state){ this._state = deepClone(state); return true; },
-  async writeSnapshot(name,state){ this._snaps[name] = {v:deepClone(state),ts:Date.now()}; return true; },
-  async readSnapshot(name){ const s = this._snaps[name]; return s ? deepClone(s.v) : null; },
-  async listSnapshots(){ return Object.entries(this._snaps).map(([name,o]) => ({name,ts:o.ts})).sort((a,b) => (b.ts||0)-(a.ts||0)); },
-  async rotateSnapshot(currentState){
-    const s2 = this._snaps['2']; const s1 = this._snaps['1'];
-    if (s2) this._snaps['3'] = s2;
-    if (s1) this._snaps['2'] = s1;
-    this._snaps['1'] = {v:deepClone(currentState),ts:Date.now()};
-    return true;
-  }
-};
-
-const Storage = {
-  _backend:null,_impl:null,
-  async init(){
-    let idb = null;
-    try { idb = typeof indexedDB !== 'undefined' ? indexedDB : null; }
-    catch(e){
-      if (isPreviewDeniedError(e)) return this._useMemory();
-      return {mode:'error',error:e};
-    }
-    if (!idb) return this._useMemory();
-    try {
-      await IDBStorage.open();
-      this._backend = 'idb'; this._impl = IDBStorage;
-      return {mode:'idb'};
-    } catch(e){
-      if (isPreviewDeniedError(e)) return this._useMemory();
-      this._backend = null; this._impl = null;
-      return {mode:'error',error:e};
-    }
-  },
-  _useMemory(){ this._backend = 'memory'; this._impl = MemoryStorage; MemoryStorage._reset(); return {mode:'memory'}; },
-  isPreview(){ return this._backend === 'memory'; },
-  async readState(){ if (!this._impl) return {ok:false,reason:'not-init'}; return this._impl.readState(); },
-  async writeState(s){ if (!this._impl) return false; return this._impl.writeState(s); },
-  async writeSnapshot(n,s){ if (!this._impl) return false; return this._impl.writeSnapshot(n,s); },
-  async readSnapshot(n){ if (!this._impl) return null; return this._impl.readSnapshot(n); },
-  async listSnapshots(){ if (!this._impl) return []; return this._impl.listSnapshots(); },
-  async rotateSnapshot(s){ if (!this._impl) return false; return this._impl.rotateSnapshot(s); },
-  async secureWipe(){
-    if (this._backend === 'memory'){ MemoryStorage._reset(); this._backend = null; this._impl = null; return true; }
-    try {
-      if (IDBStorage._db){ try { IDBStorage._db.close(); } catch(_){} IDBStorage._db = null; }
-      const ok = await new Promise(resolve => {
-        let req;
-        try { req = indexedDB.deleteDatabase(DB_NAME); } catch(_){ resolve(false); return; }
-        req.onsuccess = () => resolve(true);
-        req.onerror = () => resolve(false);
-        req.onblocked = () => resolve(false);
-      });
-      if (ok){ this._backend = null; this._impl = null; }
-      return ok;
-    } catch(_){ return false; }
-  }
-};
+const Storage = StorageCore.createStorage({
+  dbName: DB_NAME,
+  getIndexedDB: () => indexedDB,
+  deepClone,
+  isPreviewDeniedError
+});
 
 /* ---------- SCHEMA ---------- */
 const Schema = {
@@ -7518,9 +7363,7 @@ async function unarchiveInstrument(id){
 /* ---------- STORAGE ---------- */
 async function retryStorage(){
   toast('جاري إعادة المحاولة...');
-  Storage._backend = null; Storage._impl = null;
-  if (IDBStorage._db){ try { IDBStorage._db.close(); } catch(e){} }
-  IDBStorage._db = null;
+  Storage.resetConnection();
   const initResult = await Storage.init();
   if (initResult.mode === 'memory'){
     S.previewMode = true; S.storageStatus = 'ok'; S.storageError = null;
