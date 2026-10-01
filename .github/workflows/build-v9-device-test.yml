@@ -137,6 +137,10 @@ jobs:
           grep -q "SecurityCrypto.recoveryDigest" "$HTML"
           node --check "$SECURITY_CORE"
           node app/src/test/js/security-core.test.js
+          SECURITY_ADAPTER="app/src/main/assets/js/security-adapter.js"
+          test -s "$SECURITY_ADAPTER"
+          node --check "$SECURITY_ADAPTER"
+          node app/src/test/js/security-adapter.test.js
 
           RECEIPT_CORE="app/src/main/assets/js/receipt-core.js"
           test -s "$RECEIPT_CORE"
@@ -415,6 +419,8 @@ jobs:
           node app/src/test/js/backup-core.test.js
           node --check app/src/main/assets/js/security-core.js
           node app/src/test/js/security-core.test.js
+          node --check app/src/main/assets/js/security-adapter.js
+          node app/src/test/js/security-adapter.test.js
           node --check app/src/main/assets/js/receipt-core.js
           node app/src/test/js/receipt-core.test.js
           node --check app/src/main/assets/js/schema-repair-core.js
