@@ -15,6 +15,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.webkit.JavascriptInterface;
 import android.webkit.MimeTypeMap;
 import android.webkit.ValueCallback;
@@ -29,6 +30,7 @@ import android.widget.Toast;
 import android.view.ViewGroup;
 
 import androidx.annotation.Nullable;
+import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.FileProvider;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewFeature;
@@ -388,6 +390,42 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public void showNotification(String id, String title, String body) {
             runOnUiThread(() -> NotificationScheduler.showNow(MainActivity.this, id, title, body));
+        }
+
+        @JavascriptInterface
+        public boolean bankNotificationAccessEnabled() {
+            return NotificationManagerCompat.getEnabledListenerPackages(MainActivity.this)
+                    .contains(getPackageName());
+        }
+
+        @JavascriptInterface
+        public void openBankNotificationAccessSettings() {
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
+                } catch (ActivityNotFoundException e) {
+                    try {
+                        startActivity(new Intent(Settings.ACTION_SETTINGS));
+                    } catch (ActivityNotFoundException ignored) {
+                        Toast.makeText(MainActivity.this, "Could not open notification access settings", Toast.LENGTH_LONG).show();
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public String getPendingBankNotifications() {
+            return BankNotificationStore.getAllJson(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void acknowledgeBankNotifications(String jsonIds) {
+            BankNotificationStore.acknowledge(MainActivity.this, jsonIds);
+        }
+
+        @JavascriptInterface
+        public void clearBankNotifications() {
+            BankNotificationStore.clear(MainActivity.this);
         }
 
         @JavascriptInterface
