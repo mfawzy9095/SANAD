@@ -49,7 +49,7 @@
     if(/credit card mini statement|minimum amount due|amount to be paid to avoid charges/.test(x))return 'card-statement';
     if(/was declined|declined due to|transaction declined|تم رفض|عملية مرفوض/.test(x))return 'declined-transaction';
     if(/نود تاكيد\s+استلام\s+دفعة.+عن\s+البطاقة\s+الائتمانية/.test(x))return 'card-payment-ack';
-    if(/has been suspended|has been resumed|request to freeze|successfully reactivated|registered.+google pay|suspended from google pay|resumed to google pay|suspended from merchant|resumed to merchant/.test(x))return 'card-status';
+    if(/has been suspended|has been resumed|request to freeze|successfully reactivated|registered.+google pay|suspended from google pay|resumed to google pay|suspended from merchant|resumed to merchant|تم تسجيل بطاقتك.+google pay/.test(x))return 'card-status';
     return null;
   }
   function result(base,input,raw){
