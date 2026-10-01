@@ -750,11 +750,16 @@ window.__sanadSplashBorn=performance.now();
 <div class="action-menu" id="actionMenu"></div>
 <div class="toast" id="toast"></div>
 
+<script src="js/finance-core.js"></script>
 <script>
 /* =========================================================
-   SANAD V9.0.6 — Device Test 6
+   SANAD — Architecture Refactor
+   Stable behavior baseline: V9.0.10
    Schema: 16 (unchanged)
    ========================================================= */
+
+const FinanceCore = window.SanadFinanceCore;
+if (!FinanceCore) throw new Error('SANAD finance core failed to load');
 
 const CURRENCIES = {
   EGP:{code:'EGP',symbol:'ج.م',name:'جنيه مصري',flag:'🇪🇬'},
@@ -2448,58 +2453,9 @@ const Finance = {
       }
     });
   },
-  accountBalance(accountId){
-    const a = this.getAccount(accountId);
-    if (!a) return 0;
-    const liability = isLiabilityAccount(a);
-    if (liability){
-      let debt = Number(a.openingDebt) || 0;
-      for (const t of S.transactions){
-        if (t.accountId === accountId){
-          if (t.type === 'expense') debt += Number(t.walletAmount != null ? t.walletAmount : t.amount) || 0;
-          if (t.type === 'income') debt -= Number(t.walletAmount != null ? t.walletAmount : t.amount) || 0;
-          if (t.type === 'adjustment') debt -= Number(t.walletAmount) || 0;
-        }
-        if (t.type === 'transfer'){
-          if (t.toAccountId === accountId) debt -= Number(t.toAmount) || 0;
-          if (t.fromAccountId === accountId){
-            debt += Number(t.fromAmount) || 0;
-            if (Number(t.fee) > 0) debt += Number(t.fee) || 0;
-          }
-        }
-      }
-      return -Math.round(debt * 100) / 100;
-    }
-    let bal = Number(a.openingBalance) || 0;
-    for (const t of S.transactions){
-      if (t.accountId === accountId){
-        if (t.type === 'expense') bal -= Number(t.walletAmount != null ? t.walletAmount : t.amount) || 0;
-        if (t.type === 'income') bal += Number(t.walletAmount != null ? t.walletAmount : t.amount) || 0;
-        if (t.type === 'adjustment') bal += Number(t.walletAmount) || 0;
-      }
-      if (t.type === 'transfer'){
-        if (t.fromAccountId === accountId){
-          bal -= Number(t.fromAmount) || 0;
-          if (Number(t.fee) > 0) bal -= Number(t.fee) || 0;
-        }
-        if (t.toAccountId === accountId) bal += Number(t.toAmount) || 0;
-      }
-      if (t.type === 'external_transfer' && t.fromAccountId === accountId){
-        bal -= Number(t.fromAmount) || 0;
-        if (Number(t.fee) > 0) bal -= Number(t.fee) || 0;
-      }
-    }
-    return Math.round(bal * 100) / 100;
-  },
-  accountDebt(accountId){ const bal = this.accountBalance(accountId); return bal < 0 ? -bal : 0; },
-  creditAvailable(accountId){
-    const a = this.getAccount(accountId);
-    if (!a || a.type !== 'credit') return null;
-    const limit = Number(a.creditLimit) || 0;
-    if (limit <= 0) return null;
-    const debt = this.accountDebt(accountId);
-    return Math.max(0, Math.round((limit - debt) * 100) / 100);
-  },
+  accountBalance(accountId){ return FinanceCore.accountBalance(S, accountId); },
+  accountDebt(accountId){ return FinanceCore.accountDebt(S, accountId); },
+  creditAvailable(accountId){ return FinanceCore.creditAvailable(S, accountId); },
   countryLiquidity(country){
     const out = {};
     this.getCountryAccounts(country).forEach(a => {
@@ -2509,16 +2465,7 @@ const Finance = {
     });
     return out;
   },
-  suggestRate(fromCur,toCur){
-    if (fromCur === toCur) return 1;
-    const key = fromCur + '_' + toCur;
-    const saved = S.settings.lastFx && S.settings.lastFx[key];
-    if (saved && saved > 0) return saved;
-    if (DEFAULT_FX[key]) return DEFAULT_FX[key];
-    const inv = toCur + '_' + fromCur;
-    if (DEFAULT_FX[inv]) return Math.round((1 / DEFAULT_FX[inv]) * 10000) / 10000;
-    return 1;
-  },
+  suggestRate(fromCur,toCur){ return FinanceCore.suggestRate(fromCur,toCur,S.settings.lastFx,DEFAULT_FX); },
   rememberRate(fromCur,toCur,rate){
     if (!S.settings.lastFx) S.settings.lastFx = {};
     S.settings.lastFx[fromCur + '_' + toCur] = rate;
