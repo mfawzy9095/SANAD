@@ -135,6 +135,9 @@ jobs:
           grep -q "SecurityCore.createSecurityCore" "$HTML"
           grep -q "SecurityCrypto.generateRecoveryCode" "$HTML"
           grep -q "SecurityCrypto.recoveryDigest" "$HTML"
+          grep -q "SecurityCrypto.shouldRelockOnForeground" "$HTML"
+          grep -q "function shouldRelockOnForeground" "$SECURITY_CORE"
+          ! grep -q "const elapsed=Math.max(0,(Number(ts)||Date.now())-this.backgroundAt)" "$HTML"
           node --check "$SECURITY_CORE"
           node app/src/test/js/security-core.test.js
           SECURITY_ADAPTER="app/src/main/assets/js/security-adapter.js"

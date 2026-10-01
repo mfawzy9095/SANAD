@@ -7818,9 +7818,15 @@ const SanadSecurity = {
   async nativeAuth(reason){return SecurityAdapter.nativeAuth(reason,60000);},
   onBackground(ts){if(this.cfg.enabled&&this.unlocked)this.backgroundAt=Number(ts)||Date.now();},
   onForeground(ts){
-    if(!this.cfg.enabled||!this.unlocked||!this.backgroundAt){this.backgroundAt=0;return;}
-    const elapsed=Math.max(0,(Number(ts)||Date.now())-this.backgroundAt);this.backgroundAt=0;
-    if(elapsed>=this.relockAfterMs)this.show();
+    const shouldRelock=SecurityCrypto.shouldRelockOnForeground({
+      enabled:this.cfg.enabled,
+      unlocked:this.unlocked,
+      backgroundAt:this.backgroundAt,
+      now:Number(ts)||Date.now(),
+      relockAfterMs:this.relockAfterMs
+    });
+    this.backgroundAt=0;
+    if(shouldRelock)this.show();
   },
   async authorize(reason){
     if(this.nativeAvailable())return this.nativeAuth(reason||'Verify SANAD');
