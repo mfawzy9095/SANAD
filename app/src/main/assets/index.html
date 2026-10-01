@@ -764,6 +764,7 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/persistence-core.js"></script>
 <script src="js/mutation-core.js"></script>
 <script src="js/reminder-core.js"></script>
+<script src="js/report-core.js"></script>
 <script>
 /* =========================================================
    SANAD — Architecture Refactor
@@ -785,6 +786,7 @@ const SchemaCore = window.SanadSchemaCore;
 const PersistenceCore = window.SanadPersistenceCore;
 const MutationCore = window.SanadMutationCore;
 const ReminderCore = window.SanadReminderCore;
+const ReportCore = window.SanadReportCore;
 if (!FinanceCore) throw new Error('SANAD finance core failed to load');
 if (!StateCore) throw new Error('SANAD state core failed to load');
 if (!StorageCore) throw new Error('SANAD storage core failed to load');
@@ -799,6 +801,7 @@ if (!SchemaCore) throw new Error('SANAD schema core failed to load');
 if (!PersistenceCore) throw new Error('SANAD persistence core failed to load');
 if (!MutationCore) throw new Error('SANAD mutation core failed to load');
 if (!ReminderCore) throw new Error('SANAD reminder core failed to load');
+if (!ReportCore) throw new Error('SANAD report core failed to load');
 
 const SchemaRepair = SchemaRepairCore.createSchemaRepairCore({financeCore:FinanceCore});
 
@@ -1287,192 +1290,32 @@ const Finance = {
     return base.concat(defs);
   },
   periodRange(period, monthKey){
-    const mk = monthKey || S.month;
-    const today = new Date(); today.setHours(0,0,0,0);
-    const [Y, M] = mk.split('-').map(Number);
-    if (period === 'today'){ const iso = isoToday(); return {start:iso, end:iso}; }
-    if (period === 'week'){
-      const start = new Date(today); start.setDate(start.getDate() - 6);
-      return {start: start.getFullYear()+'-'+pad(start.getMonth()+1)+'-'+pad(start.getDate()), end: isoToday()};
-    }
-    if (period === 'month'){
-      const s = new Date(Y,M-1,1);
-      const e = new Date(Y,M,0);
-      return {start: s.getFullYear()+'-'+pad(s.getMonth()+1)+'-'+pad(s.getDate()), end: e.getFullYear()+'-'+pad(e.getMonth()+1)+'-'+pad(e.getDate())};
-    }
-    if (period === '6months'){
-      const s = new Date(Y,M-6,1);
-      const e = new Date(Y,M,0);
-      return {start: s.getFullYear()+'-'+pad(s.getMonth()+1)+'-'+pad(s.getDate()), end: e.getFullYear()+'-'+pad(e.getMonth()+1)+'-'+pad(e.getDate())};
-    }
-    return {start: isoToday(), end: isoToday()};
+    return ReportCore.periodRange(period,monthKey||S.month,Date.now());
   },
   reportExpenseEntries({country, period, accountId, currency, month}){
-    const r = this.periodRange(period, month);
-    const out = [];
-    const push = entry => {
-      if (accountId && entry.accountId !== accountId) return;
-      if (currency && entry.currency !== currency) return;
-      out.push(entry);
-    };
-    for (const t of S.transactions){
-      if (!t.date) continue;
-      if (t.date < r.start || t.date > r.end) continue;
-      if (t.type === 'expense'){
-        const acc = this.getAccount(t.accountId);
-        if (!acc) continue;
-        if (acc.country !== country) continue;
-        const amtInAcc = Number(t.walletAmount != null ? t.walletAmount : t.amount) || 0;
-        if (amtInAcc <= 0) continue;
-        push({id:t.id+':exp',sourceTxId:t.id,sourceType:'expense',
-          amount:amtInAcc,currency:acc.currency,category:t.cat||'other',
-          date:t.date,accountId:t.accountId,instrumentId:t.instrumentId||null,note:t.note||''});
-      }
-      if (t.type === 'transfer'){
-        const fee = Number(t.fee) || 0;
-        if (fee <= 0) continue;
-        const fromAcc = this.getAccount(t.fromAccountId);
-        if (!fromAcc || fromAcc.country !== country) continue;
-        push({id:t.id+':fee',sourceTxId:t.id,sourceType:'transfer_fee',
-          amount:fee,currency:fromAcc.currency,category:'transferFee',
-          date:t.date,accountId:t.fromAccountId,instrumentId:t.instrumentId||null,note:t.note||''});
-      }
-      if (t.type === 'external_transfer'){
-        const fromAcc = this.getAccount(t.fromAccountId);
-        if (!fromAcc || fromAcc.country !== country) continue;
-        const principal = Number(t.fromAmount) || 0;
-        if (principal > 0){
-          push({id:t.id+':principal',sourceTxId:t.id,sourceType:'external_transfer_principal',
-            amount:principal,currency:fromAcc.currency,category:'externalTransfer',
-            date:t.date,accountId:t.fromAccountId,instrumentId:t.instrumentId||null,note:t.note||''});
-        }
-        const fee = Number(t.fee) || 0;
-        if (fee > 0){
-          push({id:t.id+':fee',sourceTxId:t.id,sourceType:'external_transfer_fee',
-            amount:fee,currency:fromAcc.currency,category:'transferFee',
-            date:t.date,accountId:t.fromAccountId,note:t.note||''});
-        }
-      }
-    }
-    return out;
+    return ReportCore.reportExpenseEntries(S,{
+      country,period,accountId,currency,month:month||S.month,now:Date.now()
+    });
   },
   reportIncomeEntries({country, period, accountId, currency, month}){
-    const r = this.periodRange(period, month);
-    const out = [];
-    for (const t of S.transactions){
-      if (t.type !== 'income') continue;
-      if (!t.date) continue;
-      if (t.date < r.start || t.date > r.end) continue;
-      const acc = this.getAccount(t.accountId);
-      if (!acc || acc.country !== country) continue;
-      if (accountId && t.accountId !== accountId) continue;
-      if (currency && acc.currency !== currency) continue;
-      const amt = Number(t.walletAmount != null ? t.walletAmount : t.amount) || 0;
-      out.push({id:t.id+':inc',sourceTxId:t.id,amount:amt,currency:acc.currency,
-        category:t.cat||'other',date:t.date,accountId:t.accountId,note:t.note||''});
-    }
-    return out;
+    return ReportCore.reportIncomeEntries(S,{
+      country,period,accountId,currency,month:month||S.month,now:Date.now()
+    });
   },
   reportTransferEntries({country, period, accountId, month}){
-    const r = this.periodRange(period, month);
-    const internalOut = [];
-    const internalIn = [];
-    const crossOut = [];
-    const crossIn = [];
-    const allInternal = [];
-    const allOutbound = [];
-    const allInbound = [];
-    for (const t of S.transactions){
-      if (t.type !== 'transfer') continue;
-      if (!t.date) continue;
-      if (t.date < r.start || t.date > r.end) continue;
-      const fromAcc = this.getAccount(t.fromAccountId);
-      const toAcc = this.getAccount(t.toAccountId);
-      if (!fromAcc || !toAcc) continue;
-      const fromIn = fromAcc.country === country;
-      const toIn = toAcc.country === country;
-      if (!fromIn && !toIn) continue;
-      if (fromIn && toIn) allInternal.push(t);
-      else if (fromIn && !toIn) allOutbound.push(t);
-      else if (!fromIn && toIn) allInbound.push(t);
-      if (accountId){
-        if (t.fromAccountId === accountId){
-          if (toIn) internalOut.push(t);
-          else crossOut.push(t);
-        } else if (t.toAccountId === accountId){
-          if (fromIn) internalIn.push(t);
-          else crossIn.push(t);
-        }
-      } else {
-        if (fromIn && toIn) internalOut.push(t);
-        else if (fromIn && !toIn) crossOut.push(t);
-        else if (!fromIn && toIn) crossIn.push(t);
-      }
-    }
-    return {
-      internal: allInternal, outbound: allOutbound, inbound: allInbound,
-      internalOut, internalIn, crossOut, crossIn
-    };
+    return ReportCore.reportTransferEntries(S,{
+      country,period,accountId,month:month||S.month,now:Date.now()
+    });
   },
   buildReportDataset({country, period, accountId, currency, month}){
-    const expenses = this.reportExpenseEntries({country, period, accountId, currency, month});
-    const incomes = this.reportIncomeEntries({country, period, accountId, currency, month});
-    const transfers = this.reportTransferEntries({country, period, accountId, month});
-    const spendingByCur = {};
-    expenses.forEach(e => { spendingByCur[e.currency] = (spendingByCur[e.currency] || 0) + e.amount; });
-    const incomeByCur = {};
-    incomes.forEach(e => { incomeByCur[e.currency] = (incomeByCur[e.currency] || 0) + e.amount; });
-    const categoryByCur = {};
-    expenses.forEach(e => {
-      if (!categoryByCur[e.currency]) categoryByCur[e.currency] = {};
-      categoryByCur[e.currency][e.category] = (categoryByCur[e.currency][e.category] || 0) + e.amount;
+    const ds=ReportCore.buildReportDataset(S,{
+      country,period,accountId,currency,month:month||S.month,now:Date.now()
     });
-    const buckets = this.chartBuckets(period, country, accountId, currency, expenses, month);
-    return {country, period, accountId, currency, month, expenses, incomes, transfers,
-      spendingByCur, incomeByCur, categoryByCur, chartBuckets: buckets};
+    ds.month=month;
+    return ds;
   },
   chartBuckets(period, country, accountId, currency, expenses, month){
-    const mk = month || S.month;
-    const today = new Date(); today.setHours(0,0,0,0);
-    const [Y, M] = mk.split('-').map(Number);
-    if (period === 'today'){
-      const sum = expenses.reduce((s,e) => s + e.amount, 0);
-      return [{label:'اليوم', val:sum, hi:true}];
-    }
-    if (period === 'week'){
-      const days = [];
-      for (let i = 6; i >= 0; i--){
-        const d = new Date(today); d.setDate(d.getDate() - i);
-        const key = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
-        const val = expenses.filter(e => e.date === key).reduce((s,e) => s + e.amount, 0);
-        days.push({label: d.toLocaleDateString('ar-EG-u-nu-latn',{weekday:'short'}), val, hi: i === 0});
-      }
-      return days;
-    }
-    if (period === 'month'){
-      const last = new Date(Y,M,0).getDate();
-      const nWeeks = Math.ceil(last/7);
-      const weeks = [];
-      for (let i = 0; i < nWeeks; i++){
-        const s = i*7+1, e = Math.min((i+1)*7, last);
-        const dateSet = new Set();
-        for (let d = s; d <= e; d++) dateSet.add(Y+'-'+pad(M)+'-'+pad(d));
-        const val = expenses.filter(e => dateSet.has(e.date)).reduce((s,e) => s + e.amount, 0);
-        weeks.push({label:'أ'+(i+1), val, hi:false});
-      }
-      return weeks;
-    }
-    if (period === '6months'){
-      const months = [];
-      for (let i = 5; i >= 0; i--){
-        const d = new Date(Y, M-1-i, 1);
-        const key = ymKey(d);
-        const val = expenses.filter(e => e.date.slice(0,7) === key).reduce((s,e) => s + e.amount, 0);
-        months.push({label: d.toLocaleDateString('ar-EG-u-nu-latn',{month:'short'}), val, hi: i === 0});
-      }
-      return months;
-    }
-    return [];
+    return ReportCore.chartBuckets(period,expenses,month||S.month,Date.now());
   },
   getCategoryBudget(month, country, currency, category){
     const mb = S.settings.categoryBudgets[month];
@@ -1497,14 +1340,7 @@ const Finance = {
     if (amount > 0) S.settings.overallSpendingLimits[month][country][currency] = amount;
     else delete S.settings.overallSpendingLimits[month][country][currency];
   },
-  computeBudgetStatus(spent, budget){
-    if (!budget || budget <= 0) return {level:'none', pct:0};
-    const pct = (spent / budget) * 100;
-    if (pct >= 100) return {level:'over', pct};
-    if (pct >= 95) return {level:'strong', pct};
-    if (pct >= 80) return {level:'warn', pct};
-    return {level:'normal', pct};
-  },
+  computeBudgetStatus(spent, budget){ return ReportCore.computeBudgetStatus(spent,budget); },
   /* V8.8.4.3 FIX 2: evaluate ALL configured budgets so re-arm works when spending drops */
   evaluateBudgetAlerts(ctx){
     ctx = ctx || {};
