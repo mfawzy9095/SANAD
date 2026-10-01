@@ -7702,8 +7702,13 @@ const SanadReceipts = {
     SanadI18n.apply(box);
   },
   async removeCurrent(){
-    if(this.pending){this.pending=null;this.refreshControls();return;}
-    if(S.form&&S.form.id){await this.domain().remove(S.form.id);this.refreshControls();toast('تم حذف الفاتورة');}
+    if(this.pending){this.pending=null;this.refreshControls();return true;}
+    if(S.form&&S.form.id){
+      const ok=await this.domain().remove(S.form.id);
+      if(!ok){toast('تعذر حذف الفاتورة');return false;}
+      this.refreshControls();toast('تم حذف الفاتورة');return true;
+    }
+    return false;
   },
   async attachAfterSave(saveSucceeded,beforeIds,editId,pending){
     if(!pending||!pending.blob)return;

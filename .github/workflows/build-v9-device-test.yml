@@ -192,6 +192,8 @@ jobs:
           grep -q "ReceiptCore.createReceiptService" "$HTML"
           grep -q "this.domain().attach(txId,pending)" "$HTML"
           grep -q "this.domain().remove(S.form.id)" "$HTML"
+          grep -q "const ok=await this.domain().remove(S.form.id)" "$HTML"
+          grep -q "if(!ok){toast('تعذر حذف الفاتورة');return false;}" "$HTML"
           grep -q "function currentTxId" "$RECEIPT_CORE"
           grep -q "function resolveAttachmentTxId" "$RECEIPT_CORE"
           grep -q "function resolveAttachmentAfterSave" "$RECEIPT_CORE"
