@@ -143,8 +143,8 @@ jobs:
           grep -q "NotificationTimeCalculator.nextTrigger" app/src/main/java/com/sanad/v9test/NotificationScheduler.java
           grep -q "ACTION_TIMEZONE_CHANGED" app/src/main/java/com/sanad/v9test/BootReceiver.java
           grep -q "const SANAD_CLOUD_FAMILY_BETA_ENABLED = false" "$HTML"
-          grep -q "async replaceReceipts(records)" "$HTML"
-          grep -q "async pruneReceiptOrphans(validIds)" "$HTML"
+          grep -q "async replaceReceipts(records)" "$FEATURE_CORE"
+          grep -q "async pruneReceiptOrphans(validIds)" "$FEATURE_CORE"
           grep -q "PBKDF2" "$HTML"
           grep -q "SanadSecurity.pendingStart=true" "$HTML"
           grep -q "beforeFinance=snapshotState()" "$HTML"
