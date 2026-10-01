@@ -43,12 +43,27 @@
     return Math.max(1,Math.round((Number(bytes)||0)/1024))+' KB';
   }
 
+  function currentTxId(form){
+    if(!form||!['tx','transfer'].includes(form._sheet))return null;
+    return typeof form.id==='string'&&form.id?form.id:null;
+  }
+
+  function resolveAttachmentTxId(beforeIds,editId,transactions){
+    if(typeof editId==='string'&&editId)return editId;
+    const ids=beforeIds instanceof Set?beforeIds:new Set(beforeIds||[]);
+    const list=Array.isArray(transactions)?transactions:[];
+    const found=list.find(t=>t&&typeof t.id==='string'&&t.id&&!ids.has(t.id));
+    return found?found.id:null;
+  }
+
   return Object.freeze({
     DEFAULT_MAX_FILE_BYTES,
     DEFAULT_MAX_DIMENSION,
     validateFile,
     compressionDimensions,
     makeMeta,
-    sizeLabel
+    sizeLabel,
+    currentTxId,
+    resolveAttachmentTxId
   });
 });

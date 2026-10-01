@@ -27,4 +27,18 @@ const R=require('../../main/assets/js/receipt-core.js');
   assert.strictEqual(R.sizeLabel(0),'1 KB');
 })();
 
+(function txIdentity(){
+  assert.strictEqual(R.currentTxId({_sheet:'tx',id:'t1'}),'t1');
+  assert.strictEqual(R.currentTxId({_sheet:'transfer',id:'xfer1'}),'xfer1');
+  assert.strictEqual(R.currentTxId({_sheet:'account',id:'a1'}),null);
+  assert.strictEqual(R.currentTxId({_sheet:'tx',id:''}),null);
+  assert.strictEqual(R.currentTxId(null),null);
+
+  const txs=[{id:'old'},{id:'new'}];
+  assert.strictEqual(R.resolveAttachmentTxId(new Set(['old']),null,txs),'new');
+  assert.strictEqual(R.resolveAttachmentTxId(new Set(['old']),'edit-1',txs),'edit-1');
+  assert.strictEqual(R.resolveAttachmentTxId(new Set(['old','new']),null,txs),null);
+  assert.strictEqual(R.resolveAttachmentTxId(['old'],null,txs),'new');
+})();
+
 console.log('receipt-core regression tests: PASS');
