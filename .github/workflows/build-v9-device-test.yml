@@ -117,7 +117,7 @@ jobs:
           grep -q "BackupCore.makeFinanceBackup" "$HTML"
           grep -q "BackupCore.verifyFinanceIntegrity" "$HTML"
           grep -q "BackupCore.makeFullBackup" "$HTML"
-          grep -q "BackupCore.validateFullEnvelope" "$HTML"
+          grep -q "function validateFullEnvelope" "$BACKUP_CORE"
           grep -q "BackupCore.parseJsonText" "$HTML"
           grep -q "BackupCore.prepareFullRestore" "$HTML"
           grep -q "prepareFinanceRestore" "$BACKUP_CORE"
