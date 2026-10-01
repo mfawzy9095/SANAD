@@ -634,6 +634,7 @@
       if (i.type === 'debit_card' && a.type !== 'bank') push('بطاقة debit مرتبطة بحساب غير بنكي: ' + i.id);
       if (i.type === 'credit_card' && a.type !== 'credit') push('بطاقة credit مرتبطة بحساب غير credit: ' + i.id);
       if (i.type === 'prepaid_card' && a.type !== 'prepaid') push('بطاقة prepaid مرتبطة بحساب غير prepaid: ' + i.id);
+      if (i.type === 'wallet_card' && a.type !== 'ewallet') push('بطاقة wallet مرتبطة بحساب غير ewallet: ' + i.id);
       if (i.country && i.country !== a.country) push('بلد البطاقة لا يطابق الحساب: ' + i.id);
       if (i.institutionId){
         const ins = institutionById.get(i.institutionId);

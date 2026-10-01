@@ -9,7 +9,7 @@ const ACCOUNT_TYPES=[
   {id:'bank',asset:true},{id:'cash',asset:true},{id:'ewallet',asset:true},
   {id:'prepaid',asset:true},{id:'credit',asset:false},{id:'debt',asset:false},{id:'other',asset:true}
 ];
-const INSTRUMENT_TYPES=[{id:'debit_card'},{id:'credit_card'},{id:'prepaid_card'}];
+const INSTRUMENT_TYPES=[{id:'debit_card'},{id:'credit_card'},{id:'prepaid_card'},{id:'wallet_card'}];
 const SUPPORTED_TX_TYPES=['expense','income','transfer','external_transfer','adjustment'];
 const CURRENCIES={EGP:{},AED:{},USD:{},EUR:{},SAR:{},MAD:{}};
 const COUNTRIES={UAE:{},EGY:{},MAR:{},OTHER:{}};
@@ -83,6 +83,15 @@ function emptyState(){
   ];
   const errors=Schema.validateStateStrict(s);
   assert.ok(errors.some(x=>x.includes('معرّف حساب مكرر')));
+})();
+
+(function walletCardRequiresEwallet(){
+  const s=Schema.migrate(emptyState());
+  s.accounts=[{id:'w',type:'ewallet',country:'UAE',currency:'AED',openingBalance:10,openingDebt:0,creditLimit:0,archived:false}];
+  s.paymentInstruments=[{id:'wc',type:'wallet_card',accountId:'w',country:'UAE',last4:'7105',archived:false}];
+  assert.deepStrictEqual(Schema.validateStateStrict(s),[]);
+  s.accounts[0].type='bank';
+  assert.ok(Schema.validateStateStrict(s).some(x=>x.includes('بطاقة wallet مرتبطة بحساب غير ewallet')));
 })();
 
 (function prepaidNegativeRejected(){
