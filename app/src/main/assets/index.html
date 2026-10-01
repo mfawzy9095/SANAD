@@ -757,6 +757,7 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/backup-core.js"></script>
 <script src="js/security-core.js"></script>
 <script src="js/receipt-core.js"></script>
+<script src="js/schema-repair-core.js"></script>
 <script>
 /* =========================================================
    SANAD — Architecture Refactor
@@ -771,6 +772,7 @@ const FeatureStorageCore = window.SanadFeatureStorageCore;
 const BackupCore = window.SanadBackupCore;
 const SecurityCore = window.SanadSecurityCore;
 const ReceiptCore = window.SanadReceiptCore;
+const SchemaRepairCore = window.SanadSchemaRepairCore;
 if (!FinanceCore) throw new Error('SANAD finance core failed to load');
 if (!StateCore) throw new Error('SANAD state core failed to load');
 if (!StorageCore) throw new Error('SANAD storage core failed to load');
@@ -778,6 +780,9 @@ if (!FeatureStorageCore) throw new Error('SANAD feature storage core failed to l
 if (!BackupCore) throw new Error('SANAD backup core failed to load');
 if (!SecurityCore) throw new Error('SANAD security core failed to load');
 if (!ReceiptCore) throw new Error('SANAD receipt core failed to load');
+if (!SchemaRepairCore) throw new Error('SANAD schema repair core failed to load');
+
+const SchemaRepair = SchemaRepairCore.createSchemaRepairCore({financeCore:FinanceCore});
 
 const SecurityCrypto = SecurityCore.createSecurityCore({
   crypto: window.crypto,
@@ -950,134 +955,15 @@ const Storage = StorageCore.createStorage({
 /* ---------- SCHEMA ---------- */
 const Schema = {
   CURRENT: SCHEMA_VERSION,
-  normalizeRepaymentFees(state){
-    const accounts = state.accounts || [];
-    const transactions = state.transactions || [];
-    for (const t of transactions){
-      if (!t || t.type !== 'transfer') continue;
-      const toAcc = accounts.find(a => a.id === t.toAccountId);
-      if (!toAcc || accountTypeInfo(toAcc.type).asset) continue;
-      const legacyFee = Number(t.fee) || 0;
-      if (legacyFee <= 0) continue;
-      const linkedExists = transactions.some(x => x && x.linkedTransferId === t.id && x.type === 'expense' && x.cat === 'debtInterest');
-      if (!linkedExists){
-        transactions.push({
-          id: 'lf_' + t.id,
-          type: 'expense',
-          amount: legacyFee,
-          currency: t.fromCurrency || toAcc.currency || 'EGP',
-          accountId: t.fromAccountId,
-          walletAmount: legacyFee,
-          fxRate: 1,
-          cat: 'debtInterest',
-          note: 'فوائد / رسوم سداد',
-          tags: ['سداد'],
-          date: t.date,
-          linkedTransferId: t.id,
-          created: (t.created || Date.now()) + 1
-        });
-      }
-      t.fee = 0;
-    }
-  },
+  normalizeRepaymentFees(state){ return SchemaRepair.normalizeRepaymentFees(state); },
   /* V8.8.4.3 FIX 10: never silently convert an existing asset account to prepaid */
-  repairPrepaidOwnedAccounts(state){
-    const accounts = state.accounts || [];
-    const instruments = state.paymentInstruments || [];
-    for (const inst of instruments){
-      if (!inst || inst.type !== 'prepaid_card') continue;
-      const acc = accounts.find(a => a.id === inst.accountId);
-      if (!acc) continue;
-      if (acc.type !== 'prepaid'){
-        inst.accountId = null;
-        continue;
-      }
-      acc.ownedByInstrumentId = inst.id;
-      if (inst.archived) acc.archived = true;
-      else acc.archived = false;
-    }
-    accounts.forEach(a => {
-      if (!a.ownedByInstrumentId) return;
-      const inst = instruments.find(i => i.id === a.ownedByInstrumentId && i.type === 'prepaid_card');
-      if (!inst || inst.accountId !== a.id || a.type !== 'prepaid'){
-        delete a.ownedByInstrumentId;
-      }
-    });
-  },
+  repairPrepaidOwnedAccounts(state){ return SchemaRepair.repairPrepaidOwnedAccounts(state); },
   /* V8.8.4.11: state-local balance (does not depend on global S). */
-  _schemaAccountBalance(state, accountId){
-    const a = (state.accounts || []).find(x => x.id === accountId);
-    if (!a) return 0;
-    const txs = state.transactions || [];
-    const liability = accountTypeInfo(a.type).asset === false;
-    if (liability){
-      let debt = Number(a.openingDebt) || 0;
-      for (const t of txs){
-        if (t.accountId === accountId){
-          if (t.type === 'expense') debt += Number(t.walletAmount != null ? t.walletAmount : t.amount) || 0;
-          if (t.type === 'income') debt -= Number(t.walletAmount != null ? t.walletAmount : t.amount) || 0;
-          if (t.type === 'adjustment') debt -= Number(t.walletAmount) || 0;
-        }
-        if (t.type === 'transfer'){
-          if (t.toAccountId === accountId) debt -= Number(t.toAmount) || 0;
-          if (t.fromAccountId === accountId){
-            debt += Number(t.fromAmount) || 0;
-            if (Number(t.fee) > 0) debt += Number(t.fee) || 0;
-          }
-        }
-      }
-      return -Math.round(debt * 100) / 100;
-    }
-    let bal = Number(a.openingBalance) || 0;
-    for (const t of txs){
-      if (t.accountId === accountId){
-        if (t.type === 'expense') bal -= Number(t.walletAmount != null ? t.walletAmount : t.amount) || 0;
-        if (t.type === 'income') bal += Number(t.walletAmount != null ? t.walletAmount : t.amount) || 0;
-        if (t.type === 'adjustment') bal += Number(t.walletAmount) || 0;
-      }
-      if (t.type === 'transfer'){
-        if (t.fromAccountId === accountId){
-          bal -= Number(t.fromAmount) || 0;
-          if (Number(t.fee) > 0) bal -= Number(t.fee) || 0;
-        }
-        if (t.toAccountId === accountId) bal += Number(t.toAmount) || 0;
-      }
-      if (t.type === 'external_transfer' && t.fromAccountId === accountId){
-        bal -= Number(t.fromAmount) || 0;
-        if (Number(t.fee) > 0) bal -= Number(t.fee) || 0;
-      }
-    }
-    return Math.round(bal * 100) / 100;
-  },
+  _schemaAccountBalance(state, accountId){ return SchemaRepair.schemaAccountBalance(state, accountId); },
 
   /* V8.8.4.11: credit-card backing account archive consistency.
      Never hide a non-zero raw balance during migration. */
-  repairCreditArchiveConsistency(state){
-    const accounts = state.accounts || [];
-    const instruments = state.paymentInstruments || [];
-    const byCreditAcc = {};
-    instruments.forEach(inst => {
-      if (!inst || inst.type !== 'credit_card') return;
-      if (!inst.accountId) return;
-      const acc = accounts.find(a => a.id === inst.accountId);
-      if (!acc || acc.type !== 'credit') return;
-      (byCreditAcc[acc.id] = byCreditAcc[acc.id] || []).push(inst);
-    });
-    Object.keys(byCreditAcc).forEach(accId => {
-      const cards = byCreditAcc[accId];
-      const acc = accounts.find(a => a.id === accId);
-      if (!acc) return;
-      const anyActive = cards.some(c => !c.archived);
-      if (anyActive){
-        acc.archived = false;
-        return;
-      }
-      /* All linked credit cards archived → archive ONLY if raw balance is zero.
-         Never hide a non-zero financial value during migration. */
-      const rawBal = this._schemaAccountBalance(state, acc.id);
-      acc.archived = (Math.abs(rawBal) <= 0.01);
-    });
-  },
+  repairCreditArchiveConsistency(state){ return SchemaRepair.repairCreditArchiveConsistency(state); },
   migrate(state){
     if (!state || typeof state !== 'object') return null;
     const filled = deepClone(state);
