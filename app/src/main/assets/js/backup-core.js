@@ -72,11 +72,50 @@
     return out;
   }
 
+  function parseJsonText(text){
+    try{return JSON.parse(String(text));}
+    catch(_){throw new Error('json-invalid');}
+  }
+
+  function prepareFinanceRestore(data,options){
+    const opts=options||{};
+    if(typeof opts.migrate!=='function')throw new Error('migrate-required');
+    if(typeof opts.validateStateStrict!=='function')throw new Error('validate-state-required');
+    let migrated;
+    try{migrated=opts.migrate(data);}
+    catch(err){
+      const e=new Error('migration-failed');
+      e.cause=err;
+      throw e;
+    }
+    if(!migrated)throw new Error('migration-failed');
+    const errors=opts.validateStateStrict(migrated)||[];
+    if(errors.length){
+      const e=new Error('schema-invalid');
+      e.validationErrors=Array.from(errors);
+      throw e;
+    }
+    return migrated;
+  }
+
+  function prepareFullRestore(data,options){
+    const opts=options||{};
+    const envelope=validateFullEnvelope(data,opts.fingerprint);
+    const migrated=prepareFinanceRestore(envelope.finance,opts);
+    const validIds=new Set((Array.isArray(migrated.transactions)?migrated.transactions:[])
+      .map(t=>t&&t.id).filter(id=>typeof id==='string'&&id));
+    const receiptDescriptors=validateReceiptDescriptors(envelope.receipts,validIds);
+    return {migrated,features:envelope.features,receiptDescriptors};
+  }
+
   return Object.freeze({
     makeFinanceBackup,
     verifyFinanceIntegrity,
     makeFullBackup,
     validateFullEnvelope,
-    validateReceiptDescriptors
+    validateReceiptDescriptors,
+    parseJsonText,
+    prepareFinanceRestore,
+    prepareFullRestore
   });
 });

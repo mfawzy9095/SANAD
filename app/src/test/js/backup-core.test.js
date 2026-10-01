@@ -77,4 +77,45 @@ function state(){
   assert.throws(()=>B.validateReceiptDescriptors([{txId:'t1',data:'x'},{txId:'t1',data:'y'}],valid),/receipt-invalid/);
 })();
 
+(function jsonParsing(){
+  assert.deepStrictEqual(B.parseJsonText('{"ok":true}'),{ok:true});
+  assert.throws(()=>B.parseJsonText('{bad'),/json-invalid/);
+})();
+
+(function restorePreparation(){
+  const s=state();
+  const full=B.makeFullBackup({
+    state:s,
+    fingerprint:State.stateFingerprint,
+    features:{family:{id:null}},
+    receipts:[{txId:'t1',data:'data:image/jpeg;base64,AA=='}]
+  });
+  const prepared=B.prepareFullRestore(full,{
+    fingerprint:State.stateFingerprint,
+    migrate:x=>JSON.parse(JSON.stringify(x)),
+    validateStateStrict:()=>[]
+  });
+  assert.strictEqual(prepared.migrated.transactions[0].id,'t1');
+  assert.strictEqual(prepared.receiptDescriptors.length,1);
+  assert.strictEqual(prepared.features.family.id,null);
+
+  assert.throws(()=>B.prepareFullRestore(full,{
+    fingerprint:State.stateFingerprint,
+    migrate:()=>{throw new Error('boom');},
+    validateStateStrict:()=>[]
+  }),/migration-failed/);
+
+  let schemaError=null;
+  try{
+    B.prepareFullRestore(full,{
+      fingerprint:State.stateFingerprint,
+      migrate:x=>x,
+      validateStateStrict:()=>['bad-state']
+    });
+  }catch(e){schemaError=e;}
+  assert(schemaError);
+  assert.strictEqual(schemaError.message,'schema-invalid');
+  assert.deepStrictEqual(schemaError.validationErrors,['bad-state']);
+})();
+
 console.log('backup-core regression tests: PASS');

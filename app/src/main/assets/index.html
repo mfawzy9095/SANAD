@@ -6299,7 +6299,7 @@ async function importData(file){
   const r = new FileReader();
   r.onload = async () => {
     let parsed;
-    try { parsed = JSON.parse(r.result); }
+    try { parsed = BackupCore.parseJsonText(r.result); }
     catch(e){ toast('الملف ليس JSON صالح'); return; }
     const integrityCheck = BackupCore.verifyFinanceIntegrity(parsed,stateFingerprint);
     if (!integrityCheck.ok){
@@ -8032,20 +8032,18 @@ const SanadFullBackup = {
     i.value='';i.click();
   },
   prepare(data){
-    const envelope=BackupCore.validateFullEnvelope(data,stateFingerprint);
-    let migrated;
-    try{migrated=Schema.migrate(envelope.finance);}catch(_){throw new Error('migration-failed');}
-    const errs=Schema.validateStateStrict(migrated);
-    if(errs.length)throw new Error('schema-invalid:'+errs.slice(0,3).join('|'));
-    const validIds=new Set(migrated.transactions.map(t=>t.id));
-    const descriptors=BackupCore.validateReceiptDescriptors(envelope.receipts,validIds);
+    const prepared=BackupCore.prepareFullRestore(data,{
+      fingerprint:stateFingerprint,
+      migrate:Schema.migrate,
+      validateStateStrict:Schema.validateStateStrict
+    });
     const receipts=[];
-    for(const r of descriptors){
+    for(const r of prepared.receiptDescriptors){
       const blob=this.dataURLToBlob(r.data);
       if(!/^image\//.test(blob.type))throw new Error('receipt-type');
       receipts.push({txId:r.txId,blob,meta:Object.assign({updatedAt:Date.now()},r.meta||{})});
     }
-    return {migrated,receipts};
+    return {migrated:prepared.migrated,receipts};
   },
   async importData(data,ask=true){
     let prepared;try{prepared=this.prepare(data);}catch(e){const code=e&&e.message||'';if(code==='fingerprint-mismatch')toast('النسخة تالفة — بصمة السلامة غير مطابقة');else if(code==='not-full-backup')toast('ليست نسخة SANAD كاملة');else if(code==='migration-failed')toast('النسخة غير متوافقة');else toast('تم رفض النسخة لحماية البيانات');return false;}
@@ -8062,7 +8060,7 @@ const SanadFullBackup = {
       SanadFamily.state=incomingFamily;SanadCloud.config=incomingFirebase;SanadCloud.meta=Object.assign({},beforeMeta,{dirty:true,receiptDirty:{},lastSync:null});if(!await SanadExtStorage.set('syncMeta',SanadCloud.meta))throw new Error('sync meta restore failed');syncNativeNotifications();render();toast('تم الاستيراد');return true;
     }catch(e){console.error(e);try{await SanadCloud.safeApplyRemote(beforeFinance);}catch(_){}try{await SanadExtStorage.replaceReceipts(beforeReceipts);}catch(_){}try{await SanadExtStorage.set('family',beforeFamily);SanadFamily.state=beforeFamily;}catch(_){}try{if(beforeFirebase)await SanadExtStorage.set('firebaseConfig',beforeFirebase);else await SanadExtStorage.del('firebaseConfig');SanadCloud.config=beforeFirebase;}catch(_){}try{SanadCloud.meta=beforeMeta;await SanadExtStorage.set('syncMeta',beforeMeta);}catch(_){}try{render();}catch(_){}toast('تعذر الاستيراد');return false;}
   },
-  async importFile(file){if(!file)return false;let data;try{data=JSON.parse(await file.text());}catch(_){toast('الملف ليس JSON صالح');return false;}return this.importData(data,true);}
+  async importFile(file){if(!file)return false;let data;try{data=BackupCore.parseJsonText(await file.text());}catch(_){toast('الملف ليس JSON صالح');return false;}return this.importData(data,true);}
 };
 
 const SanadV9 = {
