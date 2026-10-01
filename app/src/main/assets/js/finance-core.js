@@ -76,6 +76,33 @@
     return Math.max(0,round2(limit-accountDebt(state,accountId)));
   }
 
+  function capturePrepaidBalances(state){
+    const out=new Map();
+    const accounts=state&&Array.isArray(state.accounts)?state.accounts:[];
+    for(const a of accounts){
+      if(a&&a.type==='prepaid')out.set(a.id,accountBalance(state,a.id));
+    }
+    return out;
+  }
+
+  function checkPrepaidInvariant(before,state){
+    const prepaidBefore=before instanceof Map?before:new Map(before||[]);
+    const accounts=state&&Array.isArray(state.accounts)?state.accounts:[];
+    for(const a of accounts){
+      if(!a||a.type!=='prepaid')continue;
+      const afterBal=accountBalance(state,a.id);
+      const hadBefore=prepaidBefore.has(a.id);
+      const beforeBal=hadBefore?num(prepaidBefore.get(a.id)):null;
+      if(!hadBefore){
+        if(afterBal<-0.01)return 'prepaid-insufficient';
+        continue;
+      }
+      if(beforeBal>=-0.01&&afterBal<-0.01)return 'prepaid-insufficient';
+      if(beforeBal<-0.01&&afterBal<beforeBal-0.01)return 'prepaid-insufficient';
+    }
+    return null;
+  }
+
   function suggestRate(fromCur,toCur,lastFx,defaultFx){
     if(fromCur===toCur)return 1;
     const saved=lastFx&&num(lastFx[fromCur+'_'+toCur]);
@@ -90,6 +117,8 @@
   return Object.freeze({
     accountBalance,
     accountDebt,
+    capturePrepaidBalances,
+    checkPrepaidInvariant,
     creditAvailable,
     getAccount,
     isLiabilityAccount,
