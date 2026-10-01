@@ -224,6 +224,17 @@ jobs:
           grep -q "ReminderCore.dueNotifications(S.recurring" "$HTML"
           node --check "$REMINDER_CORE"
           node app/src/test/js/reminder-core.test.js
+          REPORT_CORE="app/src/main/assets/js/report-core.js"
+          test -s "$REPORT_CORE"
+          REPORT_CORE_SHA="$(sha256sum "$REPORT_CORE" | awk '{print $1}')"
+          echo "REPORT_CORE_SHA=$REPORT_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/report-core.js"></script>' "$HTML"
+          grep -q "const ReportCore = window.SanadReportCore" "$HTML"
+          grep -q "ReportCore.reportExpenseEntries(S" "$HTML"
+          grep -q "ReportCore.buildReportDataset(S" "$HTML"
+          grep -q "ReportCore.computeBudgetStatus(spent,budget)" "$HTML"
+          node --check "$REPORT_CORE"
+          node app/src/test/js/report-core.test.js
 
           grep -q "const SANAD_V9_VERSION = '9.0.10'" "$HTML"
           grep -q "_criticalMutationInFlight" "$HTML"
@@ -338,7 +349,8 @@ jobs:
           persistence=h.index('<script src="js/persistence-core.js"></script>')
           mutation=h.index('<script src="js/mutation-core.js"></script>')
           reminder=h.index('<script src="js/reminder-core.js"></script>')
-          inline=h.index('<script>', reminder)
+          report=h.index('<script src="js/report-core.js"></script>')
+          inline=h.index('<script>', report)
           bind=h.index('const FinanceCore = window.SanadFinanceCore', inline)
           state_bind=h.index('const StateCore = window.SanadStateCore', inline)
           storage_bind=h.index('const StorageCore = window.SanadStorageCore', inline)
@@ -353,7 +365,8 @@ jobs:
           persistence_bind=h.index('const PersistenceCore = window.SanadPersistenceCore', inline)
           mutation_bind=h.index('const MutationCore = window.SanadMutationCore', inline)
           reminder_bind=h.index('const ReminderCore = window.SanadReminderCore', inline)
-          assert finance < state < storage < feature < backup < security < receipt < schema_repair < state_model < i18n < schema < persistence < mutation < reminder < inline < bind < state_bind < storage_bind < feature_bind < backup_bind < security_bind < receipt_bind < schema_repair_bind < state_model_bind < i18n_bind < schema_bind < persistence_bind < mutation_bind < reminder_bind
+          report_bind=h.index('const ReportCore = window.SanadReportCore', inline)
+          assert finance < state < storage < feature < backup < security < receipt < schema_repair < state_model < i18n < schema < persistence < mutation < reminder < report < inline < bind < state_bind < storage_bind < feature_bind < backup_bind < security_bind < receipt_bind < schema_repair_bind < state_model_bind < i18n_bind < schema_bind < persistence_bind < mutation_bind < reminder_bind < report_bind
           assert "accountBalance(accountId){ return FinanceCore.accountBalance(S, accountId); }" in h
           assert "creditAvailable(accountId){ return FinanceCore.creditAvailable(S, accountId); }" in h
           PY
@@ -398,6 +411,8 @@ jobs:
           node app/src/test/js/mutation-core.test.js
           node --check app/src/main/assets/js/reminder-core.js
           node app/src/test/js/reminder-core.test.js
+          node --check app/src/main/assets/js/report-core.js
+          node app/src/test/js/report-core.test.js
 
       - name: JVM regression tests
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
@@ -414,7 +429,7 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.10-REFACTOR-A12.apk"
+          cp "$APK" "SANAD-V9.0.10-REFACTOR-A13.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
@@ -461,17 +476,19 @@ jobs:
           test "$EMBEDDED_MUTATION_CORE_SHA" = "$MUTATION_CORE_SHA"
           EMBEDDED_REMINDER_CORE_SHA="$(unzip -p "$APK" assets/js/reminder-core.js | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_REMINDER_CORE_SHA" = "$REMINDER_CORE_SHA"
+          EMBEDDED_REPORT_CORE_SHA="$(unzip -p "$APK" assets/js/report-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_REPORT_CORE_SHA" = "$REPORT_CORE_SHA"
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          sha256sum "SANAD-V9.0.10-REFACTOR-A12.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.0.10-REFACTOR-A13.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.10-REFACTOR-A12
+          name: SANAD-V9.0.10-REFACTOR-A13
           path: |
-            SANAD-V9.0.10-REFACTOR-A12.apk
+            SANAD-V9.0.10-REFACTOR-A13.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
