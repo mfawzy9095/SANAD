@@ -19,6 +19,7 @@ const DEFAULT_CATS={
 };
 const deepClone=v=>JSON.parse(JSON.stringify(v));
 const accountTypeInfo=id=>ACCOUNT_TYPES.find(x=>x.id===id)||ACCOUNT_TYPES[ACCOUNT_TYPES.length-1];
+const isAssetAccount=a=>!!(a&&accountTypeInfo(a.type).asset===true);
 const isFiniteNumberLike=v=>v!==''&&v!==null&&v!==undefined&&Number.isFinite(Number(v));
 const repair=RepairCore.createSchemaRepairCore({financeCore:Finance,now:()=>1000});
 
@@ -32,6 +33,7 @@ const Schema=SchemaCore.createSchema({
   instrumentTypes:INSTRUMENT_TYPES,
   supportedTxTypes:SUPPORTED_TX_TYPES,
   accountTypeInfo,
+  isAssetAccount,
   isFiniteNumberLike,
   isValidIsoDate:StateCore.isValidIsoDate,
   isoToday:()=> '2026-10-01',
