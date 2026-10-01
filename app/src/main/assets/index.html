@@ -7900,7 +7900,14 @@ const SanadSecurity = {
   async unlock(auto=false){
     if(!this.cfg.enabled){this.finishUnlock();return true;}
     if(!auto){this._autoPrompting=false;const el=this.ensureOverlay();el.classList.remove('auto-auth');}
-    if(this.cfg.authMode==='android-device'||(!this.cfg.credentialId&&this.nativeAvailable())){
+    const route=SecurityCrypto.unlockRoute({
+      enabled:true,
+      authMode:this.cfg.authMode,
+      credentialId:this.cfg.credentialId,
+      nativeAvailable:this.cfg.authMode==='android-device'?true:(!this.cfg.credentialId&&this.nativeAvailable()),
+      webAuthnEnvironmentAvailable:true
+    });
+    if(route==='native'){
       if(!this.nativeAvailable()){
         this._autoPrompting=false;this.ensureOverlay().classList.remove('auto-auth');
         toast('قفل الجهاز غير متاح — استخدم رمز الاسترداد');return false;
