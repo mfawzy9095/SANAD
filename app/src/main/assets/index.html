@@ -2397,16 +2397,7 @@ function viewRep(){
     countryAccounts.map(a => '<option value="' + a.id + '"' + (S.repAccountId === a.id ? ' selected' : '') + '>' + a.icon + ' ' + esc(a.name) + '</option>').join('');
   const accountFilterHtml = '<div class="field" style="margin-bottom:12px"><label>الحساب</label>' +
     '<select data-rep-account="1">' + accountFilterOptions + '</select></div>';
-  const transferGroup = (list, useFrom) => {
-    const byCur = {};
-    list.forEach(t => {
-      const acc = useFrom ? Finance.getAccount(t.fromAccountId) : Finance.getAccount(t.toAccountId);
-      const cur = (useFrom ? t.fromCurrency : t.toCurrency) || (acc ? acc.currency : 'AED');
-      const amt = useFrom ? (Number(t.fromAmount) || 0) : (Number(t.toAmount) || 0);
-      byCur[cur] = (byCur[cur] || 0) + amt;
-    });
-    return byCur;
-  };
+  const transferGroup = (list, useFrom) => ReportCore.transferCurrencyTotals(S,list,useFrom);
   const rowsFromMap = (map) => Object.entries(map).map(([cur,val]) =>
     '<div class="cs-row"><span class="lbl">' + Finance.curSymbol(cur) + '</span><span class="val amt-val">' + amtText(val) + '</span></div>').join('');
   const transfersHtml = (() => {
@@ -2444,21 +2435,10 @@ function viewRep(){
     const debt = Finance.accountDebt(repAcc.id);
     const avail = Finance.creditAvailable(repAcc.id);
     const limit = Number(repAcc.creditLimit) || 0;
-    let purchases = 0;
-    let repaymentPrincipal = 0;
     const rr = Finance.periodRange(p, S.month);
-    for (const t of S.transactions){
-      if (!t.date || t.date < rr.start || t.date > rr.end) continue;
-      if (t.type === 'expense' && t.accountId === repAcc.id){
-        /* V8.8.4.8: walletAmount is already in credit-account currency.
-           Do NOT gate on t.currency === repAcc.currency — cross-currency
-           purchases (e.g. 100 USD on an AED card) were being dropped. */
-        purchases += Number(t.walletAmount != null ? t.walletAmount : t.amount) || 0;
-      }
-      if (t.type === 'transfer' && t.toAccountId === repAcc.id){
-        repaymentPrincipal += Number(t.toAmount) || 0;
-      }
-    }
+    const activity = ReportCore.creditPeriodActivity(S,repAcc.id,rr);
+    const purchases = activity.purchases;
+    const repaymentPrincipal = activity.repaymentPrincipal;
     return '<div class="sec"><h2>ملخص البطاقة</h2></div>' +
       '<div class="card credit-summary">' +
         '<div class="cs-row"><span class="lbl">المديونية الحالية</span><span class="val neg amt-val">' + amtFull(debt, repAcc.currency) + '</span></div>' +
