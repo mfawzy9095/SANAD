@@ -45,7 +45,10 @@
     }
     function normalizeRecovery(s){return String(s||'').replace(/[^0-9]/g,'');}
     function formatRecovery(code){
-      return normalizeRecovery(code).replace(/(d{4})(?=d)/g,'$1-');
+      const v=normalizeRecovery(code);
+      const parts=[];
+      for(let i=0;i<v.length;i+=4)parts.push(v.slice(i,i+4));
+      return parts.join('-');
     }
     function generateRecoveryCode(length=16){
       const bytes=random(length);
