@@ -20,7 +20,12 @@ public final class BankNotificationFilter {
                 "رمز التحقق", "كلمة مرور لمرة", "كلمه مرور لمره",
                 "دفعة بطاقة تتطلب موافقتك", "دفعه بطاقه تتطلب موافقتك",
                 "requires your approval", "pending approval", "authorization required",
-                "تم استبدال", "rewards redemption", "reward redemption")) {
+                "تم استبدال", "rewards redemption", "reward redemption",
+                "credit card mini statement", "minimum amount due",
+                "was declined", "declined due to", "transaction declined",
+                "نود تاكيد استلام دفعه", "نود تاكيد استلام دفعة",
+                "has been suspended", "has been resumed", "request to freeze",
+                "successfully reactivated", "registered in google pay", "تم تسجيل بطاقتك")) {
             return false;
         }
 
@@ -32,7 +37,9 @@ public final class BankNotificationFilter {
                 "تم تحويل مبلغ", "تحويل الأموال", "تحويل الاموال", "لتسديد مستحقات",
                 "purchase", "purchased", "card purchase", "pos", "merchant",
                 "debited", "debit", "credited", "credit", "salary", "payroll",
-                "deposit", "transfer", "payment");
+                "deposit", "transfer", "payment", "عملية دفع", "عمليه دفع",
+                "has been used for", "you've received", "you’ve received", "received aed",
+                "successfully withdrawn", "withdrawn");
     }
 
     private static boolean containsAny(String x, String... terms) {

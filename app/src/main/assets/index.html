@@ -1196,6 +1196,30 @@ const Finance = {
     S.institutions.push({id,name:bank.name,country:c,type:'bank',bankRegistryId:bankId});
     return id;
   },
+  registeredProviderId(inst){
+    if (!inst || !UaeBankRegistryCore.getProvider) return null;
+    if (inst.providerRegistryId && UaeBankRegistryCore.getProvider(inst.providerRegistryId)) return inst.providerRegistryId;
+    const hit = UaeBankRegistryCore.detectProvider ? UaeBankRegistryCore.detectProvider(inst.name || '') : null;
+    return hit ? hit.provider.id : null;
+  },
+  findRegisteredProvider(providerId,country){
+    if (!providerId) return null;
+    const c = country || 'UAE';
+    return S.institutions.find(i => i.country === c && this.registeredProviderId(i) === providerId) || null;
+  },
+  ensureRegisteredProvider(providerId,country){
+    const provider = UaeBankRegistryCore.getProvider ? UaeBankRegistryCore.getProvider(providerId) : null;
+    if (!provider) return null;
+    const c = country || provider.country || 'UAE';
+    const existing = this.findRegisteredProvider(providerId,c);
+    if (existing){
+      if (!existing.providerRegistryId) existing.providerRegistryId = providerId;
+      return existing.id;
+    }
+    const id = uid('inst');
+    S.institutions.push({id,name:provider.name,country:c,type:'wallet_provider',providerRegistryId:providerId});
+    return id;
+  },
 
   findInstitution(name,country){
     if (!name) return null;
@@ -4715,6 +4739,12 @@ function bankRegistryOptions(selectedId){
       '<option value="' + esc(b.id) + '"' + (selectedId === b.id ? ' selected' : '') + '>' + esc(b.name) + '</option>'
     ).join('');
 }
+function providerRegistryOptions(selectedId){
+  const providers=Array.isArray(UaeBankRegistryCore.PAYMENT_PROVIDERS)?UaeBankRegistryCore.PAYMENT_PROVIDERS:[];
+  return '<option value="">— اختر مزود المحفظة —</option>' + providers.map(p =>
+    '<option value="' + esc(p.id) + '"' + (selectedId === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>'
+  ).join('');
+}
 function parseBankRefsInput(value){
   return Array.from(new Set(String(value || '').split(/[\n,;]+/).map(v => v.trim()).filter(Boolean))).slice(0,8);
 }
@@ -4725,14 +4755,23 @@ function accountBankRefsText(account){
 }
 function refreshOfficialBankField(kind,country){
   const isCard = kind === 'card';
+  const accountType = !isCard ? ((document.getElementById('wType') || {}).value || '') : '';
+  const isWallet = !isCard && accountType === 'ewallet';
   const wrap = document.getElementById(isCard ? 'cardBankRegistryWrap' : 'wBankRegistryWrap');
   const sel = document.getElementById(isCard ? 'cardBankRegistry' : 'wBankRegistry');
+  const providerWrap = document.getElementById('wProviderRegistryWrap');
+  const providerSel = document.getElementById('wProviderRegistry');
   const refs = document.getElementById('wBankRefsWrap');
-  if (wrap) wrap.hidden = country !== 'UAE';
-  if (refs && !isCard) refs.hidden = country !== 'UAE';
-  if (sel && country === 'UAE'){
+  if (wrap) wrap.hidden = country !== 'UAE' || isWallet;
+  if (providerWrap) providerWrap.hidden = country !== 'UAE' || !isWallet;
+  if (refs && !isCard) refs.hidden = country !== 'UAE' || isWallet;
+  if (sel && country === 'UAE' && !isWallet){
     const current = sel.value || '';
     sel.innerHTML = bankRegistryOptions(current);
+  }
+  if (providerSel && country === 'UAE' && isWallet){
+    const current = providerSel.value || '';
+    providerSel.innerHTML = providerRegistryOptions(current);
   }
 }
 
@@ -4760,6 +4799,7 @@ function openAccountSheet(id, presetType, preserve){
     if (preserve.c) data.color = preserve.c;
     if (preserve.institutionId !== undefined) data.institutionId = preserve.institutionId;
     if (Array.isArray(preserve.bankRefs)) data.bankRefs = preserve.bankRefs.slice();
+    if (preserve.providerRegistryId !== undefined) data.providerRegistryId = preserve.providerRegistryId;
   }
   data.type = type;
   const hasTx = isEdit && hasAccountHistory(id);
@@ -4780,7 +4820,11 @@ function openAccountSheet(id, presetType, preserve){
   const selectedBankRegistryId = preserve && preserve.bankRegistryId
     ? preserve.bankRegistryId
     : (currentInstitution ? Finance.registeredBankId(currentInstitution) : null);
+  const selectedProviderRegistryId = preserve && preserve.providerRegistryId
+    ? preserve.providerRegistryId
+    : (currentInstitution ? Finance.registeredProviderId(currentInstitution) : null);
   const officialBankOptions = bankRegistryOptions(selectedBankRegistryId);
+  const officialProviderOptions = providerRegistryOptions(selectedProviderRegistryId);
   const bankRefsValue = accountBankRefsText(data);
   const icons = (isDebt ? DEBT_ICONS : ACCOUNT_ICONS).map(ic =>
     '<div class="icon-opt ' + (data.icon === ic ? 'on' : '') + '" data-wallet-ic="' + ic + '">' + ic + '</div>').join('');
@@ -4861,14 +4905,17 @@ function openAccountSheet(id, presetType, preserve){
       '<div class="field"><label>اسم الحساب</label><input type="text" id="wName" maxlength="30" value="' + esc(data.name) + '" placeholder="ADCB Current"></div>' +
       '<div class="field"><label>البلد</label><div class="country-picker">' + countryOpts + '</div>' +
         '<input type="hidden" id="wCountry" value="' + data.country + '"></div>' +
-      '<div class="field" id="wBankRegistryWrap"' + (data.country === 'UAE' ? '' : ' hidden') + '><label>البنك في الإمارات</label>' +
+      '<div class="field" id="wBankRegistryWrap"' + (data.country === 'UAE' && type !== 'ewallet' ? '' : ' hidden') + '><label>البنك في الإمارات</label>' +
         '<select id="wBankRegistry">' + officialBankOptions + '</select>' +
         '<div class="field-hint">القائمة من سجل البنوك المرخصة لدى مصرف الإمارات المركزي.</div></div>' +
+      '<div class="field" id="wProviderRegistryWrap"' + (data.country === 'UAE' && type === 'ewallet' ? '' : ' hidden') + '><label>مزود المحفظة الإلكترونية</label>' +
+        '<select id="wProviderRegistry">' + officialProviderOptions + '</select>' +
+        '<div class="field-hint">مثال: du Pay. يتم استخدام المزود لتوجيه إشعارات المحفظة للحساب الصحيح.</div></div>' +
       '<div class="field"><label>مؤسسة مخصصة (اختياري)</label>' +
         '<select id="wInst">' + instOptions + '</select>' +
         '<input type="text" id="wInstName" value="' + esc((preserve && preserve.institutionName) || '') + '" placeholder="جهة أخرى غير موجودة بالقائمة" maxlength="40" style="margin-top:8px">' +
         '<div class="field-hint">لو اخترت بنكًا رسميًا بالأعلى، له الأولوية.</div></div>' +
-      '<div class="field" id="wBankRefsWrap"' + (data.country === 'UAE' ? '' : ' hidden') + '><label>مراجع الحساب في رسائل البنك (اختياري)</label>' +
+      '<div class="field" id="wBankRefsWrap"' + (data.country === 'UAE' && type !== 'ewallet' ? '' : ' hidden') + '><label>مراجع الحساب في رسائل البنك (اختياري)</label>' +
         '<input type="text" id="wBankRefs" maxlength="140" value="' + esc(bankRefsValue) + '" placeholder="مثال: 1801, 012XXX50XXX01">' +
         '<div class="field-hint">اكتب آخر أرقام أو الشكل المقنّع الذي يظهر في رسائل البنك. يمكن إضافة أكثر من مرجع بفاصلة.</div></div>' +
       '<div class="field"><label>النوع</label><select id="wType" ' + (typeSelectDisabled ? 'disabled' : '') + '>' +
@@ -4903,6 +4950,7 @@ function captureAccountSheetValues(){
     c: (document.getElementById('wCol') || {}).value || '#00695C',
     institutionId: (document.getElementById('wInst') || {}).value || null,
     bankRegistryId: (document.getElementById('wBankRegistry') || {}).value || null,
+    providerRegistryId: (document.getElementById('wProviderRegistry') || {}).value || null,
     bankRefs: parseBankRefsInput((document.getElementById('wBankRefs') || {}).value || ''),
     institutionName: ((document.getElementById('wInstName') || {}).value || '').trim()
   };
@@ -4976,9 +5024,12 @@ async function saveAccount(id){
     const instEl = document.getElementById('wInst');
     institutionId = instEl ? (instEl.value || null) : null;
     const officialEl = document.getElementById('wBankRegistry');
-    const officialBankId = officialEl && country === 'UAE' ? (officialEl.value || null) : null;
+    const officialBankId = officialEl && country === 'UAE' && type !== 'ewallet' ? (officialEl.value || null) : null;
+    const providerEl = document.getElementById('wProviderRegistry');
+    const officialProviderId = providerEl && country === 'UAE' && type === 'ewallet' ? (providerEl.value || null) : null;
     const newInstName = ((document.getElementById('wInstName') || {}).value || '').trim();
-    if (officialBankId) institutionId = Finance.ensureRegisteredBank(officialBankId, country);
+    if (officialProviderId) institutionId = Finance.ensureRegisteredProvider(officialProviderId, country);
+    else if (officialBankId) institutionId = Finance.ensureRegisteredBank(officialBankId, country);
     else if (newInstName) institutionId = Finance.ensureInstitution(newInstName, country, type === 'ewallet' ? 'wallet_provider' : 'bank');
     if (institutionId){
       const inst = Finance.getInstitution(institutionId);
@@ -8174,11 +8225,12 @@ const SanadBankInbox = {
   },
   pendingCount(){return this.items.length;},
   kindLabel(kind){
-    return {purchase:'شراء',salary:'راتب',deposit:'إيداع',card_repayment:'سداد بطاقة',outgoing_transfer:'تحويل خارج الحساب'}[kind]||'عملية بنكية';
+    return {purchase:'شراء',salary:'راتب',deposit:'إيداع',card_repayment:'سداد بطاقة',outgoing_transfer:'تحويل خارج الحساب',cash_withdrawal:'سحب نقدي'}[kind]||'عملية بنكية';
   },
   routeLabel(item){
     const r=item.route,p=item.parsed;
     if(!p||!p.recognized)return 'لم يتم التعرف على الصيغة — لا يتم الحفظ';
+    if(p.kind==='cash_withdrawal'&&r&&r.reason==='cash-destination-required')return 'تم التعرف على السحب — يحتاج تحديد وجهة الكاش قبل الحفظ';
     if(!r||r.status!=='routed')return 'يحتاج ربط الحساب/البطاقة';
     if(p.kind==='card_repayment')return 'من '+esc(r.fromAccount.name)+' إلى '+esc(r.targetAccount.name);
     if(p.kind==='outgoing_transfer')return 'من '+esc(r.fromAccount.name);
@@ -8201,12 +8253,13 @@ const SanadBankInbox = {
     const rows=this.items.map(item=>{
       const n=item.native,p=item.parsed||{},r=item.route;
       const bank=p.bankId?UaeBankRegistryCore.get(p.bankId):null;
+      const provider=p.providerId&&UaeBankRegistryCore.getProvider?UaeBankRegistryCore.getProvider(p.providerId):null;
       const amount=p.recognized?amtFull(p.amount,p.currency):'—';
       const merchant=p.merchant?'<div style="font-size:12px;color:var(--text-2);margin-top:3px">'+esc(p.merchant)+'</div>':'';
       const source=this.routeLabel(item);
       const canApprove=!!(p.recognized&&r&&r.status==='routed');
       return '<div class="card" style="padding:14px;margin-bottom:10px">' +
-        '<div style="display:flex;justify-content:space-between;gap:10px"><div><b>' + esc(bank?bank.name:(n.title||'إشعار بنكي')) + '</b>' +
+        '<div style="display:flex;justify-content:space-between;gap:10px"><div><b>' + esc(bank?bank.name:(provider?provider.name:(n.title||'إشعار بنكي'))) + '</b>' +
         '<div style="font-size:12px;color:var(--text-2);margin-top:3px">' + esc(p.recognized?this.kindLabel(p.kind):'صيغة غير معروفة') + '</div></div>' +
         '<b class="amt-val">' + amount + '</b></div>' + merchant +
         '<div style="font-size:12px;margin-top:8px;color:'+(canApprove?'var(--success)':'var(--warn)')+'">' + source + '</div>' +

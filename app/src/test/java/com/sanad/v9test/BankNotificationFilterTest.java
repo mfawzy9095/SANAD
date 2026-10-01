@@ -34,5 +34,31 @@ public class BankNotificationFilterTest {
                 "Emirates NBD OTP 123456 for purchase AED 20.00. Do not share this verification code."));
         assertFalse(BankNotificationFilter.looksLikeCandidate(
                 "WhatsApp Ahmed sent you a message."));
+    @Test
+    public void acceptsArabicCreditCardAndDuPayCompletedTransactions() {
+        assertTrue(BankNotificationFilter.looksLikeCandidate(
+                "عملية دفع ببطاقة الائتمان المنتهية بالرقم: 0308 لدى: FRESH CRAFT MINI MART, DUBAI المبلغ: AED 2.50 التاريخ: 01/10/2026, 06:44 الحد المتوفر: 457.04 AED"));
+        assertTrue(BankNotificationFilter.looksLikeCandidate(
+                "Your request to transfer AED 149.00 to Mohamed Abdelrahman Fawzy is successfully processed. TID: DIR7BQ7FZ3"));
+        assertTrue(BankNotificationFilter.looksLikeCandidate(
+                "You've received AED 3,500.00 to your du Pay wallet. Your available balance is now AED 3,500.40."));
+        assertTrue(BankNotificationFilter.looksLikeCandidate(
+                "Your du Pay Card ending in 7105 has been used for AED 318.15 at Platinumlist. Your available balance is now AED 3,182.38."));
+        assertTrue(BankNotificationFilter.looksLikeCandidate(
+                "You have successfully withdrawn AED 100.00 from your du Pay wallet. Available balance: AED 10.28"));
+    }
+
+    @Test
+    public void rejectsStatementsDeclinesAndCardLifecycleMessages() {
+        assertFalse(BankNotificationFilter.looksLikeCandidate(
+                "Credit Card Mini Statement Minimum Amount Due: AED 476.19 Amount to be paid to avoid charges: AED 3,509.97"));
+        assertFalse(BankNotificationFilter.looksLikeCandidate(
+                "Your transaction of AED 40.53 at Talabat on your du Pay Card ending in 7105 was declined due to insufficient Balance."));
+        assertFalse(BankNotificationFilter.looksLikeCandidate(
+                "نود تأكيد استلام دفعة AED 433.00 عن البطاقة الائتمانية التي تبدأ بالرقم 457828."));
+        assertFalse(BankNotificationFilter.looksLikeCandidate(
+                "Your du Pay Card ending in 7105 has been suspended from Google Pay."));
+    }
+
     }
 }
