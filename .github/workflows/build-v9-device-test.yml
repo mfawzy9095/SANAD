@@ -140,6 +140,7 @@ jobs:
           grep -q "function defaultConfig" "$SECURITY_CORE"
           grep -q "function prepareInitialState" "$SECURITY_CORE"
           grep -q "function unlockRoute" "$SECURITY_CORE"
+          grep -q "function shouldShowLockOverlay" "$SECURITY_CORE"
           grep -q "SecurityCrypto.prepareInitialState" "$HTML"
           grep -q "SecurityCrypto.unlockRoute" "$HTML"
           ! grep -q "const elapsed=Math.max(0,(Number(ts)||Date.now())-this.backgroundAt)" "$HTML"

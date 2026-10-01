@@ -135,6 +135,11 @@
       return o.webAuthnEnvironmentAvailable?'webauthn':'webauthn-unavailable';
     }
 
+    function shouldShowLockOverlay(options){
+      const o=options||{};
+      return !!(o.enabled&&!o.unlocked);
+    }
+
     return Object.freeze({
       b64,
       unb64,
@@ -147,7 +152,8 @@
       shouldRelockOnForeground,
       defaultConfig,
       prepareInitialState,
-      unlockRoute
+      unlockRoute,
+      shouldShowLockOverlay
     });
   }
 

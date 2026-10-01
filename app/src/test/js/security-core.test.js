@@ -103,5 +103,11 @@ const Core=require('../../main/assets/js/security-core.js');
     enabled:true,authMode:null,credentialId:null,nativeAvailable:false,webAuthnEnvironmentAvailable:true
   }),'webauthn');
 
+  assert.strictEqual(S.shouldShowLockOverlay({enabled:true,unlocked:false}),true);
+  assert.strictEqual(S.shouldShowLockOverlay({enabled:true,unlocked:true}),false);
+  assert.strictEqual(S.shouldShowLockOverlay({enabled:false,unlocked:false}),false);
+  assert.strictEqual(S.shouldShowLockOverlay({enabled:false,unlocked:true}),false);
+  assert.strictEqual(S.shouldShowLockOverlay(null),false);
+
   console.log('security-core regression tests: PASS');
 })().catch(e=>{console.error(e);process.exit(1);});
