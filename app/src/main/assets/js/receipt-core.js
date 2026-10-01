@@ -11,7 +11,7 @@
   function validateFile(file,maxBytes=DEFAULT_MAX_FILE_BYTES){
     if(!file)return {ok:false,reason:'missing'};
     const type=String(file.type||'');
-    if(!/^image//.test(type))return {ok:false,reason:'type'};
+    if(!type.startsWith('image/'))return {ok:false,reason:'type'};
     const size=Number(file.size)||0;
     if(size>maxBytes)return {ok:false,reason:'size'};
     return {ok:true};
