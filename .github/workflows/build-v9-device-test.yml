@@ -146,6 +146,8 @@ jobs:
           grep -q "SecurityAdapterCore.createSecurityAdapter" "$HTML"
           grep -q "SecurityAdapter.nativeAvailable()" "$HTML"
           grep -q "SecurityAdapter.nativeAuth(reason,60000)" "$HTML"
+          grep -q "SecurityAdapter.markerEnabled(this.markerKey)" "$HTML"
+          grep -q "SecurityAdapter.setMarker(this.markerKey,on)" "$HTML"
           grep -q "SecurityAdapter.webAuthnEnvironmentAvailable()" "$HTML"
           grep -q "SecurityAdapter.getCredential" "$HTML"
           grep -q "SecurityAdapter.createCredential" "$HTML"
@@ -399,6 +401,11 @@ jobs:
           assert finance < state < storage < feature < backup < security < security_adapter < receipt < schema_repair < state_model < i18n < schema < persistence < mutation < reminder < report < inline < bind < state_bind < storage_bind < feature_bind < backup_bind < security_bind < security_adapter_bind < receipt_bind < schema_repair_bind < state_model_bind < i18n_bind < schema_bind < persistence_bind < mutation_bind < reminder_bind < report_bind
           assert "accountBalance(accountId){ return FinanceCore.accountBalance(S, accountId); }" in h
           assert "creditAvailable(accountId){ return FinanceCore.creditAvailable(S, accountId); }" in h
+          security_ui=h[h.index("const SanadSecurity = {"):h.index("window.sanadDeviceAuthResult")]
+          assert "localStorage.getItem" not in security_ui
+          assert "localStorage.setItem" not in security_ui
+          assert "SecurityAdapter.markerEnabled" in security_ui
+          assert "SecurityAdapter.setMarker" in security_ui
           receipt_ui=h[h.index("const SanadReceipts = {"):h.index("const SanadSecurity = {")]
           assert "ReceiptCore.createReceiptService" in receipt_ui
           assert "SanadExtStorage.getReceipt" not in receipt_ui
