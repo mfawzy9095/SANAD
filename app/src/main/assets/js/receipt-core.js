@@ -45,14 +45,14 @@
 
   function currentTxId(form){
     if(!form||!['tx','transfer'].includes(form._sheet))return null;
-    return typeof form.id==='string'&&form.id?form.id:null;
+    return form.id||null;
   }
 
   function resolveAttachmentTxId(beforeIds,editId,transactions){
-    if(typeof editId==='string'&&editId)return editId;
+    if(editId)return editId;
     const ids=beforeIds instanceof Set?beforeIds:new Set(beforeIds||[]);
     const list=Array.isArray(transactions)?transactions:[];
-    const found=list.find(t=>t&&typeof t.id==='string'&&t.id&&!ids.has(t.id));
+    const found=list.find(t=>t&&!ids.has(t.id));
     return found?found.id:null;
   }
 

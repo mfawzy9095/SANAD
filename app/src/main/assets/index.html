@@ -7748,7 +7748,7 @@ const SanadReceipts = {
     if(bmp.close)bmp.close();
     return await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('canvas encode failed')),'image/jpeg',0.78));
   },
-  async currentRecord(){const id=S.form&&['tx','transfer'].includes(S.form._sheet)&&S.form.id;return id?SanadExtStorage.getReceipt(id):null;},
+  async currentRecord(){const id=ReceiptCore.currentTxId(S.form);return id?SanadExtStorage.getReceipt(id):null;},
   injectTxControls(){
     if(!S.form||!['tx','transfer'].includes(S.form._sheet))return; const mount=document.getElementById('sanadReceiptQuickMount')||document.querySelector('#sheet .adv-body');if(!mount||mount.querySelector('[data-sanad-receipt]'))return;
     const wrap=document.createElement('div');wrap.className='field sanad-receipt-field quick';wrap.setAttribute('data-sanad-receipt','1');
@@ -7772,7 +7772,7 @@ const SanadReceipts = {
   },
   async attachAfterSave(beforeIds,editId,pending){
     if(!pending||!pending.blob)return;
-    let txId=editId||null; if(!txId){const found=S.transactions.find(t=>!beforeIds.has(t.id));if(found)txId=found.id;}
+    const txId=ReceiptCore.resolveAttachmentTxId(beforeIds,editId,S.transactions);
     if(!txId)return;
     const ok=await SanadExtStorage.putReceipt(txId,pending.blob,pending.meta); if(ok){await SanadCloud.markReceiptDirty(txId,false); this.pending=null;}
   },
