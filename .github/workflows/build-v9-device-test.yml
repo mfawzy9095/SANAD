@@ -203,6 +203,12 @@ jobs:
           grep -q '<script src="js/i18n-core.js"></script>' "$HTML"
           grep -q "const I18nCore = window.SanadI18nCore" "$HTML"
           grep -q "Object.assign(I18nCore.createI18nCore()" "$HTML"
+          grep -q "I18nCore.normalizeLanguage" "$HTML"
+          grep -q "I18nCore.directionForLanguage" "$HTML"
+          grep -q "I18nCore.isValidLanguage" "$HTML"
+          grep -q "function normalizeLanguage" "$I18N_CORE"
+          grep -q "function directionForLanguage" "$I18N_CORE"
+          grep -q "function isValidLanguage" "$I18N_CORE"
           ! grep -q "const SanadI18n = {" "$HTML"
           node --check "$I18N_CORE"
           node app/src/test/js/i18n-core.test.js
