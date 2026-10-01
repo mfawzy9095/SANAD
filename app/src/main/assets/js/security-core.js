@@ -30,7 +30,7 @@
       throw new Error('base64-unavailable');
     }
     function b64(bytes){
-      return encodeBase64(bytes).replace(/+/g,'-').replace(///g,'_').replace(/=+$/,'');
+      return encodeBase64(bytes).split('+').join('-').split('/').join('_').replace(/=+$/,'');
     }
     function unb64(s){
       let v=String(s||'').replace(/-/g,'+').replace(/_/g,'/');
