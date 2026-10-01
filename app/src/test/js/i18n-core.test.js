@@ -33,4 +33,17 @@ const I=Core.createI18nCore();
   assert.strictEqual(I.text('  الرئيسية  '),'  Home  ');
 })();
 
+(function languageDecisions(){
+  assert.strictEqual(Core.isValidLanguage('ar'),true);
+  assert.strictEqual(Core.isValidLanguage('en'),true);
+  assert.strictEqual(Core.isValidLanguage('fr'),false);
+  assert.strictEqual(Core.normalizeLanguage('en'),'en');
+  assert.strictEqual(Core.normalizeLanguage('ar'),'ar');
+  assert.strictEqual(Core.normalizeLanguage('fr'),'ar');
+  assert.strictEqual(Core.normalizeLanguage(null),'ar');
+  assert.strictEqual(Core.directionForLanguage('en'),'ltr');
+  assert.strictEqual(Core.directionForLanguage('ar'),'rtl');
+  assert.strictEqual(Core.directionForLanguage('bad'),'rtl');
+})();
+
 console.log('i18n-core regression tests: PASS');

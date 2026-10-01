@@ -5,6 +5,18 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
 
+  function isValidLanguage(lang){
+    return lang==='ar'||lang==='en';
+  }
+
+  function normalizeLanguage(lang){
+    return lang==='en'?'en':'ar';
+  }
+
+  function directionForLanguage(lang){
+    return normalizeLanguage(lang)==='en'?'ltr':'rtl';
+  }
+
   function createI18nCore(){
     return {
   lang:'ar',
@@ -145,5 +157,10 @@
     };
   }
 
-  return Object.freeze({createI18nCore});
+  return Object.freeze({
+    createI18nCore,
+    isValidLanguage,
+    normalizeLanguage,
+    directionForLanguage
+  });
 });
