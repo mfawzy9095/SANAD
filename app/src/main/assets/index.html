@@ -6301,16 +6301,21 @@ async function importData(file){
     let parsed;
     try { parsed = BackupCore.parseJsonText(r.result); }
     catch(e){ toast('الملف ليس JSON صالح'); return; }
-    const integrityCheck = BackupCore.verifyFinanceIntegrity(parsed,stateFingerprint);
-    if (!integrityCheck.ok){
-      await dialog({emoji:'❌', title:'النسخة الاحتياطية تالفة', msg:'بصمة سلامة الملف لا تطابق محتواه. لم يتم استيراد أي بيانات.', okText:'حسناً', primary:true, hideCancel:true});
-      return;
-    }
-    let errors = [];
-    try { errors = Schema.validateForImport(parsed); }
-    catch(e){ errors = ['فشل التحقق: ' + (e.message || e)]; }
-    if (errors.length){
-      await dialog({emoji:'❌', title:'ملف غير صالح', msg: errors.slice(0,5).join('\n'), okText:'حسناً', primary:true, hideCancel:true});
+    const financeValidation = BackupCore.validateFinanceRestoreInput(parsed,{
+      fingerprint:stateFingerprint,
+      validateForImport:Schema.validateForImport
+    });
+    if (!financeValidation.ok){
+      if (financeValidation.reason === 'fingerprint-mismatch'){
+        await dialog({emoji:'❌', title:'النسخة الاحتياطية تالفة', msg:'بصمة سلامة الملف لا تطابق محتواه. لم يتم استيراد أي بيانات.', okText:'حسناً', primary:true, hideCancel:true});
+        return;
+      }
+      const errors = financeValidation.reason === 'validation-error'
+        ? financeValidation.errors.map(x=>'فشل التحقق: ' + x)
+        : financeValidation.errors;
+      if (errors.length){
+        await dialog({emoji:'❌', title:'ملف غير صالح', msg: errors.slice(0,5).join('\n'), okText:'حسناً', primary:true, hideCancel:true});
+      }
       return;
     }
     const ok = await dialog({emoji:'📥', title:'استيراد نسخة', msg:'سيتم استبدال البيانات الحالية.', okText:'استيراد', primary:true});

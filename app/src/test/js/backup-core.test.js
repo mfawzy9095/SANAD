@@ -118,6 +118,42 @@ function state(){
   assert.deepStrictEqual(schemaError.validationErrors,['bad-state']);
 })();
 
+(function financeRestoreValidation(){
+  const s=state();
+  const backup=B.makeFinanceBackup(s,{
+    schemaVersion:16,
+    fingerprint:State.stateFingerprint
+  });
+  const valid=B.validateFinanceRestoreInput(backup,{
+    fingerprint:State.stateFingerprint,
+    validateForImport:()=>[]
+  });
+  assert.strictEqual(valid.ok,true);
+
+  const corrupt=JSON.parse(JSON.stringify(backup));
+  corrupt.transactions[0].amount=999;
+  const badIntegrity=B.validateFinanceRestoreInput(corrupt,{
+    fingerprint:State.stateFingerprint,
+    validateForImport:()=>[]
+  });
+  assert.strictEqual(badIntegrity.ok,false);
+  assert.strictEqual(badIntegrity.reason,'fingerprint-mismatch');
+
+  const badSchema=B.validateFinanceRestoreInput(backup,{
+    fingerprint:State.stateFingerprint,
+    validateForImport:()=>['bad import']
+  });
+  assert.strictEqual(badSchema.reason,'schema-invalid');
+  assert.deepStrictEqual(badSchema.errors,['bad import']);
+
+  const validatorCrash=B.validateFinanceRestoreInput(backup,{
+    fingerprint:State.stateFingerprint,
+    validateForImport:()=>{throw new Error('validator detail');}
+  });
+  assert.strictEqual(validatorCrash.reason,'validation-error');
+  assert.deepStrictEqual(validatorCrash.errors,['validator detail']);
+})();
+
 (function financeRestorePreparation(){
   const s=state();
   const prepared=B.prepareFinanceRestore(s,{

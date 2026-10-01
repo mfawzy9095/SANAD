@@ -77,6 +77,27 @@
     catch(_){throw new Error('json-invalid');}
   }
 
+  function validateFinanceRestoreInput(data,options){
+    const opts=options||{};
+    const integrity=verifyFinanceIntegrity(data,opts.fingerprint);
+    if(!integrity.ok)return {ok:false,reason:'fingerprint-mismatch',integrity,errors:[]};
+    if(typeof opts.validateForImport!=='function')throw new Error('validate-import-required');
+    let errors=[];
+    try{
+      const result=opts.validateForImport(data);
+      errors=Array.isArray(result)?result:(result?[String(result)]:[]);
+    }catch(err){
+      return {
+        ok:false,
+        reason:'validation-error',
+        integrity,
+        errors:[String(err&&err.message||err)]
+      };
+    }
+    if(errors.length)return {ok:false,reason:'schema-invalid',integrity,errors:Array.from(errors)};
+    return {ok:true,reason:null,integrity,errors:[]};
+  }
+
   function prepareFinanceRestore(data,options){
     const opts=options||{};
     if(typeof opts.migrate!=='function')throw new Error('migrate-required');
@@ -115,6 +136,7 @@
     validateFullEnvelope,
     validateReceiptDescriptors,
     parseJsonText,
+    validateFinanceRestoreInput,
     prepareFinanceRestore,
     prepareFullRestore
   });
