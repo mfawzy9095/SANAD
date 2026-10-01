@@ -293,6 +293,20 @@
     return newAlerts;
   }
 
+  function categoryPieBuckets(categoryTotals){
+    const all=Object.entries(categoryTotals||{}).sort((a,b)=>(Number(b[1])||0)-(Number(a[1])||0));
+    if(all.length<=6)return all.map(([id,value])=>({id,value:Number(value)||0,other:false}));
+    const top5=all.slice(0,5).map(([id,value])=>({id,value:Number(value)||0,other:false}));
+    const rest=all.slice(5).reduce((sum,[,value])=>sum+(Number(value)||0),0);
+    top5.push({id:null,value:rest,other:true});
+    return top5;
+  }
+
+  function distinctSourceTransactionCount(entries,currency){
+    const list=Array.isArray(entries)?entries:[];
+    return new Set(list.filter(e=>e&&(!currency||e.currency===currency)).map(e=>e.sourceTxId)).size;
+  }
+
   function computeBudgetStatus(spent,budget){
     const b=Number(budget)||0,s=Number(spent)||0;
     if(b<=0)return {level:'none',pct:0};
@@ -315,6 +329,8 @@
     getOverallLimit,
     setOverallLimit,
     evaluateBudgetAlerts,
+    categoryPieBuckets,
+    distinctSourceTransactionCount,
     computeBudgetStatus
   });
 });

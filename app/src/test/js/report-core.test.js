@@ -116,6 +116,29 @@ const state={
   assert.deepStrictEqual(budgetAlerts['overall|2026-09|UAE|AED|_'],{warned80:true,warned95:true,warned100:true});
 })();
 
+(function reportPresentationData(){
+  assert.deepStrictEqual(R.categoryPieBuckets({food:30,transport:20}),[
+    {id:'food',value:30,other:false},{id:'transport',value:20,other:false}
+  ]);
+  assert.deepStrictEqual(R.categoryPieBuckets({a:70,b:60,c:50,d:40,e:30,f:20,g:10}),[
+    {id:'a',value:70,other:false},{id:'b',value:60,other:false},{id:'c',value:50,other:false},
+    {id:'d',value:40,other:false},{id:'e',value:30,other:false},{id:null,value:30,other:true}
+  ]);
+  assert.deepStrictEqual(R.categoryPieBuckets(null),[]);
+
+  const entries=[
+    {sourceTxId:'t1',currency:'AED'},
+    {sourceTxId:'t1',currency:'AED'},
+    {sourceTxId:'t2',currency:'AED'},
+    {sourceTxId:'t3',currency:'EGP'},
+    {sourceTxId:'t4',currency:'AED'}
+  ];
+  assert.strictEqual(R.distinctSourceTransactionCount(entries,'AED'),3);
+  assert.strictEqual(R.distinctSourceTransactionCount(entries,'EGP'),1);
+  assert.strictEqual(R.distinctSourceTransactionCount(entries,null),4);
+  assert.strictEqual(R.distinctSourceTransactionCount(null,'AED'),0);
+})();
+
 (function budgetStatus(){
   assert.deepStrictEqual(R.computeBudgetStatus(0,0),{level:'none',pct:0});
   assert.strictEqual(R.computeBudgetStatus(79,100).level,'normal');
