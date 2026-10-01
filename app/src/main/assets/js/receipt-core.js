@@ -56,6 +56,33 @@
     return found?found.id:null;
   }
 
+  function createReceiptService(options){
+    const opts=options||{};
+    const storage=opts.storage;
+    const markDirty=typeof opts.markDirty==='function'?opts.markDirty:async()=>{};
+    if(!storage||typeof storage.getReceipt!=='function'||typeof storage.putReceipt!=='function'||typeof storage.delReceipt!=='function'){
+      throw new Error('receipt-storage-required');
+    }
+    return Object.freeze({
+      async get(txId){
+        return txId?storage.getReceipt(txId):null;
+      },
+      async remove(txId){
+        if(!txId)return false;
+        await storage.delReceipt(txId);
+        await markDirty(txId,true);
+        return true;
+      },
+      async attach(txId,pending){
+        if(!txId||!pending||!pending.blob)return false;
+        const ok=await storage.putReceipt(txId,pending.blob,pending.meta);
+        if(!ok)return false;
+        await markDirty(txId,false);
+        return true;
+      }
+    });
+  }
+
   return Object.freeze({
     DEFAULT_MAX_FILE_BYTES,
     DEFAULT_MAX_DIMENSION,
@@ -64,6 +91,7 @@
     makeMeta,
     sizeLabel,
     currentTxId,
-    resolveAttachmentTxId
+    resolveAttachmentTxId,
+    createReceiptService
   });
 });

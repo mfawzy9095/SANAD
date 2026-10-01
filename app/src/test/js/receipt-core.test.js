@@ -43,4 +43,48 @@ const R=require('../../main/assets/js/receipt-core.js');
   assert.strictEqual(R.resolveAttachmentTxId(['old'],null,txs),'new');
 })();
 
-console.log('receipt-core regression tests: PASS');
+(async function receiptService(){
+  const calls=[];
+  const records=new Map([['t1',{txId:'t1',blob:{size:10},meta:{name:'old'}}]]);
+  const storage={
+    async getReceipt(id){calls.push(['get',id]);return records.get(id)||null;},
+    async putReceipt(id,blob,meta){calls.push(['put',id,blob,meta]);records.set(id,{txId:id,blob,meta});return true;},
+    async delReceipt(id){calls.push(['del',id]);records.delete(id);return true;}
+  };
+  const dirty=[];
+  const service=R.createReceiptService({
+    storage,
+    markDirty:async(id,deleted)=>{dirty.push([id,deleted]);}
+  });
+
+  const existing=await service.get('t1');
+  assert.strictEqual(existing.txId,'t1');
+  assert.strictEqual(await service.get(null),null);
+
+  const pending={blob:{size:20},meta:{name:'new'}};
+  assert.strictEqual(await service.attach('t2',pending),true);
+  assert.deepStrictEqual(dirty.pop(),['t2',false]);
+  assert.strictEqual(records.get('t2').meta.name,'new');
+
+  assert.strictEqual(await service.remove('t2'),true);
+  assert.deepStrictEqual(dirty.pop(),['t2',true]);
+  assert.strictEqual(records.has('t2'),false);
+
+  assert.strictEqual(await service.attach(null,pending),false);
+  assert.strictEqual(await service.remove(null),false);
+
+  const failed=R.createReceiptService({
+    storage:Object.assign({},storage,{putReceipt:async()=>false}),
+    markDirty:async(id,deleted)=>{dirty.push([id,deleted]);}
+  });
+  const beforeDirty=dirty.length;
+  assert.strictEqual(await failed.attach('t3',pending),false);
+  assert.strictEqual(dirty.length,beforeDirty);
+
+  assert.throws(()=>R.createReceiptService({storage:{}}),/receipt-storage-required/);
+})().then(()=>{
+  console.log('receipt-core regression tests: PASS');
+}).catch(err=>{
+  console.error(err);
+  process.exitCode=1;
+});
