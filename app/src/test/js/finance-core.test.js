@@ -75,4 +75,32 @@ function state(accounts,transactions){return {accounts,transactions};}
   assert.strictEqual(F.suggestRate('ABC','XYZ',{},defaults),1);
 })();
 
+(function prepaidInvariant(){
+  const beforeState=state([{id:'p',type:'prepaid',openingBalance:100}],[]);
+  const before=F.capturePrepaidBalances(beforeState);
+  assert.strictEqual(before.get('p'),100);
+
+  const safe=state([{id:'p',type:'prepaid',openingBalance:100}],
+    [{type:'expense',accountId:'p',amount:100}]);
+  assert.strictEqual(F.checkPrepaidInvariant(before,safe),null);
+
+  const negative=state([{id:'p',type:'prepaid',openingBalance:100}],
+    [{type:'expense',accountId:'p',amount:100.02}]);
+  assert.strictEqual(F.checkPrepaidInvariant(before,negative),'prepaid-insufficient');
+
+  const legacyBefore=F.capturePrepaidBalances(
+    state([{id:'p',type:'prepaid',openingBalance:-20}],[])
+  );
+  const improved=state([{id:'p',type:'prepaid',openingBalance:-20}],
+    [{type:'income',accountId:'p',amount:5}]);
+  assert.strictEqual(F.checkPrepaidInvariant(legacyBefore,improved),null);
+
+  const worsened=state([{id:'p',type:'prepaid',openingBalance:-20}],
+    [{type:'expense',accountId:'p',amount:1}]);
+  assert.strictEqual(F.checkPrepaidInvariant(legacyBefore,worsened),'prepaid-insufficient');
+
+  const newNegative=state([{id:'new',type:'prepaid',openingBalance:-1}],[]);
+  assert.strictEqual(F.checkPrepaidInvariant(new Map(),newNegative),'prepaid-insufficient');
+})();
+
 console.log('finance-core regression tests: PASS');
