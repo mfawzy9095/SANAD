@@ -120,6 +120,29 @@ jobs:
           grep -q "BackupCore.validateFullEnvelope" "$HTML"
           node --check "$BACKUP_CORE"
           node app/src/test/js/backup-core.test.js
+          SECURITY_CORE="app/src/main/assets/js/security-core.js"
+          test -s "$SECURITY_CORE"
+          SECURITY_CORE_SHA="$(sha256sum "$SECURITY_CORE" | awk '{print $1}')"
+          echo "SECURITY_CORE_SHA=$SECURITY_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/security-core.js"></script>' "$HTML"
+          grep -q "const SecurityCore = window.SanadSecurityCore" "$HTML"
+          grep -q "SecurityCore.createSecurityCore" "$HTML"
+          grep -q "SecurityCrypto.generateRecoveryCode" "$HTML"
+          grep -q "SecurityCrypto.recoveryDigest" "$HTML"
+          node --check "$SECURITY_CORE"
+          node app/src/test/js/security-core.test.js
+
+          RECEIPT_CORE="app/src/main/assets/js/receipt-core.js"
+          test -s "$RECEIPT_CORE"
+          RECEIPT_CORE_SHA="$(sha256sum "$RECEIPT_CORE" | awk '{print $1}')"
+          echo "RECEIPT_CORE_SHA=$RECEIPT_CORE_SHA" >> "$GITHUB_ENV"
+          grep -q '<script src="js/receipt-core.js"></script>' "$HTML"
+          grep -q "const ReceiptCore = window.SanadReceiptCore" "$HTML"
+          grep -q "ReceiptCore.validateFile(file)" "$HTML"
+          grep -q "ReceiptCore.compressionDimensions" "$HTML"
+          grep -q "ReceiptCore.makeMeta" "$HTML"
+          node --check "$RECEIPT_CORE"
+          node app/src/test/js/receipt-core.test.js
 
           grep -q "const SANAD_V9_VERSION = '9.0.10'" "$HTML"
           grep -q "_criticalMutationInFlight" "$HTML"
@@ -224,13 +247,17 @@ jobs:
           storage=h.index('<script src="js/storage-core.js"></script>')
           feature=h.index('<script src="js/feature-storage-core.js"></script>')
           backup=h.index('<script src="js/backup-core.js"></script>')
-          inline=h.index('<script>', backup)
+          security=h.index('<script src="js/security-core.js"></script>')
+          receipt=h.index('<script src="js/receipt-core.js"></script>')
+          inline=h.index('<script>', receipt)
           bind=h.index('const FinanceCore = window.SanadFinanceCore', inline)
           state_bind=h.index('const StateCore = window.SanadStateCore', inline)
           storage_bind=h.index('const StorageCore = window.SanadStorageCore', inline)
           feature_bind=h.index('const FeatureStorageCore = window.SanadFeatureStorageCore', inline)
           backup_bind=h.index('const BackupCore = window.SanadBackupCore', inline)
-          assert finance < state < storage < feature < backup < inline < bind < state_bind < storage_bind < feature_bind < backup_bind
+          security_bind=h.index('const SecurityCore = window.SanadSecurityCore', inline)
+          receipt_bind=h.index('const ReceiptCore = window.SanadReceiptCore', inline)
+          assert finance < state < storage < feature < backup < security < receipt < inline < bind < state_bind < storage_bind < feature_bind < backup_bind < security_bind < receipt_bind
           assert "accountBalance(accountId){ return FinanceCore.accountBalance(S, accountId); }" in h
           assert "creditAvailable(accountId){ return FinanceCore.creditAvailable(S, accountId); }" in h
           PY
@@ -257,6 +284,10 @@ jobs:
           node app/src/test/js/feature-storage-core.test.js
           node --check app/src/main/assets/js/backup-core.js
           node app/src/test/js/backup-core.test.js
+          node --check app/src/main/assets/js/security-core.js
+          node app/src/test/js/security-core.test.js
+          node --check app/src/main/assets/js/receipt-core.js
+          node app/src/test/js/receipt-core.test.js
 
       - name: JVM regression tests
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
@@ -273,7 +304,7 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.10-REFACTOR-A4.apk"
+          cp "$APK" "SANAD-V9.0.10-REFACTOR-A5.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
@@ -302,17 +333,21 @@ jobs:
           test "$EMBEDDED_FEATURE_CORE_SHA" = "$FEATURE_CORE_SHA"
           EMBEDDED_BACKUP_CORE_SHA="$(unzip -p "$APK" assets/js/backup-core.js | sha256sum | awk '{print $1}')"
           test "$EMBEDDED_BACKUP_CORE_SHA" = "$BACKUP_CORE_SHA"
+          EMBEDDED_SECURITY_CORE_SHA="$(unzip -p "$APK" assets/js/security-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_SECURITY_CORE_SHA" = "$SECURITY_CORE_SHA"
+          EMBEDDED_RECEIPT_CORE_SHA="$(unzip -p "$APK" assets/js/receipt-core.js | sha256sum | awk '{print $1}')"
+          test "$EMBEDDED_RECEIPT_CORE_SHA" = "$RECEIPT_CORE_SHA"
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          sha256sum "SANAD-V9.0.10-REFACTOR-A4.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.0.10-REFACTOR-A5.apk" | tee apk-sha256.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.10-REFACTOR-A4
+          name: SANAD-V9.0.10-REFACTOR-A5
           path: |
-            SANAD-V9.0.10-REFACTOR-A4.apk
+            SANAD-V9.0.10-REFACTOR-A5.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
