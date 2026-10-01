@@ -16,6 +16,7 @@
     const INSTRUMENT_TYPES=opts.instrumentTypes;
     const SUPPORTED_TX_TYPES=opts.supportedTxTypes;
     const accountTypeInfo=opts.accountTypeInfo;
+    const isAssetAccount=opts.isAssetAccount;
     const isFiniteNumberLike=opts.isFiniteNumberLike;
     const isValidIsoDate=opts.isValidIsoDate;
     const isoToday=opts.isoToday;
@@ -23,6 +24,7 @@
 
     if(typeof deepClone!=='function')throw new Error('deepClone-required');
     if(typeof accountTypeInfo!=='function')throw new Error('accountTypeInfo-required');
+    if(typeof isAssetAccount!=='function')throw new Error('isAssetAccount-required');
     if(typeof isFiniteNumberLike!=='function')throw new Error('isFiniteNumberLike-required');
     if(typeof isValidIsoDate!=='function')throw new Error('isValidIsoDate-required');
     if(typeof isoToday!=='function')throw new Error('isoToday-required');
