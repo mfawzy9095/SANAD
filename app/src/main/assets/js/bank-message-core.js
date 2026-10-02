@@ -107,6 +107,12 @@
       availableBalance:base.availableBalance==null?null:Number(base.availableBalance),availableCredit:base.availableCredit==null?null:Number(base.availableCredit),
       raw:String(raw),confidence:Number(base.confidence||0.95)},base);
   }
+  function taptapBeneficiaryFromMerchant(value){
+    const merchant=String(value||'').trim();
+    const m=merchant.match(/^TAPT\*+(.+)$/i);
+    if(!m)return '';
+    return m[1].replace(/[_-]+/g,' ').replace(/([a-z])([A-Z])/g,'$1 $2').replace(/\s+/g,' ').trim();
+  }
   function parseEnbd(input,raw){
     const x=cleanText(raw); let m;
     m=x.match(/تم\s+خصم\s+مبلغ\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+من\s+حسابك\s+\.?\s*([A-Za-z0-9Xx*]+)\s+لتسديد\s+مستحقات\s+بطاقتك\s+الائتمانية\s*(\d{4})/i);
@@ -116,7 +122,11 @@
     m=x.match(/تمت\s+عملية\s+شراء\s+بقيمة\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+لدى\s+(.+?)\s+باستخدام\s+بطاقة\s+خصم\s+تنتهي\s+ارقامها\s+ب[ـ]?\s*(\d{4}).*?الرصيد\s+المتوفر\s+هو\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)/i);
     if(m){const merchant=m[3].replace(/\s+/g,' ').trim();return result({bankId:'emirates-nbd',kind:'purchase',direction:'debit',currency:m[1],amount:amount(m[2]),merchant,category:categoryForMerchant(merchant),cardLast4:m[4],cardType:'debit_card',availableBalance:amount(m[6]),confidence:0.99},input,raw);}
     m=x.match(/(?:لقد\s+)?تم\s+تحويل\s+مبلغ\s+([\d,]+(?:\.\d+)?)\s*([A-Za-z]{3})\s+باستخدام\s+بطاقة\s+الخصم.+?(\d{4})\s+لدى\s+(.+?)\.\s*رصيدك\s+الحالي\s+هو\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)/i);
-    if(m){const merchant=m[4].replace(/\s+/g,' ').trim();return result({bankId:'emirates-nbd',kind:'purchase',direction:'debit',currency:m[2],amount:amount(m[1]),merchant,category:categoryForMerchant(merchant),cardLast4:m[3],cardType:'debit_card',availableBalance:amount(m[6]),confidence:0.98},input,raw);}
+    if(m){
+      const merchant=m[4].replace(/\s+/g,' ').trim();
+      const beneficiaryName=taptapBeneficiaryFromMerchant(merchant);
+      return result({bankId:'emirates-nbd',kind:beneficiaryName?'outgoing_transfer':'purchase',direction:'debit',currency:m[2],amount:amount(m[1]),merchant,beneficiaryName:beneficiaryName||null,category:beneficiaryName?'externalTransfer':categoryForMerchant(merchant),cardLast4:m[3],cardType:'debit_card',availableBalance:amount(m[6]),confidence:0.98},input,raw);
+    }
     m=x.match(/تم\s+ايداع\s+الراتب\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+في\s+حسابك\s+\.?\s*([A-Za-z0-9Xx*]+)/i);
     if(m)return result({bankId:'emirates-nbd',kind:'salary',direction:'credit',currency:m[1],amount:amount(m[2]),accountRef:normalizeRef(m[3]),availableBalance:availableBalanceFromText(x),category:'salary',confidence:0.99},input,raw);
     m=x.match(/(?:لقد\s+)?تم\s+ايداع\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+في\s+(?:رقم\s+)?حسابك\s+\.?\s*([A-Za-z0-9Xx*]+)/i);
@@ -277,6 +287,7 @@
     }
     if(parsed.kind==='card_repayment'){targetAccount=account;if(fromAccount&&targetAccount&&targetAccount.type==='credit')return {status:'routed',fromAccount,targetAccount,instrument,confidence:0.99};return {status:'needs-review',reason:'repayment-route-not-found',fromAccount,targetAccount,instrument,confidence:0};}
     if(parsed.kind==='outgoing_transfer'){
+      if(account)return {status:'routed',fromAccount:account,instrument,confidence:instrument?0.99:0.90};
       if(fromAccount)return {status:'routed',fromAccount,confidence:parsed.accountRef?0.97:(parsed.providerId?0.95:0.80)};
       return {status:'needs-review',reason:'transfer-source-not-found',confidence:0};
     }
@@ -315,7 +326,7 @@
     }
     if(parsed.kind==='outgoing_transfer'){
       const from=route.fromAccount;if(!from)return {ok:false,reason:'transfer-source-required'};if(from.currency!==parsed.currency)return {ok:false,reason:'fx-review-required'};
-      return {ok:true,transaction:{id,type:'external_transfer',fromAccountId:from.id,fromAmount:parsed.amount,fromCurrency:from.currency,fromCountry:from.country,beneficiaryId:null,receivedAmount:parsed.amount,receivedCurrency:parsed.currency,fxRate:1,fee:0,note:parsed.beneficiaryName?('تحويل إلى '+parsed.beneficiaryName):'تحويل بنكي',tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,bankTransactionRef:parsed.transactionRef||null}};
+      return {ok:true,transaction:{id,type:'external_transfer',fromAccountId:from.id,instrumentId:route.instrument?route.instrument.id:null,fromAmount:parsed.amount,fromCurrency:from.currency,fromCountry:from.country,beneficiaryId:null,receivedAmount:parsed.amount,receivedCurrency:parsed.currency,fxRate:1,fee:0,note:parsed.beneficiaryName?('تحويل إلى '+parsed.beneficiaryName):'تحويل بنكي',tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,bankTransactionRef:parsed.transactionRef||null}};
     }
     if(parsed.kind==='cash_withdrawal'){
       const from=route.fromAccount,to=route.targetAccount;
