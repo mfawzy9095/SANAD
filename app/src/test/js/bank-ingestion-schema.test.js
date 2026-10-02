@@ -1,6 +1,8 @@
 'use strict';
 
 const assert=require('assert');
+const fs=require('fs');
+const path=require('path');
 const Finance=require('../../main/assets/js/finance-core.js');
 const RepairCore=require('../../main/assets/js/schema-repair-core.js');
 const SchemaCore=require('../../main/assets/js/schema-core.js');
@@ -219,6 +221,13 @@ function process(text,input,state){
   assert.strictEqual(second.action,'duplicate');
   assert.strictEqual(second.existingTransactionId,first.plan.transaction.id);
   assert.strictEqual(s.transactions.length,1);
+})();
+
+
+(function creditCardEditorUsesItsOwnRegistrySelection(){
+  const html=fs.readFileSync(path.join(__dirname,'../../main/assets/index.html'),'utf8');
+  assert.ok(html.includes("bankRegistryPickerHtml(cardSelectedBankRegistryId,'cardBankRegistry')"),'credit card editor must use cardSelectedBankRegistryId');
+  assert.ok(!html.includes("bankRegistryPickerHtml(selectedBankRegistryId,'cardBankRegistry')"),'credit card editor must not reference the account-editor variable');
 })();
 
 console.log('bank ingestion schema integration tests: PASS');
