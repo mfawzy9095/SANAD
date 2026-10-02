@@ -8,7 +8,7 @@ const samples=[
 ['salary','تم ايداع الراتب AED 9,000.00 في  حسابك .012XXX50XXX01 الرصيد المتوفر هو AED 9,001.66','salary',9000,null],
 ['repayment','تم خصم مبلغ AED 684.19 من حسابك 012XXX50XXX01 لتسديد مستحقات بطاقتك الائتمانية4021.','card_repayment',684.19,'4021'],
 ['debit purchase','تمت عملية شراء بقيمة AED 5.10 لدى NMC MED CEN SHJ BR ,SHARJAH باستخدام بطاقة خصم تنتهي أرقامها بـ 3993. الرصيد المتوفر هو AED 2,684.31.','purchase',5.10,'3993'],
-['debit merchant','لقد تمّ تحويل مبلغ 100.00AED باستخدام بطاقة الخصم الخاصة بك والمنتهية أرقامها بـ 3993 لدى TAPT*Mohamed Abdelrahm. رصيدك الحالي هو AED 123.83.','purchase',100,'3993']
+['debit merchant','لقد تمّ تحويل مبلغ 100.00AED باستخدام بطاقة الخصم الخاصة بك والمنتهية أرقامها بـ 3993 لدى TAPT*Mohamed Abdelrahm. رصيدك الحالي هو AED 123.83.','outgoing_transfer',100,'3993']
 ];
 for(const [label,text,kind,amt,last4] of samples){
   const p=P.parse({id:label,postedAt:1,text});
