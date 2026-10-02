@@ -301,6 +301,7 @@
       [parsed.fromAccountRef,'<fromaccount>'],
       [parsed.toAccountRef,'<toaccount>'],
       [parsed.accountRef,'<account>'],
+      [parsed.cardFirst4,'<cardfirst>'],
       [parsed.cardLast4,'<card>']
     ].map(([value,token])=>[normalizeSource(value||''),token])
       .filter(([value])=>value&&value.length>=2)
@@ -319,12 +320,21 @@
     const sourceKey=learningSourceKey(parsed),signature=templateSignature(parsed);
     if(!sourceKey||signature.length<8)return null;
     const country=countryForParsed(parsed),currency=String(parsed.currency||'').toUpperCase();
-    const card=String(parsed.cardLast4||''),account=String(parsed.accountRef||'');
+    const cardFirst=String(parsed.cardFirst4||''),card=String(parsed.cardLast4||''),account=String(parsed.accountRef||'');
+    const instruments=arr(state&&state.paymentInstruments);
     const matches=learningRules(state).filter(r=>{
       if(r.sourceKey!==sourceKey||r.templateSignature!==signature)return false;
       if(r.country&&r.country!==country)return false;
       if(r.currency&&String(r.currency).toUpperCase()!==currency)return false;
-      if(r.cardLast4&&String(r.cardLast4)!==card)return false;
+      const linkedInstrument=r.instrumentId?instruments.find(i=>i&&i.id===r.instrumentId&&!i.archived)||null:null;
+      if(cardFirst){
+        const learnedFirst=String(r.cardFirst4||(linkedInstrument&&linkedInstrument.first4)||'');
+        if(!learnedFirst||learnedFirst!==cardFirst)return false;
+      }
+      if(card){
+        const learnedLast=String(r.cardLast4||(linkedInstrument&&linkedInstrument.last4)||'');
+        if(!learnedLast||learnedLast!==card)return false;
+      }
       if(r.accountRef&&String(r.accountRef)!==account)return false;
       return true;
     });
@@ -344,6 +354,7 @@
     if(instrument){
       const linked=accounts.find(a=>a&&a.id===instrument.accountId&&!a.archived)||null;
       if(!linked||linked.country!==country||(!currency||linked.currency!==currency))return null;
+      if(parsed.cardFirst4&&String(instrument.first4||'')!==String(parsed.cardFirst4))return null;
       if(parsed.cardLast4&&String(instrument.last4||'')!==String(parsed.cardLast4))return null;
     }
     const kind=parsed.kind;
@@ -604,7 +615,7 @@
     const kind=String(opts.kind||parsed.kind||'');
     const spec={
       sourceKey,templateSignature:signature,country:countryForParsed(parsed),currency:String(parsed.currency||'').toUpperCase(),
-      cardLast4:parsed.cardLast4?String(parsed.cardLast4):null,accountRef:parsed.accountRef?String(parsed.accountRef):null,
+      cardFirst4:parsed.cardFirst4?String(parsed.cardFirst4):null,cardLast4:parsed.cardLast4?String(parsed.cardLast4):null,accountRef:parsed.accountRef?String(parsed.accountRef):null,
       kind,
       accountId:route.account&&route.account.id||null,
       fromAccountId:route.fromAccount&&route.fromAccount.id||null,
@@ -613,7 +624,7 @@
     };
     const key=r=>[
       r.sourceKey,r.templateSignature,r.country||'',String(r.currency||'').toUpperCase(),
-      r.cardLast4||'',r.accountRef||''
+      r.cardFirst4||'',r.cardLast4||'',r.accountRef||''
     ].join('|');
     const wantedKey=key(spec);
     let rule=state.settings.bankLearningRules.find(r=>r&&key(r)===wantedKey)||null;
