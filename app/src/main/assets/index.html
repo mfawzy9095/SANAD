@@ -4880,7 +4880,7 @@ function openAccountSheet(id, presetType, preserve){
       '<div class="field-hint">' + (hasTx ? 'مقفل — استخدم "تسوية المديونية".' : 'قيمة الدين عند بداية استخدام التطبيق.') + '</div></div>';
   } else {
     amountField = '<div class="field"><label>الرصيد الافتتاحي</label>' +
-      '<input type="number" inputmode="decimal" id="wBalance" value="' + (data.openingBalance || 0) + '" ' + (hasTx ? 'disabled' : '') + '>' +
+      '<input type="number" inputmode="decimal" id="wBalance" value="' + (data.openingBalance || 0) + '">' +
       '<div class="field-hint">' + (hasTx ? 'مقفل — استخدم "تعديل الرصيد الحقيقي".' : 'رصيد الحساب عند تاريخ البداية.') + '</div></div>';
   }
   const cashFundingHtml = (isCash && !isEdit) ?
