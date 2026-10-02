@@ -258,4 +258,17 @@ function process(text,input,state){
   assert.ok(html.includes("rows.push(['التاجر', t.merchantName])"),'transaction details must show merchantName');
 })();
 
+
+(function homeHeroPrefersCurrentReportedBalance(){
+  const html=fs.readFileSync(path.join(__dirname,'../../main/assets/index.html'),'utf8');
+  assert.ok(
+    html.includes('const heroBalanceView = !isLiabilityAccount(defaultAcc) ? Finance.accountBalancePresentation(defaultAcc.id) : null;'),
+    'home hero must inspect the latest reported balance for asset accounts'
+  );
+  assert.ok(
+    html.includes('const bal = heroBalanceView ? heroBalanceView.display : Finance.accountBalance(defaultAcc.id);'),
+    'home hero must display a current bank/wallet observation when it is newer'
+  );
+})();
+
 console.log('bank ingestion schema integration tests: PASS');
