@@ -1820,7 +1820,8 @@ function viewHome(){
   const defaultAcc = Finance.getPrimaryAccount(country) || Finance.getDefaultAccount(country);
   let heroHtml = '';
   if (defaultAcc){
-    const bal = Finance.accountBalance(defaultAcc.id);
+    const heroBalanceView = !isLiabilityAccount(defaultAcc) ? Finance.accountBalancePresentation(defaultAcc.id) : null;
+    const bal = heroBalanceView ? heroBalanceView.display : Finance.accountBalance(defaultAcc.id);
     const cInfo = countryInfo(defaultAcc.country);
     const inst = Finance.getInstitution(defaultAcc.institutionId);
     heroHtml = '<div class="wallet-hero ' + maskCls + '" data-account-open="' + defaultAcc.id + '">' +
