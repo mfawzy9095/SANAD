@@ -5019,11 +5019,11 @@ function openAccountSheet(id, presetType, preserve){
   if (isLiab){
     amountField = '<div class="field"><label>قيمة الدين عند البداية</label>' +
       '<input type="number" inputmode="decimal" id="wDebt" value="' + (data.openingDebt || 0) + '">' +
-      '<div class="field-hint">' + (hasTx ? 'مقفل — استخدم "تسوية المديونية".' : 'قيمة الدين عند بداية استخدام التطبيق.') + '</div></div>';
+      '<div class="field-hint">' + (hasTx ? 'يمكن تعديل قيمة البداية؛ SANAD يعيد احتساب المديونية بعد الحفظ. استخدم «تسوية المديونية» إذا كنت تصحح القيمة الحالية فقط.' : 'قيمة الدين عند بداية استخدام التطبيق.') + '</div></div>';
   } else {
     amountField = '<div class="field"><label>الرصيد الافتتاحي</label>' +
       '<input type="number" inputmode="decimal" id="wBalance" value="' + (data.openingBalance || 0) + '">' +
-      '<div class="field-hint">' + (hasTx ? 'مقفل — استخدم "تعديل الرصيد الحقيقي".' : 'رصيد الحساب عند تاريخ البداية.') + '</div></div>';
+      '<div class="field-hint">' + (hasTx ? 'يمكن تعديل رصيد البداية؛ SANAD يعيد احتساب الرصيد من كل المعاملات بعد الحفظ. استخدم «تعديل الرصيد الحقيقي» إذا كنت تصحح الرصيد الحالي.' : 'رصيد الحساب عند تاريخ البداية.') + '</div></div>';
   }
   const cashFundingHtml = (isCash && !isEdit) ?
     '<div class="field"><label>مصدر الكاش الأول</label><select id="cashFundingMode"><option value="existing">الكاش موجود عندي بالفعل</option><option value="transfer">سحب / نقل من حساب موجود</option></select><div class="field-hint">لو اخترت حسابًا، SANAD يسجلها كتحويل حتى لا تتضاعف أموالك.</div></div>' +
@@ -5201,6 +5201,11 @@ async function saveAccount(id){
     if (hasDebit && type !== 'bank'){ toast('لا يمكن تغيير النوع — بالحساب بطاقة ديبت مرتبطة'); return; }
   }
   let savedId = id;
+  const accountNeedsRecalc = !!(id && hasAccountHistory(id));
+  if(accountNeedsRecalc){
+    showFinancialRecalcOverlay('جاري تحديث الحساب وإعادة الحساب');
+    await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,20)));
+  }
   const result = await commitCriticalMutation(async () => {
     let institutionId = null;
     const instEl = document.getElementById('wInst');
@@ -5220,25 +5225,17 @@ async function saveAccount(id){
     if (id){
       const a = Finance.getAccount(id);
       const hasTx = hasAccountHistory(id);
-      const countryChanged = a.country !== country;
-      const instChanged = a.institutionId !== institutionId;
       a.name = name; a.type = type;
       a.currency = hasTx ? a.currency : cur;
-      a.country = country; a.institutionId = institutionId;
+      a.country = country;
+      const relinkInstitution=BankIngestionCore.rebindAccountInstitution(S,id,institutionId);
+      if(!relinkInstitution.ok)return false;
       a.bankRefs = bankRefs.slice();
       if (bankRefs.length === 1) a.bankRef = bankRefs[0]; else delete a.bankRef;
       a.icon = i; a.color = c;
       a.openingBalance = openingBalance;
       if (isLiab) a.openingDebt = openingDebt;
       if (isDebt){ a.creditor = creditor; a.dueDate = dueDate; }
-      if (!hasTx && (countryChanged || instChanged)){
-        S.paymentInstruments.forEach(inst => {
-          if (inst.accountId === id && inst.type === 'debit_card'){
-            inst.country = country;
-            inst.institutionId = institutionId || null;
-          }
-        });
-      }
     } else {
       savedId = uid('a');
       S.accounts.push({
@@ -5272,9 +5269,10 @@ async function saveAccount(id){
     Finance.ensureAllPrimaries();
     return true;
   });
+  hideFinancialRecalcOverlay();
   if (!result.ok){ render(); toast('تعذر الحفظ'); return; }
   closeSheet(); render();
-  toast(id ? 'تم التعديل' : 'تمت الإضافة');
+  toast(accountNeedsRecalc ? 'تم التعديل وإعادة الحساب' : (id ? 'تم التعديل' : 'تمت الإضافة'));
 }
 async function archiveAccount(id){
   if (!canWrite()){ return; }
@@ -6135,7 +6133,7 @@ function openInstrumentSheet(id, presetType, preserve){
       '</select>' + (hasTx ? '<div class="field-hint" style="color:var(--warn)">🔒 العملة مقفلة (توجد معاملات).</div>' : '') + '</div>' +
       '<div class="field"><label>المديونية عند البداية</label>' +
         '<input type="number" inputmode="decimal" id="cardDebt" value="' + (linkedCreditAcc ? linkedCreditAcc.openingDebt : 0) + '">' +
-        '<div class="field-hint">' + (hasTx ? 'مقفل — استخدم "تسوية المديونية".' : 'قيمة الدين عند البداية.') + '</div></div>' +
+        '<div class="field-hint">' + (hasTx ? 'يمكن تعديل المديونية الافتتاحية؛ SANAD سيعيد احتساب رصيد البطاقة. استخدم «تسوية المديونية» لتصحيح الوضع الحالي فقط.' : 'قيمة الدين عند البداية.') + '</div></div>' +
       '<div class="field"><label>حد البطاقة</label>' +
         '<input type="number" inputmode="decimal" id="cardLimit" value="' + (linkedCreditAcc ? linkedCreditAcc.creditLimit : 0) + '"></div>' +
       '<div class="field"><label>حساب السداد الافتراضي (اختياري)</label>' +
@@ -6363,7 +6361,10 @@ async function saveCard(id, presetType){
       toast('إعادة الربط تتطلب حسابًا بنفس البلد والعملة');
       return;
     }
-    showFinancialRecalcOverlay('جاري إعادة ربط البطاقة');
+  }
+  const cardNeedsRecalc=!!(id&&cardHasHistory(id));
+  if(relinkRequested||cardNeedsRecalc){
+    showFinancialRecalcOverlay(relinkRequested?'جاري إعادة ربط البطاقة':'جاري تحديث البطاقة وإعادة الحساب');
     await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,20)));
   }
   const result = await commitCriticalMutation(async () => {
@@ -6388,7 +6389,8 @@ async function saveCard(id, presetType){
             acc.name = name;
             if (!hasTx){ acc.country = country; acc.currency = cardCur; }
             acc.openingDebt = debt;
-            acc.institutionId = institutionId;
+            const relinkInstitution=BankIngestionCore.rebindAccountInstitution(S,acc.id,institutionId);
+            if(!relinkInstitution.ok)return false;
             acc.creditLimit = limit;
             acc.defaultRepaymentAccountId = repayId;
             acc.icon = icon; acc.color = color;
@@ -6412,7 +6414,8 @@ async function saveCard(id, presetType){
             const hasTx = cardHasHistory(id);
             acc.name = name;
             if (!hasTx){ acc.country = country; acc.currency = cardCur; acc.openingBalance = bal; }
-            acc.institutionId = institutionId;
+            const relinkInstitution=BankIngestionCore.rebindAccountInstitution(S,acc.id,institutionId);
+            if(!relinkInstitution.ok)return false;
             acc.icon = icon; acc.color = color;
             acc.ownedByInstrumentId = id;
             accountId = acc.id;
@@ -6479,7 +6482,7 @@ async function saveCard(id, presetType){
   hideFinancialRecalcOverlay();
   if (!result.ok){ render(); toast('تعذر الحفظ'); return; }
   closeSheet(); render();
-  toast(relinkRequested ? 'تمت إعادة ربط البطاقة وإعادة الحساب' : (id ? 'تم التعديل' : 'تمت الإضافة'));
+  toast(relinkRequested ? 'تمت إعادة ربط البطاقة وإعادة الحساب' : (cardNeedsRecalc ? 'تم تعديل البطاقة وإعادة الحساب' : (id ? 'تم التعديل' : 'تمت الإضافة')));
 }
 async function archiveInstrument(id){
   if (!canWrite()){ return; }
