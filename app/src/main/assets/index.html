@@ -70,6 +70,10 @@ main{flex:1;overflow-y:auto;padding:0 16px 120px;-webkit-overflow-scrolling:touc
 .wallet-hero .wh-name{flex:1;font-size:14px;font-weight:500}
 .wallet-hero .wh-cur{font-size:11.5px;opacity:.85;margin-top:2px}
 .wallet-hero .wh-bal{font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;position:relative;z-index:1}
+.wallet-hero .wh-balance-row{display:flex;align-items:center;gap:10px;position:relative;z-index:3}
+.wallet-hero .wh-balance-row .wh-bal{flex:0 1 auto}
+.wallet-hero .amount-eye{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:rgba(255,255,255,.14);color:#fff;font-size:17px;position:relative;z-index:4}
+.wallet-hero .amount-eye:active{background:rgba(255,255,255,.24)}
 .wallet-hero .wh-sub{font-size:11.5px;opacity:.85;margin-top:4px;position:relative;z-index:1}
 .wallet-hero .wh-link{position:absolute;top:16px;inset-inline-end:16px;font-size:11.5px;opacity:.9;z-index:3;cursor:pointer;padding:4px 8px;border-radius:8px}
 .wallet-hero.masked .wh-bal{filter:blur(9px);user-select:none}
@@ -966,9 +970,11 @@ function softTint(hex,alpha){
   const {r,g,b} = hexToRgb(hex);
   return `rgba(${r},${g},${b},${alpha})`;
 }
-function amtText(val){ return S.settings.hideAmounts ? '•••' : fmt(val); }
-function amtFull(val, cur){ return S.settings.hideAmounts ? '•••' : (fmt(val) + ' ' + Finance.curSymbol(cur)); }
-function viewRootClass(){ return S.settings.hideAmounts ? 'hide-amt' : ''; }
+let sessionAmountsRevealed=false;
+function amountsMasked(){return !!(S.settings.hideAmounts&&!sessionAmountsRevealed);}
+function amtText(val){ return amountsMasked() ? '•••' : fmt(val); }
+function amtFull(val, cur){ return amountsMasked() ? '•••' : (fmt(val) + ' ' + Finance.curSymbol(cur)); }
+function viewRootClass(){ return amountsMasked() ? 'hide-amt' : ''; }
 
 function isPreviewDeniedError(err){
   if (!err) return false;
@@ -1815,7 +1821,7 @@ function viewHome(){
       (canWrite() ? '<button type="button" class="btn primary" data-act="account-add-menu" style="margin-top:16px;max-width:220px;margin-inline:auto">+ إضافة حساب</button>' : '') +
       '</div>';
   }
-  const maskCls = S.settings.hideAmounts ? 'masked' : '';
+  const maskCls = amountsMasked() ? 'masked' : '';
   /* V8.8.4.3 FIX 12: hero uses Primary (independent of transaction default) */
   const defaultAcc = Finance.getPrimaryAccount(country) || Finance.getDefaultAccount(country);
   let heroHtml = '';
@@ -1824,13 +1830,16 @@ function viewHome(){
     const bal = heroBalanceView ? heroBalanceView.display : Finance.accountBalance(defaultAcc.id);
     const cInfo = countryInfo(defaultAcc.country);
     const inst = Finance.getInstitution(defaultAcc.institutionId);
+    const quickAmountEye=S.settings.hideAmounts
+      ? '<button type="button" class="amount-eye" data-sanad-act="amount-visibility" aria-label="'+(amountsMasked()?'إظهار المبالغ':'إخفاء المبالغ')+'" title="'+(amountsMasked()?'إظهار المبالغ':'إخفاء المبالغ')+'">'+(amountsMasked()?'👁️':'🙈')+'</button>'
+      : '';
     heroHtml = '<div class="wallet-hero ' + maskCls + '" data-account-open="' + defaultAcc.id + '">' +
       '<div class="wh-link" data-act="go-accounts">كل الحسابات ›</div>' +
       '<div class="wh-top"><div class="wh-ico">' + defaultAcc.icon + '</div>' +
         '<div style="flex:1"><div class="wh-name">' + cInfo.flag + ' ' + esc(defaultAcc.name) + '</div>' +
           '<div class="wh-cur">' + (inst ? esc(inst.name) + ' · ' : '') + Finance.curInfo(defaultAcc.currency).name + '</div></div>' +
       '</div>' +
-      '<div class="wh-bal amt-val">' + amtText(bal) + ' <span style="font-size:14px;opacity:.85">' + Finance.curSymbol(defaultAcc.currency) + '</span></div>' +
+      '<div class="wh-balance-row"><div class="wh-bal amt-val">' + amtText(bal) + ' <span style="font-size:14px;opacity:.85">' + Finance.curSymbol(defaultAcc.currency) + '</span></div>' + quickAmountEye + '</div>' +
       '<div class="wh-sub">الحساب الأساسي في ' + esc(cInfo.name) + '</div>' +
     '</div>';
   } else {
@@ -7097,6 +7106,7 @@ function shiftMonth(step){
 async function toggleMask(){
   if (!canWrite()){ return; }
   S.settings.hideAmounts = !S.settings.hideAmounts;
+  sessionAmountsRevealed=false;
   const ok = await persist();
   if (!ok){ S.settings.hideAmounts = !S.settings.hideAmounts; toast('تعذر الحفظ'); return; }
   syncNativeNotifications();
@@ -8358,8 +8368,25 @@ const SanadSecurity = {
   async recovery(){const code=prompt(SanadI18n.lang==='en'?'Enter recovery code':'أدخل رمز الاسترداد');if(!code)return;let got='';try{got=(this.cfg.recoveryKdf==='PBKDF2-SHA256'&&this.cfg.recoverySalt)?await this.recoveryDigest(code,this.cfg.recoverySalt,this.cfg.recoveryIterations):await this.hash(this.normalizeRecovery(code));}catch(e){console.warn('recovery verify failed',e);}if(got&&got===this.cfg.recoveryHash){const next={enabled:false,authMode:null,credentialId:null,recoveryHash:null,recoverySalt:null,recoveryKdf:null,recoveryIterations:0,storageUnavailable:false};if(!await SanadExtStorage.set('security',next)){toast('تعذر حفظ إعدادات القفل');return;}this.cfg=next;this.setMarker(false);this.finishUnlock();render();toast('تم فتح التطبيق وإيقاف القفل');}else toast('رمز غير صحيح');}
 };
 
+const SanadAmountPrivacy = {
+  async toggle(){
+    if(!S.settings.hideAmounts){sessionAmountsRevealed=false;render();return;}
+    if(sessionAmountsRevealed){sessionAmountsRevealed=false;render();return;}
+    if(!SanadSecurity.supported()){toast('التحقق بالبصمة / قفل الجهاز غير متاح');return;}
+    const ok=await SanadSecurity.authorize(SanadI18n.lang==='en'?'Reveal amounts':'إظهار المبالغ');
+    if(!ok){toast('تعذر التحقق');return;}
+    sessionAmountsRevealed=true;
+    render();
+  },
+  onBackground(){
+    if(!sessionAmountsRevealed)return;
+    sessionAmountsRevealed=false;
+    if(S.ready)render();
+  }
+};
+
 window.sanadDeviceAuthResult=function(ok){try{SanadSecurity.nativeResult(!!ok);}catch(_){}};
-window.sanadAppBackgrounded=function(ts){try{SanadSecurity.onBackground(ts);}catch(_){}};
+window.sanadAppBackgrounded=function(ts){try{SanadAmountPrivacy.onBackground();}catch(_){}try{SanadSecurity.onBackground(ts);}catch(_){}};
 window.sanadAppForegrounded=function(ts){try{SanadSecurity.onForeground(ts);}catch(_){}};
 
 const SanadCloud = {
@@ -9242,7 +9269,7 @@ const SanadV9 = {
   settingsHtml(){const lang=S.settings.language==='en'?'en':'ar',mode=SanadTheme.mode(),sec=SanadSecurity.cfg.enabled?'مفعّل':'غير مفعّل',langDesc=lang==='en'?'Arabic / English':'العربية / الإنجليزية',enLabel=lang==='en'?'English':'الإنجليزية';return '<div class="sec"><h2>اللغة والمظهر</h2></div><div class="card feature-card"><div class="feature-row"><div><b>🌐 اللغة</b><span>'+langDesc+'</span></div><div class="seg"><button type="button" class="'+(lang==='ar'?'on':'')+'" data-sanad-act="lang" data-value="ar">العربية</button><button type="button" class="'+(lang==='en'?'on':'')+'" data-sanad-act="lang" data-value="en">'+enLabel+'</button></div></div><div class="feature-row"><div><b>🎨 المظهر</b><span>فاتح، داكن أو حسب الجهاز</span></div><div class="seg"><button type="button" class="'+(mode==='light'?'on':'')+'" data-sanad-act="theme" data-value="light">☀️</button><button type="button" class="'+(mode==='dark'?'on':'')+'" data-sanad-act="theme" data-value="dark">🌙</button><button type="button" class="'+(mode==='system'?'on':'')+'" data-sanad-act="theme" data-value="system">◐</button></div></div></div>'+'<div class="sec"><h2>الأمان والخصوصية</h2></div><div class="list"><div class="list-item" data-sanad-act="toggle-security"><div class="li-ico">🔐</div><div class="li-body"><b>قفل بالبصمة / الجهاز</b><span>'+sec+(SanadSecurity.supported()?'':' · يحتاج HTTPS')+'</span></div><div class="li-arrow">›</div></div></div>'+SanadBankInbox.settingsHtml()+'<div class="sec"><h2>السحابة والعائلة</h2></div><div class="list"><div class="list-item" aria-disabled="true"><div class="li-ico">☁️</div><div class="li-body"><b>مؤجل إلى V9.1</b><span>معطّل في النسخة المحلية المستقرة</span></div></div></div>'+'<div class="sec"><h2>نسخة احتياطية كاملة</h2></div><button type="button" class="btn" data-sanad-act="full-export">📦 تصدير كامل مع الفواتير</button><button type="button" class="btn" data-sanad-act="full-import">📥 استيراد نسخة كاملة</button>';},
   async setLanguage(lang){if(!I18nCore.isValidLanguage(lang)||!canWrite())return;const prev=S.settings.language;S.settings.language=lang;const ok=await persist();if(!ok){S.settings.language=prev;return;}render();requestAnimationFrame(()=>SanadI18n.apply(document));},
   async afterStart(fromUnlock=false){SanadTheme.apply();SanadI18n.apply();if(SanadExtStorage.mode==='error')toast('تنبيه: تخزين المرفقات غير متاح مؤقتاً');const validIds=new Set(S.transactions.map(t=>t.id));await SanadExtStorage.pruneReceiptOrphans(validIds);await SanadFamily.pruneMissingTransactions();if(SecurityCrypto.shouldShowLockOverlay({enabled:SanadSecurity.cfg.enabled,unlocked:SanadSecurity.unlocked})){SanadSecurity.show();return;}await SanadBankInbox.refresh();hideSanadBootSplash();},
-  async click(el){const a=el.dataset.sanadAct,v=el.dataset.value;if(a==='lang')return this.setLanguage(v);if(a==='theme')return SanadTheme.set(v);if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable();if(a==='unlock')return SanadSecurity.unlock();if(a==='recovery-unlock')return SanadSecurity.recovery();if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;}if(a==='remove-receipt')return SanadReceipts.removeCurrent();if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);if(a==='firebase-config')return SanadCloud.openConfig();if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||'');if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle();if(a==='sync-now')return SanadCloud.syncNow();if(a==='verify-phone')return SanadCloud.verifyPhoneSheet();if(a==='send-phone-code')return SanadCloud.sendPhoneCode();if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();if(a==='open-family')return SanadFamily.open();if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||'');if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||'');if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();if(a==='bank-access')return SanadBankInbox.openAccess();if(a==='bank-auto-toggle')return SanadBankInbox.toggleAuto();if(a==='bank-sync')return SanadBankInbox.syncNow();if(a==='bank-sms-history')return SanadBankInbox.historicalImporting?SanadBankInbox.cancelHistoricalImport('user'):SanadBankInbox.openHistoricalImportPicker();if(a==='bank-sms-range'){closeSheet();return SanadBankInbox.importHistoricalSms(Number(el.dataset.days)||0);}if(a==='bank-sms-date')return SanadBankInbox.importHistoricalFromDate();if(a==='bank-inbox')return SanadBankInbox.open();if(a==='bank-refresh')return SanadBankInbox.open();if(a==='bank-approve')return SanadBankInbox.approve(el.dataset.id);if(a==='bank-fix')return SanadBankInbox.openCorrection(el.dataset.id);if(a==='bank-fix-save')return SanadBankInbox.saveCorrection(el.dataset.id);if(a==='bank-dismiss')return SanadBankInbox.dismiss(el.dataset.id);if(a==='full-export')return SanadFullBackup.export();if(a==='full-import')return SanadFullBackup.importPicker();}
+  async click(el){const a=el.dataset.sanadAct,v=el.dataset.value;if(a==='lang')return this.setLanguage(v);if(a==='theme')return SanadTheme.set(v);if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable();if(a==='amount-visibility')return SanadAmountPrivacy.toggle();if(a==='unlock')return SanadSecurity.unlock();if(a==='recovery-unlock')return SanadSecurity.recovery();if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;}if(a==='remove-receipt')return SanadReceipts.removeCurrent();if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);if(a==='firebase-config')return SanadCloud.openConfig();if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||'');if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle();if(a==='sync-now')return SanadCloud.syncNow();if(a==='verify-phone')return SanadCloud.verifyPhoneSheet();if(a==='send-phone-code')return SanadCloud.sendPhoneCode();if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();if(a==='open-family')return SanadFamily.open();if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||'');if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||'');if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();if(a==='bank-access')return SanadBankInbox.openAccess();if(a==='bank-auto-toggle')return SanadBankInbox.toggleAuto();if(a==='bank-sync')return SanadBankInbox.syncNow();if(a==='bank-sms-history')return SanadBankInbox.historicalImporting?SanadBankInbox.cancelHistoricalImport('user'):SanadBankInbox.openHistoricalImportPicker();if(a==='bank-sms-range'){closeSheet();return SanadBankInbox.importHistoricalSms(Number(el.dataset.days)||0);}if(a==='bank-sms-date')return SanadBankInbox.importHistoricalFromDate();if(a==='bank-inbox')return SanadBankInbox.open();if(a==='bank-refresh')return SanadBankInbox.open();if(a==='bank-approve')return SanadBankInbox.approve(el.dataset.id);if(a==='bank-fix')return SanadBankInbox.openCorrection(el.dataset.id);if(a==='bank-fix-save')return SanadBankInbox.saveCorrection(el.dataset.id);if(a==='bank-dismiss')return SanadBankInbox.dismiss(el.dataset.id);if(a==='full-export')return SanadFullBackup.export();if(a==='full-import')return SanadFullBackup.importPicker();}
 };
 
 /* ===== non-destructive wrappers around the stable V8.9.1 core ===== */
