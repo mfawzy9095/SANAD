@@ -95,6 +95,23 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
 }
 
 
+
+// Historical re-import must never replace a newer reported wallet balance with an older observation.
+{
+  const s={institutions:[],accounts:[
+    {id:'wallet-observed',country:'UAE',name:'Wallet',type:'ewallet',currency:'AED',openingBalance:8.50,observedBalance:0,observedBalanceAt:2000,archived:false}
+  ],paymentInstruments:[],transactions:[],beneficiaries:[]};
+  const applied=I.applyPlan(s,{
+    action:'auto-save',
+    create:{institutions:[],accounts:[],instruments:[],beneficiaries:[]},
+    transaction:null,
+    observations:[{accountId:'wallet-observed',field:'observedBalance',value:8.50,at:1000}]
+  });
+  assert.strictEqual(applied,true);
+  assert.strictEqual(s.accounts[0].observedBalance,0);
+  assert.strictEqual(s.accounts[0].observedBalanceAt,2000);
+}
+
 // A new debit card on a known bank account creates only the missing instrument.
 {
   const p=P.parse({id:'n3',postedAt:2500,text:'تمت عملية شراء بقيمة AED 5.10 لدى NMC MED CEN SHJ BR ,SHARJAH باستخدام بطاقة خصم تنتهي أرقامها بـ 3993. الرصيد المتوفر هو AED 2,684.31.'});
