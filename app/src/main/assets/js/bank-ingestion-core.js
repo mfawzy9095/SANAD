@@ -438,6 +438,72 @@
     if(ap&&bp)return ap===bp;
     return false;
   }
+  function mergeDuplicateAccount(state,fromAccountId,toAccountId){
+    if(!state||fromAccountId===toAccountId)return {ok:false,reason:'invalid-merge'};
+    const accounts=arr(state.accounts),instruments=arr(state.paymentInstruments),institutions=arr(state.institutions);
+    const from=accounts.find(a=>a&&a.id===fromAccountId&&!a.archived)||null;
+    const to=accounts.find(a=>a&&a.id===toAccountId&&!a.archived)||null;
+    if(!from||!to)return {ok:false,reason:'account-not-found'};
+    if(!['bank','ewallet'].includes(from.type)||from.type!==to.type)return {ok:false,reason:'account-type-mismatch'};
+    if(from.country!==to.country||from.currency!==to.currency)return {ok:false,reason:'country-or-currency-mismatch'};
+    const fi=from.institutionId?institutions.find(i=>i&&i.id===from.institutionId)||null:null;
+    const ti=to.institutionId?institutions.find(i=>i&&i.id===to.institutionId)||null:null;
+    if(fi&&ti&&!sameInstitutionSource(state,fi,ti))return {ok:false,reason:'institution-mismatch'};
+    const directTransfer=arr(state.transactions).find(t=>t&&t.type==='transfer'&&(
+      (t.fromAccountId===from.id&&t.toAccountId===to.id)||
+      (t.fromAccountId===to.id&&t.toAccountId===from.id)
+    ));
+    if(directTransfer)return {ok:false,reason:'direct-transfer-between-duplicates'};
+    const targetHadHistory=arr(state.transactions).some(t=>t&&(t.accountId===to.id||t.fromAccountId===to.id||t.toAccountId===to.id))||
+      arr(state.recurring).some(r=>r&&r.accountId===to.id);
+    if(!targetHadHistory&&Math.abs(Number(to.openingBalance)||0)<=0.001&&Math.abs(Number(from.openingBalance)||0)>0.001){
+      to.openingBalance=Number(from.openingBalance)||0;
+    }
+    const refs=Array.from(new Set([].concat(to.bankRefs||[],to.bankRef||[],from.bankRefs||[],from.bankRef||[]).filter(Boolean).map(String)));
+    if(refs.length)to.bankRefs=refs.slice(0,12);
+    const fromObsAt=Number(from.observedBalanceAt)||0,toObsAt=Number(to.observedBalanceAt)||0;
+    if(from.observedBalance!=null&&(to.observedBalance==null||fromObsAt>=toObsAt)){
+      to.observedBalance=from.observedBalance;
+      to.observedBalanceAt=from.observedBalanceAt||null;
+    }
+    let movedTransactions=0,movedRecurring=0,movedInstruments=0;
+    for(const tx of arr(state.transactions)){
+      if(!tx)continue;
+      let touched=false;
+      if(tx.accountId===from.id){tx.accountId=to.id;touched=true;}
+      if(tx.fromAccountId===from.id){tx.fromAccountId=to.id;tx.fromCountry=to.country;tx.fromCurrency=to.currency;touched=true;}
+      if(tx.toAccountId===from.id){tx.toAccountId=to.id;tx.toCountry=to.country;tx.toCurrency=to.currency;touched=true;}
+      if(touched)movedTransactions++;
+    }
+    for(const rec of arr(state.recurring)){
+      if(rec&&rec.accountId===from.id){rec.accountId=to.id;rec.currency=to.currency;movedRecurring++;}
+    }
+    for(const instrument of instruments){
+      if(instrument&&instrument.accountId===from.id){
+        instrument.accountId=to.id;
+        instrument.institutionId=to.institutionId||instrument.institutionId||null;
+        instrument.country=to.country;
+        movedInstruments++;
+      }
+    }
+    for(const rule of arr(state.settings&&state.settings.bankLearningRules)){
+      if(!rule)continue;
+      if(rule.accountId===from.id)rule.accountId=to.id;
+      if(rule.fromAccountId===from.id)rule.fromAccountId=to.id;
+      if(rule.targetAccountId===from.id)rule.targetAccountId=to.id;
+      rule.updatedAt=Date.now();
+    }
+    if(state.settings){
+      for(const key of ['defaultAccountByCountry','primaryAccountByCountry']){
+        const map=state.settings[key];
+        if(map&&typeof map==='object'){
+          for(const c of Object.keys(map))if(map[c]===from.id)map[c]=to.id;
+        }
+      }
+    }
+    state.accounts=accounts.filter(a=>a&&a.id!==from.id);
+    return {ok:true,fromAccountId:from.id,toAccountId:to.id,movedTransactions,movedRecurring,movedInstruments};
+  }
   function mergeDuplicateInstrument(state,fromInstrumentId,toInstrumentId){
     if(!state||fromInstrumentId===toInstrumentId)return {ok:false,reason:'invalid-merge'};
     const instruments=arr(state.paymentInstruments),accounts=arr(state.accounts),institutions=arr(state.institutions);
@@ -723,6 +789,6 @@
   }
 
   return Object.freeze({
-    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindInstrumentAccount,mergeDuplicateInstrument,learnFromApproval
+    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindInstrumentAccount,mergeDuplicateAccount,mergeDuplicateInstrument,learnFromApproval
   });
 });

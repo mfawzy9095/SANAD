@@ -292,6 +292,52 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(rr.targetAccount.id,'credit');
 }
 
+// Duplicate bank accounts can be merged into the chosen canonical account without summing duplicate baselines.
+{
+  const s={institutions:[{id:'enbd1',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd'},{id:'enbd2',name:'ENBD',country:'UAE',bankRegistryId:'emirates-nbd'}],accounts:[
+    {id:'dup',institutionId:'enbd1',country:'UAE',name:'Duplicate',type:'bank',currency:'AED',openingBalance:100,openingDebt:0,creditLimit:0,archived:false,bankRefs:['1801'],observedBalance:9100,observedBalanceAt:20},
+    {id:'keep',institutionId:'enbd2',country:'UAE',name:'Current',type:'bank',currency:'AED',openingBalance:100,openingDebt:0,creditLimit:0,archived:false,bankRefs:['012XXX50XXX01'],observedBalance:100,observedBalanceAt:10}
+  ],paymentInstruments:[{id:'d1',accountId:'dup',institutionId:'enbd1',country:'UAE',type:'debit_card',last4:'3993',archived:false}],transactions:[
+    {id:'salary',type:'income',accountId:'dup',amount:9000,walletAmount:9000,currency:'AED',fxRate:1,cat:'salary',note:'Salary',tags:[],date:'2026-10-01',created:1}
+  ],recurring:[{id:'rr',type:'expense',accountId:'dup',amount:20,currency:'AED',active:true}],settings:{defaultAccountByCountry:{UAE:'dup'},primaryAccountByCountry:{UAE:'dup'},bankLearningRules:[{id:'lr',accountId:'dup'}]}};
+  const out=I.mergeDuplicateAccount(s,'dup','keep');
+  assert.strictEqual(out.ok,true);
+  assert.strictEqual(s.accounts.length,1);
+  assert.strictEqual(s.accounts[0].id,'keep');
+  assert.strictEqual(s.accounts[0].openingBalance,100); // do not add duplicate baseline
+  assert.deepStrictEqual(s.accounts[0].bankRefs.sort(),['012XXX50XXX01','1801'].sort());
+  assert.strictEqual(s.accounts[0].observedBalance,9100);
+  assert.strictEqual(s.transactions[0].accountId,'keep');
+  assert.strictEqual(s.paymentInstruments[0].accountId,'keep');
+  assert.strictEqual(s.recurring[0].accountId,'keep');
+  assert.strictEqual(s.settings.defaultAccountByCountry.UAE,'keep');
+  assert.strictEqual(s.settings.primaryAccountByCountry.UAE,'keep');
+  assert.strictEqual(s.settings.bankLearningRules[0].accountId,'keep');
+}
+
+// If the chosen canonical account is empty, it may inherit the duplicate's baseline.
+{
+  const s={institutions:[{id:'p1',name:'du Pay',country:'UAE',providerRegistryId:'du-pay'}],accounts:[
+    {id:'dup',institutionId:'p1',country:'UAE',name:'du Pay old',type:'ewallet',currency:'AED',openingBalance:40,openingDebt:0,creditLimit:0,archived:false},
+    {id:'keep',institutionId:'p1',country:'UAE',name:'du Pay',type:'ewallet',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:0,archived:false}
+  ],paymentInstruments:[],transactions:[],recurring:[],settings:{}};
+  const out=I.mergeDuplicateAccount(s,'dup','keep');
+  assert.strictEqual(out.ok,true);
+  assert.strictEqual(s.accounts[0].openingBalance,40);
+}
+
+// Never collapse a real transfer between the two accounts into a self-transfer.
+{
+  const s={institutions:[{id:'b',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd'}],accounts:[
+    {id:'a1',institutionId:'b',country:'UAE',name:'A1',type:'bank',currency:'AED',openingBalance:0,archived:false},
+    {id:'a2',institutionId:'b',country:'UAE',name:'A2',type:'bank',currency:'AED',openingBalance:0,archived:false}
+  ],paymentInstruments:[],transactions:[{id:'t',type:'transfer',fromAccountId:'a1',toAccountId:'a2',fromAmount:1,toAmount:1,fromCurrency:'AED',toCurrency:'AED'}],recurring:[],settings:{}};
+  const out=I.mergeDuplicateAccount(s,'a1','a2');
+  assert.strictEqual(out.ok,false);
+  assert.strictEqual(out.reason,'direct-transfer-between-duplicates');
+  assert.strictEqual(s.accounts.length,2);
+}
+
 // Duplicate credit cards can be merged without losing transaction history or learning rules.
 {
   const s={institutions:[{id:'ei1',name:'Emirates Islamic',country:'UAE',bankRegistryId:'emirates-islamic'},{id:'ei2',name:'Emirates Islamic Bank',country:'UAE',bankRegistryId:'emirates-islamic'}],accounts:[
