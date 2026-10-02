@@ -576,7 +576,7 @@
   function normalize(value){
     return String(value==null?'':value).toLowerCase()
       .replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d))
-      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .normalize('NFD').replace(/[\u0300-\u036f\u064b-\u065f\u0670]/g,'')
       .replace(/[إأآ]/g,'ا').replace(/ى/g,'ي').replace(/ؤ/g,'و').replace(/ئ/g,'ي')
       .replace(/[^a-z0-9\u0600-\u06ff]+/g,' ').replace(/\s+/g,' ').trim();
   }
