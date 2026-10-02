@@ -168,6 +168,40 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.existingTransactionId,'old');
 }
 
+// Same transaction arriving once as a notification and once from SMS history must dedupe
+// even when the native event ids differ and the message has no transaction reference.
+{
+  const base=P.parse({id:'notif-1',postedAt:700000,title:'ADCB',text:'Purchase AED 20.00 at TEST STORE using debit card ending 7777. Available balance is AED 80.00'});
+  const s={institutions:[{id:'adcb-i',name:'ADCB',country:'UAE',bankRegistryId:'adcb'}],accounts:[
+    {id:'adcb-a',institutionId:'adcb-i',country:'UAE',name:'ADCB',type:'bank',currency:'AED',openingBalance:100,openingDebt:0,creditLimit:0,archived:false}
+  ],paymentInstruments:[{id:'adcb-c',accountId:'adcb-a',institutionId:'adcb-i',country:'UAE',type:'debit_card',last4:'7777',archived:false}],transactions:[]};
+  const first=I.plan(base,s,{uid});
+  assert.strictEqual(first.action,'auto-save');
+  I.applyPlan(s,first);
+  const fromSms=P.parse({id:'sms-42',postedAt:700050,title:'ADCB',text:'Purchase AED 20.00 at TEST STORE using debit card ending 7777. Available balance is AED 80.00'});
+  const duplicate=I.plan(fromSms,s,{uid});
+  assert.strictEqual(duplicate.action,'duplicate');
+  assert.strictEqual(s.transactions.length,1);
+}
+
+// Existing same-source card must never be auto-created a second time if routing is inconsistent.
+{
+  const p=P.parse({id:'card-conflict',postedAt:750000,title:'Emirates Islamic',text:'عملية دفع ببطاقة الائتمان المنتهية بالرقم: 0308 لدى: TEST STORE المبلغ: AED 2.50 التاريخ: 01/10/2026, 06:44 الحد المتوفر: 457.04 AED'});
+  const s={institutions:[
+    {id:'ei-old',name:'Emirates Islamic',country:'UAE',bankRegistryId:'emirates-islamic'},
+    {id:'ei-dup',name:'Emirates Islamic Bank',country:'UAE',bankRegistryId:'emirates-islamic'}
+  ],accounts:[{id:'ei-credit',institutionId:'ei-dup',country:'UAE',name:'EI Credit',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:0,archived:false}],
+  paymentInstruments:[{id:'ei0308',accountId:'ei-credit',institutionId:'ei-dup',country:'UAE',type:'credit_card',last4:'0308',archived:false}],
+  transactions:[],beneficiaries:[]};
+  // Corrupt the instrument link enough to force discovery rather than exact routing,
+  // but keep an equivalent source/card in state. The planner must review, never duplicate.
+  s.paymentInstruments[0].accountId='missing-account';
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'review');
+  assert.strictEqual(plan.reason,'existing-instrument-conflict');
+  assert.strictEqual((plan.create.instruments||[]).length,0);
+}
+
 // Multiple same-bank asset accounts without an exact account/card match must never auto-create/link a new debit card.
 {
   const p=P.parse({id:'amb1',postedAt:8000,text:'تمت عملية شراء بقيمة AED 5.10 لدى TEST SHOP باستخدام بطاقة خصم تنتهي أرقامها بـ 5555. الرصيد المتوفر هو AED 100.00.'});

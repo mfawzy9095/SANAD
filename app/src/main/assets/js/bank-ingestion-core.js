@@ -90,13 +90,58 @@
       return String((a&&a.id)||'').localeCompare(String((b&&b.id)||''));
     });
   }
+  function normalizedText(value){
+    return String(value||'').toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g,' ').replace(/\s+/g,' ').trim();
+  }
+  function expectedTxType(kind){
+    if(['purchase','bill_payment','mobile_recharge'].includes(kind))return 'expense';
+    if(['deposit','salary','refund','incoming_transfer'].includes(kind))return 'income';
+    if(kind==='outgoing_transfer')return 'external_transfer';
+    if(['internal_transfer','card_repayment','cash_withdrawal'].includes(kind))return 'transfer';
+    return null;
+  }
+  function semanticDuplicateOf(parsed,state){
+    const expected=expectedTxType(parsed&&parsed.kind);
+    const ts=Number(parsed&&parsed.postedAt);
+    if(!expected||!Number.isFinite(ts)||ts<=0)return null;
+    const amount=round2(parsed.amount),currency=String(parsed.currency||'').toUpperCase();
+    const merchantKey=normalizedText(parsed.merchant||parsed.beneficiaryName||'');
+    const instruments=arr(state&&state.paymentInstruments),accounts=arr(state&&state.accounts);
+    return arr(state&&state.transactions).find(t=>{
+      if(!t||t.type!==expected)return false;
+      const created=Number(t.created);
+      if(!Number.isFinite(created)||Math.abs(created-ts)>120000)return false;
+      if(parsed.bankId&&String(t.bankId||'')!==String(parsed.bankId))return false;
+      if(parsed.providerId&&String(t.providerId||'')!==String(parsed.providerId))return false;
+      const txAmount=round2(expected==='expense'||expected==='income'?t.amount:t.fromAmount);
+      const txCurrency=String(expected==='expense'||expected==='income'?t.currency:t.fromCurrency||'').toUpperCase();
+      if(txAmount!==amount||txCurrency!==currency)return false;
+      if(parsed.cardLast4){
+        const inst=instruments.find(i=>i&&i.id===t.instrumentId);
+        if(!inst||String(inst.last4||'')!==String(parsed.cardLast4))return false;
+      }
+      if(parsed.accountRef){
+        const accountId=t.accountId||t.fromAccountId||null;
+        const account=accounts.find(a=>a&&a.id===accountId);
+        const refs=account?[].concat(account.bankRefs||[],account.bankRef||[],account.accountRef||[],account.accountLast4||[]):[];
+        const wanted=String(parsed.accountRef||'').replace(/[^A-Za-z0-9Xx*]/g,'').toUpperCase();
+        if(wanted&&!refs.some(r=>String(r||'').replace(/[^A-Za-z0-9Xx*]/g,'').toUpperCase()===wanted))return false;
+      }
+      if(merchantKey){
+        const noteKey=normalizedText(t.note||'');
+        if(!noteKey||(!noteKey.includes(merchantKey)&&!merchantKey.includes(noteKey)))return false;
+      }
+      return true;
+    })||null;
+  }
   function duplicateOf(parsed,state){
     const key=MessageCore.dedupeKey(parsed);
-    return arr(state&&state.transactions).find(t=>
+    const exact=arr(state&&state.transactions).find(t=>
       (parsed.transactionRef&&t.bankTransactionRef===parsed.transactionRef) ||
       (parsed.eventId&&t.bankImportEventId===parsed.eventId) ||
       (key&&t.bankImportKey===key)
     )||null;
+    return exact||semanticDuplicateOf(parsed,state);
   }
   function observedAfter(parsed){
     if(num(parsed.availableBalance)!=null)return round2(parsed.availableBalance);
@@ -305,6 +350,28 @@
     }
 
     if(parsed.kind==='purchase'&&parsed.cardLast4&&parsed.cardType){
+      const institutionBank=institutionBankId(institution);
+      const institutionProvider=institutionProviderId(institution);
+      const equivalentExisting=draft.paymentInstruments.filter(inst=>{
+        if(!inst||inst.archived||String(inst.last4||'')!==String(parsed.cardLast4)||inst.type!==parsed.cardType)return false;
+        const linked=draft.accounts.find(a=>a&&a.id===inst.accountId)||null;
+        if(linked&&linked.country!==countryForParsed(parsed))return false;
+        const sourceInst=draft.institutions.find(i=>i&&i.id===(inst.institutionId||(linked&&linked.institutionId)))||null;
+        if(!sourceInst)return inst.institutionId===institution.id||(linked&&linked.institutionId===institution.id);
+        const sourceBank=institutionBankId(sourceInst),sourceProvider=institutionProviderId(sourceInst);
+        if(institutionBank&&sourceBank)return institutionBank===sourceBank;
+        if(institutionProvider&&sourceProvider)return institutionProvider===sourceProvider;
+        return sourceInst.id===institution.id;
+      });
+      if(equivalentExisting.length){
+        return {
+          action:'review',
+          reason:equivalentExisting.length===1?'existing-instrument-conflict':'ambiguous-existing-instruments',
+          confidence:0,
+          existingInstrumentIds:equivalentExisting.map(x=>x.id),
+          create
+        };
+      }
       if(parsed.cardType==='credit_card'){
         const acc=makeCreditAccount(parsed,institution.id,uid);
         if(!acc)return {action:'review',reason:'credit-discovery-incomplete',confidence:0};
@@ -384,6 +451,6 @@
   }
 
   return Object.freeze({
-    autoEligible,duplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications
+    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications
   });
 });
