@@ -5902,7 +5902,7 @@ function openInstrumentSheet(id, presetType, preserve){
           '<option value="' + c.code + '"' + ((linkedCreditAcc ? linkedCreditAcc.currency : 'AED') === c.code ? ' selected' : '') + '>' + c.flag + ' ' + c.name + '</option>').join('') +
       '</select>' + (hasTx ? '<div class="field-hint" style="color:var(--warn)">🔒 العملة مقفلة (توجد معاملات).</div>' : '') + '</div>' +
       '<div class="field"><label>المديونية عند البداية</label>' +
-        '<input type="number" inputmode="decimal" id="cardDebt" value="' + (linkedCreditAcc ? linkedCreditAcc.openingDebt : 0) + '" ' + (hasTx ? 'disabled' : '') + '>' +
+        '<input type="number" inputmode="decimal" id="cardDebt" value="' + (linkedCreditAcc ? linkedCreditAcc.openingDebt : 0) + '">' +
         '<div class="field-hint">' + (hasTx ? 'مقفل — استخدم "تسوية المديونية".' : 'قيمة الدين عند البداية.') + '</div></div>' +
       '<div class="field"><label>حد البطاقة</label>' +
         '<input type="number" inputmode="decimal" id="cardLimit" value="' + (linkedCreditAcc ? linkedCreditAcc.creditLimit : 0) + '"></div>' +
