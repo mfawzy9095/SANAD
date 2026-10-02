@@ -271,4 +271,15 @@ function process(text,input,state){
   );
 })();
 
+
+(function quickAmountRevealRequiresDeviceAuthAndResets(){
+  const html=fs.readFileSync(path.join(__dirname,'../../main/assets/index.html'),'utf8');
+  assert.ok(html.includes('let sessionAmountsRevealed=false;'),'quick reveal must be session-only');
+  assert.ok(html.includes('function amountsMasked(){return !!(S.settings.hideAmounts&&!sessionAmountsRevealed);}'),'persistent hideAmounts must remain the source of truth');
+  assert.ok(html.includes('data-sanad-act="amount-visibility"'),'home hero must expose the quick privacy eye');
+  assert.ok(html.includes("const ok=await SanadSecurity.authorize(SanadI18n.lang==='en'?'Reveal amounts':'إظهار المبالغ');"),'revealing hidden amounts must require device authentication');
+  assert.ok(html.includes("if(a==='amount-visibility')return SanadAmountPrivacy.toggle();"),'privacy eye must be wired to the authenticated toggle');
+  assert.ok(html.includes('window.sanadAppBackgrounded=function(ts){try{SanadAmountPrivacy.onBackground();}catch(_){}'), 'backgrounding must revoke the temporary reveal');
+})();
+
 console.log('bank ingestion schema integration tests: PASS');
