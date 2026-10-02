@@ -1,0 +1,31 @@
+package com.sanad.v9test;
+
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class BankNotificationStoreTest {
+    @Test
+    public void redactsFullPanBeforePersistentInboxStorage() {
+        assertEquals(
+                "Card 4111 XXXX XXXX 1111 purchase AED 25.00",
+                BankNotificationStore.redactSensitiveCardNumbers(
+                        "Card 4111 1111 1111 1111 purchase AED 25.00"));
+        assertEquals(
+                "Card 4111 XXXX XXXX 1111 purchase AED 25.00",
+                BankNotificationStore.redactSensitiveCardNumbers(
+                        "Card 4111111111111111 purchase AED 25.00"));
+    }
+
+    @Test
+    public void doesNotMaskNonPanReferenceNumbers() {
+        assertEquals(
+                "Transaction reference 1234567890123456",
+                BankNotificationStore.redactSensitiveCardNumbers(
+                        "Transaction reference 1234567890123456"));
+        assertEquals(
+                "Card 4578 XXXX XXXX 0308 purchase AED 10.00",
+                BankNotificationStore.redactSensitiveCardNumbers(
+                        "Card 4578 XXXX XXXX 0308 purchase AED 10.00"));
+    }
+}
