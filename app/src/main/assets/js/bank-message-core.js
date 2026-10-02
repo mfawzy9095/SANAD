@@ -86,6 +86,7 @@
       currency:String(base.currency||'AED').toUpperCase(),merchant:base.merchant||'',category:base.category||'other',
       cardLast4:base.cardLast4||null,accountRef:base.accountRef||null,accountSuffix:base.accountSuffix||suffix(base.accountRef),
       transactionRef:base.transactionRef||null,transactionDate:base.transactionDate||null,beneficiaryName:base.beneficiaryName||null,
+      sourceHint:base.sourceHint||String((input&&(input.title||input.sender))||'').trim(),
       fee:base.fee==null?0:Number(base.fee),vat:base.vat==null?0:Number(base.vat),
       availableBalance:base.availableBalance==null?null:Number(base.availableBalance),availableCredit:base.availableCredit==null?null:Number(base.availableCredit),
       raw:String(raw),confidence:Number(base.confidence||0.95)},base);
@@ -148,12 +149,21 @@
     let cardType=null;
     if(/credit\s+card|بطاق\S*\s+الائتمان/i.test(x))cardType='credit_card';
     else if(/debit\s+card|بطاق\S*\s+الخصم/i.test(x))cardType='debit_card';
+    else if(/wallet\s+card|بطاق\S*\s+محفظ/i.test(x))cardType='wallet_card';
     else if(providerId&&card)cardType='wallet_card';
     let merchant='';
     let mm=x.match(/\bat\s+(.+?)(?=\s+(?:on\s+your|using|your\s+available|available\s+balance|transaction\s+id|amount\b)|$)/i);
     if(!mm)mm=x.match(/لدى\s+(.+?)(?=\s+(?:باستخدام|المبلغ|الرصيد|التاريخ)|$)/i);
     if(mm)merchant=mm[1].replace(/\s+/g,' ').trim();
-    const base={bankId,providerId,amount:value,currency,cardLast4:card,cardType,accountRef:acc?normalizeRef(acc):null,merchant};
+    let availableBalance=null,availableCredit=null,beneficiaryName='';
+    const balMatch=x.match(/(?:available\s+balance(?:\s+is|\s*:)?|current\s+balance(?:\s+is|\s*:)?|الرصيد\s+(?:المتوفر|الحالي)\s*(?:هو|:)?)[^A-Za-z0-9-]*([A-Za-z]{3})?\s*(-?[\d,]+(?:\.\d+)?)/i);
+    if(balMatch)availableBalance=amount(balMatch[2]);
+    const creditMatch=x.match(/(?:available\s+credit|available\s+limit|الحد\s+المتوفر)\s*(?:is|هو|:)?[^A-Za-z0-9-]*([A-Za-z]{3})?\s*(-?[\d,]+(?:\.\d+)?)/i);
+    if(creditMatch)availableCredit=amount(creditMatch[2]);
+    let bm=x.match(/(?:transfer(?:red)?|sent)(?:\s+(?:amount\s+of\s+)?)?(?:[A-Za-z]{3}\s*[\d,.]+\s+)?to\s+(.+?)(?=\s+(?:is\s+successfully|was\s+successful|reference|ref\b|tid\b|transaction\s+id|available\s+balance)|[.;]|$)/i);
+    if(!bm)bm=x.match(/(?:تحويل|حول)(?:\s+مبلغ)?(?:\s+[\d,.]+\s*[A-Za-z]{3})?\s+(?:الى|إلى)\s+(.+?)(?=\s+(?:بنجاح|الرقم\s+المرجعي|مرجع|الرصيد)|[.;]|$)/i);
+    if(bm)beneficiaryName=bm[1].replace(/\s+/g,' ').trim();
+    const base={bankId,providerId,amount:value,currency,cardLast4:card,cardType,accountRef:acc?normalizeRef(acc):null,merchant,availableBalance,availableCredit,beneficiaryName};
     if(/salary|payroll|راتب/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'salary',direction:'credit',category:'salary',confidence:sourceKnown?0.90:0.76}),input,raw);
     if(/refund|refunded|reversal|reversed|استرداد|مرتجع/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'refund',direction:'credit',category:'other',confidence:sourceKnown?0.90:0.75}),input,raw);
     if(/recharge|mobile\s+top.?up|airtime|شحن\s+رصيد/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'mobile_recharge',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);

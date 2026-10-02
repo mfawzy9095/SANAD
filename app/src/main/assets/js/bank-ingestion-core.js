@@ -35,6 +35,23 @@
     const hit=Registry.detectProvider?Registry.detectProvider(inst.name||''):null;
     return hit?hit.provider.id:null;
   }
+  function normalizeSource(value){
+    return String(value==null?'':value).toLowerCase()
+      .replace(/[إأآ]/g,'ا').replace(/[^a-z0-9\u0600-\u06ff]+/g,' ').replace(/\s+/g,' ').trim();
+  }
+  function institutionAliases(inst){
+    return [inst&&inst.name].concat(arr(inst&&inst.notificationAliases))
+      .map(normalizeSource)
+      .filter(x=>x&&x.length>=3&&!['bank','wallet','finance','payments','message','messages'].includes(x));
+  }
+  function findCustomInstitutionByHint(state,parsed){
+    const hint=normalizeSource(parsed&&parsed.sourceHint);
+    if(!hint)return null;
+    const matches=arr(state&&state.institutions).filter(inst=>institutionAliases(inst).some(alias=>
+      hint===alias||hint.includes(alias)||(hint.length>=4&&alias.includes(hint))
+    ));
+    return matches.length===1?matches[0]:null;
+  }
   function findInstitution(state,parsed){
     const institutions=arr(state&&state.institutions);
     if(parsed.bankId){
@@ -94,21 +111,22 @@
     }
     return null;
   }
-  function makeAssetAccount(parsed,institutionId,uid,kind){
+  function makeAssetAccount(parsed,institutionId,uid,kind,sourceInstitution){
     const opening=openingBalanceForObserved(parsed);
     if(opening==null)return null;
-    const provider=!!parsed.providerId;
+    const provider=!!parsed.providerId||!!(sourceInstitution&&sourceInstitution.type==='wallet_provider');
     const accountType=provider?'ewallet':'bank';
     const ref=parsed.accountRef||parsed.accountSuffix||null;
+    const display=sourceInstitution&&sourceInstitution.name?sourceInstitution.name:sourceDisplay(parsed);
     const name=provider
-      ? sourceDisplay(parsed)+' Wallet'
-      : sourceDisplay(parsed)+(ref?' • '+String(ref):' Account');
+      ? display+' Wallet'
+      : display+(ref?' • '+String(ref):' Account');
     const out={
       id:uid('a'),institutionId:institutionId||null,country:'UAE',name,
       type:accountType,currency:parsed.currency||'AED',
       openingBalance:opening,openingDebt:0,creditLimit:0,defaultRepaymentAccountId:null,
       icon:provider?'📱':'🏦',color:'#00695C',archived:false,created:new Date(parsed.postedAt||Date.now()).toISOString().slice(0,10),
-      autoDiscovered:true,autoDiscoverySource:parsed.bankId||parsed.providerId||null,
+      autoDiscovered:true,autoDiscoverySource:parsed.bankId||parsed.providerId||(sourceInstitution&&sourceInstitution.id)||null,
       observedBalance:num(parsed.availableBalance),observedBalanceAt:Number(parsed.postedAt)||Date.now()
     };
     if(ref)out.bankRefs=[String(ref)];
@@ -138,6 +156,34 @@
       color:account.color||'#00695C',archived:false,autoDiscovered:true
     };
   }
+  function resolveCustomRoute(parsed,state,baseRoute){
+    if(baseRoute&&baseRoute.status==='routed'&&Number(baseRoute.confidence||0)>=0.90)return baseRoute;
+    const inst=findCustomInstitutionByHint(state,parsed);
+    if(!inst)return baseRoute;
+    const accounts=arr(state&&state.accounts).filter(a=>a&&!a.archived&&a.institutionId===inst.id&&a.country==='UAE'&&(!parsed.currency||a.currency===parsed.currency));
+    const instruments=arr(state&&state.paymentInstruments).filter(i=>i&&!i.archived);
+    if(parsed.cardLast4){
+      const cards=instruments.filter(i=>String(i.last4||'')===String(parsed.cardLast4)&&
+        (i.institutionId===inst.id||accounts.some(a=>a.id===i.accountId)));
+      if(cards.length===1){
+        const account=arr(state&&state.accounts).find(a=>a.id===cards[0].accountId)||null;
+        if(account)return {status:'routed',account,instrument:cards[0],confidence:0.99,customSourceMatch:true,institution:inst};
+      }
+    }
+    if(accounts.length!==1)return baseRoute;
+    const account=accounts[0];
+    if(['purchase','bill_payment','mobile_recharge'].includes(parsed.kind))
+      return {status:'routed',account,instrument:null,confidence:0.96,customSourceMatch:true,institution:inst};
+    if(['deposit','salary','refund','incoming_transfer'].includes(parsed.kind))
+      return {status:'routed',account,instrument:null,confidence:0.97,customSourceMatch:true,institution:inst};
+    if(parsed.kind==='outgoing_transfer')
+      return {status:'routed',fromAccount:account,confidence:0.97,customSourceMatch:true,institution:inst};
+    if(parsed.kind==='cash_withdrawal'){
+      const cash=arr(state&&state.accounts).filter(a=>a&&!a.archived&&a.type==='cash'&&a.country===account.country&&a.currency===parsed.currency);
+      if(cash.length===1)return {status:'routed',fromAccount:account,targetAccount:cash[0],confidence:0.98,customSourceMatch:true,institution:inst};
+    }
+    return baseRoute;
+  }
   function updateObservation(parsed,route){
     const target=(route&&route.account)||(route&&route.fromAccount)||null;
     if(!target)return [];
@@ -163,7 +209,6 @@
   }
   function applyLearnedCategory(parsed,state,built){
     if(!built||!built.ok||!built.transaction||built.transaction.type!=='expense')return built;
-    if(built.transaction.cat&&built.transaction.cat!=='other')return built;
     const learned=learnedMerchantCategory(parsed,state);
     if(learned)built.transaction.cat=learned;
     return built;
@@ -195,7 +240,8 @@
     if(Number(route.confidence||0)<0.90)return {ok:false,reason:'route-confidence-low'};
     const exactInstrument=!!(route.instrument&&parsed.cardLast4&&String(route.instrument.last4||'')===String(parsed.cardLast4));
     const exactAccountRef=!!(parsed.accountRef&&Number(route.confidence||0)>=0.95);
-    const minParsedConfidence=exactInstrument?0.70:(exactAccountRef?0.74:0.95);
+    const exactCustomSource=!!(route.customSourceMatch&&Number(route.confidence||0)>=0.96);
+    const minParsedConfidence=exactInstrument?0.70:(exactAccountRef?0.74:(exactCustomSource?0.72:0.95));
     if(Number(parsed.confidence||0)<minParsedConfidence)return {ok:false,reason:'low-confidence'};
     if(parsed.cardLast4&&parsed.cardType&&['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)&&!route.instrument)return {ok:false,reason:'instrument-missing'};
     if((num(parsed.fee)||0)+(num(parsed.vat)||0)>0)return {ok:false,reason:'fee-review-required'};
@@ -214,7 +260,7 @@
     if(!Array.isArray(draft.paymentInstruments))draft.paymentInstruments=[];
     if(!Array.isArray(draft.transactions))draft.transactions=[];
 
-    let route=MessageCore.resolveRoute(parsed,draft);
+    let route=resolveCustomRoute(parsed,draft,MessageCore.resolveRoute(parsed,draft));
     const initialRoute=route;
     const direct=autoEligible(parsed,route);
     if(direct.ok){
@@ -226,10 +272,12 @@
     }
 
     const create={institutions:[],accounts:[],instruments:[],beneficiaries:[]};
-    if(Number(parsed.confidence||0)<0.95)return {action:'review',reason:'low-confidence',confidence:Number(parsed.confidence||0)};
-    if(!parsed.bankId&&!parsed.providerId)return {action:'review',reason:'source-not-identified',confidence:0};
+    const customInstitution=findCustomInstitutionByHint(draft,parsed);
+    const discoveryMinConfidence=customInstitution?0.72:0.95;
+    if(Number(parsed.confidence||0)<discoveryMinConfidence)return {action:'review',reason:'low-confidence',confidence:Number(parsed.confidence||0)};
+    if(!parsed.bankId&&!parsed.providerId&&!customInstitution)return {action:'review',reason:'source-not-identified',confidence:0};
 
-    let institution=findInstitution(draft,parsed);
+    let institution=findInstitution(draft,parsed)||customInstitution;
     if(!institution){
       institution=makeInstitution(parsed,uid);
       if(!institution)return {action:'review',reason:'source-not-identified',confidence:0};
@@ -240,6 +288,10 @@
       if(parsed.cardType==='credit_card'){
         const acc=makeCreditAccount(parsed,institution.id,uid);
         if(!acc)return {action:'review',reason:'credit-discovery-incomplete',confidence:0};
+        if(customInstitution&&!parsed.bankId&&!parsed.providerId){
+          acc.name=customInstitution.name+' • Credit ****'+parsed.cardLast4;
+          acc.autoDiscoverySource=customInstitution.id;
+        }
         const card=makeInstrument(parsed,acc,institution.id,uid);
         create.accounts.push(acc);create.instruments.push(card);
         draft.accounts.push(acc);draft.paymentInstruments.push(card);
@@ -252,7 +304,7 @@
           return {action:'review',reason:'ambiguous-existing-accounts',confidence:0,create};
         }
         if(!acc){
-          acc=makeAssetAccount(parsed,institution.id,uid,'purchase');
+          acc=makeAssetAccount(parsed,institution.id,uid,'purchase',institution);
           if(!acc)return {action:'review',reason:'observed-balance-required',confidence:0};
           acc.type=expectedType;
           acc.icon=expectedType==='ewallet'?'📱':'🏦';
@@ -263,14 +315,14 @@
         create.instruments.push(card);draft.paymentInstruments.push(card);
       }
     }else if(['deposit','salary','refund','incoming_transfer'].includes(parsed.kind)){
-      const acc=makeAssetAccount(parsed,institution.id,uid,parsed.kind);
+      const acc=makeAssetAccount(parsed,institution.id,uid,parsed.kind,institution);
       if(!acc)return {action:'review',reason:'observed-balance-required',confidence:0};
       create.accounts.push(acc);draft.accounts.push(acc);
     }else{
       return {action:'review',reason:direct.reason||'existing-source-required',confidence:0};
     }
 
-    route=MessageCore.resolveRoute(parsed,draft);
+    route=resolveCustomRoute(parsed,draft,MessageCore.resolveRoute(parsed,draft));
     const eligible=autoEligible(parsed,route);
     if(!eligible.ok)return {action:'review',reason:eligible.reason,confidence:0,create};
     let built=applyLearnedCategory(parsed,state,MessageCore.buildTransaction(parsed,route,{uid}));
@@ -312,6 +364,6 @@
   }
 
   return Object.freeze({
-    autoEligible,duplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory
+    autoEligible,duplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint
   });
 });

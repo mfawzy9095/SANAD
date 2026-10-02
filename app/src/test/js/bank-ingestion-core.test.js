@@ -29,6 +29,26 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.transaction.instrumentId,'c9999');
 }
 
+// A custom wallet entered by the user routes a generic deposit by exact notification source name.
+{
+  const p=P.parse({id:'custom-wallet',postedAt:1800,title:'Acme Wallet',text:'Your account was credited AED 50.00. Available balance is AED 125.00'});
+  const s={institutions:[{id:'acme',name:'Acme Wallet',country:'UAE',type:'wallet_provider'}],accounts:[{id:'aw',institutionId:'acme',country:'UAE',name:'Acme Wallet',type:'ewallet',currency:'AED',openingBalance:75,openingDebt:0,creditLimit:0,archived:false}],paymentInstruments:[],transactions:[],beneficiaries:[]};
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.transaction.accountId,'aw');
+}
+
+// A custom bank entered by the user can auto-discover a new explicitly identified credit card.
+{
+  const p=P.parse({id:'custom-credit',postedAt:1850,title:'Acme Finance',text:'Purchase AED 20.00 at TEST STORE on your credit card ending 8888. Available credit AED 480.00'});
+  const s={institutions:[{id:'acme-bank',name:'Acme Finance',country:'UAE',type:'bank'}],accounts:[],paymentInstruments:[],transactions:[],beneficiaries:[]};
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.create.accounts[0].type,'credit');
+  assert.strictEqual(plan.create.instruments[0].last4,'8888');
+  assert.ok(plan.create.accounts[0].name.includes('Acme Finance'));
+}
+
 // New credit card can be discovered without inventing a credit limit.
 {
   const p=P.parse({id:'n2',postedAt:2000,title:'Emirates Islamic',text:'عملية دفع ببطاقة الائتمان المنتهية بالرقم: 0308 لدى: FRESH CRAFT MINI MART, DUBAI المبلغ: AED 2.50 التاريخ: 01/10/2026, 06:44 الحد المتوفر: 457.04 AED'});
@@ -141,6 +161,18 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   const plan=I.plan(p,s,{uid});
   assert.strictEqual(plan.action,'auto-save');
   assert.strictEqual(plan.transaction.cat,'shopping');
+}
+
+// Learned merchant rule overrides a built-in category after the user corrects it.
+{
+  const p=P.parse({id:'learn2',postedAt:8150,text:'تمت عملية شراء في AED 20.00 UNION COOP,DUBAI على البطاقة 4021 الائتمان المتوفر AED3,980.00'});
+  const s={institutions:[{id:'i1',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd'}],accounts:[
+    {id:'credit',institutionId:'i1',country:'UAE',name:'Credit',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:5000,archived:false}
+  ],paymentInstruments:[{id:'c4021',accountId:'credit',institutionId:'i1',country:'UAE',type:'credit_card',last4:'4021',archived:false}],
+  transactions:[{id:'oldcat2',type:'expense',accountId:'credit',instrumentId:'c4021',amount:5,walletAmount:5,currency:'AED',fxRate:1,cat:'home',note:'UNION COOP,DUBAI',tags:[],date:'2026-09-01',created:2}]};
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.transaction.cat,'home');
 }
 
 // Named person transfers automatically link/create a beneficiary, without duplicating the same name.

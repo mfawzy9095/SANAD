@@ -187,6 +187,17 @@ function process(text,input,state){
   assert.strictEqual(Finance.accountDebt(s,'credit-ref'),75);
 })();
 
+(function customWalletEnteredByUserRoutesGenericDeposit(){
+  const s=empty();
+  s.institutions.push({id:'acme',name:'Acme Wallet',country:'UAE',type:'wallet_provider'});
+  s.accounts.push({id:'acme-wallet',institutionId:'acme',country:'UAE',name:'Acme Wallet',type:'ewallet',currency:'AED',openingBalance:75,openingDebt:0,creditLimit:0,archived:false});
+  strictOk(s,'custom wallet before ingest');
+  process('Your account was credited AED 50.00. Available balance is AED 125.00',{id:'acme-dep',title:'Acme Wallet'},s);
+  assert.strictEqual(s.transactions.length,1);
+  assert.strictEqual(s.transactions[0].accountId,'acme-wallet');
+  assert.strictEqual(Finance.accountBalance(s,'acme-wallet'),125);
+})();
+
 (function transactionReferencePreventsDuplicate(){
   const s=empty();
   const text="Hello Mohamed Abd, You've received AED 9.00 to your du Pay wallet. Your available balance is now AED 110.28, and the transaction ID is: DG148RKIXI";

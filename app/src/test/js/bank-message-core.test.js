@@ -69,13 +69,18 @@ const duWithdrawalRoute=P.resolveRoute(duWithdrawal,duState);assert.strictEqual(
 const duLegacyState={institutions:[],accounts:[{id:'du-old',name:'du Pay',country:'UAE',currency:'AED',type:'ewallet',institutionId:null,archived:false}],paymentInstruments:[]};
 assert.strictEqual(P.resolveRoute(duDeposit,duLegacyState).account.id,'du-old');
 
-const genericKnown=P.parse({id:'g1',text:'Purchase AED 20.00 at FRESH CRAFT MINI MART on your card ending 9999'});
+const genericKnown=P.parse({id:'g1',title:'My Bank Alerts',text:'Purchase AED 20.00 at FRESH CRAFT MINI MART on your card ending 9999'});
 assert.strictEqual(genericKnown.recognized,true);
 assert.strictEqual(genericKnown.kind,'purchase');
 assert.strictEqual(genericKnown.cardLast4,'9999');
 assert.strictEqual(genericKnown.merchant,'FRESH CRAFT MINI MART');
 assert.strictEqual(genericKnown.category,'grocery');
 assert.strictEqual(genericKnown.confidence,0.72);
+assert.strictEqual(genericKnown.sourceHint,'My Bank Alerts');
+const genericTransfer=P.parse({id:'g2',title:'Acme Wallet',text:'Transfer AED 75.00 to Ahmed Ali was successful. Available balance is AED 25.00'});
+assert.strictEqual(genericTransfer.kind,'outgoing_transfer');
+assert.strictEqual(genericTransfer.beneficiaryName,'Ahmed Ali');
+assert.strictEqual(genericTransfer.availableBalance,25);
 
 const pkgBank=P.parse({id:'pkg1',postedAt:9000,packageName:'com.emiratesnbd.android',text:'Purchase AED 10.00 with card 4021 at TEST MERCHANT'});
 assert.strictEqual(pkgBank.bankId,'emirates-nbd');
