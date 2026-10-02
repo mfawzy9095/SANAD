@@ -139,4 +139,27 @@ assert.strictEqual(eiPromo.recognized,false);
 const realCashback=P.parse({id:'cashback-real',postedAt:Date.UTC(2026,9,2),title:'ADCB',text:'Cashback AED 12.50 has been credited to your account 1234. Available balance AED 200.00'});
 assert.notStrictEqual(realCashback&&realCashback.reason,'marketing-offer');
 
+
+const taptapSaloua=P.parse({id:'taptap-saloua',postedAt:Date.UTC(2026,9,2),title:'Emirates NBD',text:'لقد تمّ تحويل مبلغ 1,068.70AED باستخدام بطاقة الخصم الخاصة بك والمنتهية أرقامها بـ 3993 لدى TAPT*SalouaOuberehil. رصيدك الحالي هو AED 7,932.96.'});
+assert.strictEqual(taptapSaloua.recognized,true);
+assert.strictEqual(taptapSaloua.bankId,'emirates-nbd');
+assert.strictEqual(taptapSaloua.kind,'outgoing_transfer');
+assert.strictEqual(taptapSaloua.direction,'debit');
+assert.strictEqual(taptapSaloua.amount,1068.70);
+assert.strictEqual(taptapSaloua.currency,'AED');
+assert.strictEqual(taptapSaloua.cardLast4,'3993');
+assert.strictEqual(taptapSaloua.cardType,'debit_card');
+assert.strictEqual(taptapSaloua.beneficiaryName,'Saloua Ouberehil');
+assert.strictEqual(taptapSaloua.availableBalance,7932.96);
+const taptapRoute=P.resolveRoute(taptapSaloua,state);
+assert.strictEqual(taptapRoute.status,'routed');
+assert.strictEqual(taptapRoute.fromAccount.id,'bank');
+assert.strictEqual(taptapRoute.instrument.id,'d3993');
+const taptapTx=P.buildTransaction(taptapSaloua,taptapRoute,{date:'2026-10-02',uid:()=> 'ttaptap'});
+assert.strictEqual(taptapTx.ok,true);
+assert.strictEqual(taptapTx.transaction.type,'external_transfer');
+assert.strictEqual(taptapTx.transaction.fromAccountId,'bank');
+assert.strictEqual(taptapTx.transaction.instrumentId,'d3993');
+assert.ok(taptapTx.transaction.note.includes('Saloua Ouberehil'));
+
 console.log('bank message parser regression tests: PASS');
