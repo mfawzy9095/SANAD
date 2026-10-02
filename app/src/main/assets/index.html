@@ -1332,6 +1332,7 @@ const Finance = {
     });
   },
   accountBalance(accountId){ return FinanceCore.accountBalance(S, accountId); },
+  accountBalancePresentation(accountId){ return FinanceCore.accountBalancePresentation(S, accountId); },
   accountDebt(accountId){ return FinanceCore.accountDebt(S, accountId); },
   creditAvailable(accountId){ return FinanceCore.creditAvailable(S, accountId); },
   countryLiquidity(country){
@@ -2258,6 +2259,7 @@ function txListHtml(){
 function accountTileHtml(a, size){
   const isLiab = isLiabilityAccount(a);
   const bal = Finance.accountBalance(a.id);
+  const balanceView = !isLiab ? Finance.accountBalancePresentation(a.id) : null;
   const cInfo = countryInfo(a.country);
   const inst = Finance.getInstitution(a.institutionId);
   const isDefault = S.settings.defaultAccountByCountry[a.country] === a.id;
@@ -2278,7 +2280,12 @@ function accountTileHtml(a, size){
       if (a.dueDate) extraHtml = '<div class="tile-foot">يستحق ' + a.dueDate + '</div>';
     }
   } else {
-    amountHtml = amtText(bal) + ' <small>' + Finance.curSymbol(a.currency) + '</small>';
+    const displayBal=balanceView?balanceView.display:bal;
+    amountHtml = amtText(displayBal) + ' <small>' + Finance.curSymbol(a.currency) + '</small>';
+    if(balanceView&&balanceView.mismatch){
+      extraHtml = '<div class="tile-row"><span>الرصيد المحسوب في SANAD</span><span class="amt-val">' + amtText(balanceView.calculated) + '</span></div>' +
+        '<div class="tile-foot" style="color:var(--warn)">آخر رصيد مؤكد من البنك/المحفظة · فرق ' + amtText(balanceView.difference) + '</div>';
+    }
   }
   return '<div class="' + tileCls + '" data-account-edit="' + a.id + '">' +
     '<div class="tile-grad" style="background:' + grad + '"></div>' +
@@ -2295,6 +2302,7 @@ function instrumentTileHtml(inst, size){
   const cInfo = countryInfo(acc.country);
   const tInfo = instrumentTypeInfo(inst.type);
   const bal = Finance.accountBalance(acc.id);
+  const balanceView = !isCredit ? Finance.accountBalancePresentation(acc.id) : null;
   const masked=maskedCardNumber(inst);
   const cardColor = inst.color || acc.color || '#00695C';
   const grad = tintGradient(cardColor);
@@ -2308,8 +2316,13 @@ function instrumentTileHtml(inst, size){
     extraHtml = '<div class="tile-row"><span>المتاح</span><span class="amt-val">' + (avail !== null ? amtText(avail) : 'غير محدد') + '</span></div>' +
       (limit > 0 ? '<div class="tile-row"><span>الحد</span><span class="amt-val">' + amtText(limit) + '</span></div>' : '');
   } else {
-    amountHtml = amtText(bal) + ' <small>' + Finance.curSymbol(acc.currency) + '</small>';
-    extraHtml = '<div class="tile-foot">↳ ' + esc(acc.name) + '</div>';
+    const displayBal=balanceView?balanceView.display:bal;
+    amountHtml = amtText(displayBal) + ' <small>' + Finance.curSymbol(acc.currency) + '</small>';
+    extraHtml = '<div class="tile-foot">↳ ' + esc(acc.name) + '</div>' +
+      (balanceView&&balanceView.mismatch
+        ? '<div class="tile-row"><span>الرصيد المحسوب في SANAD</span><span class="amt-val">' + amtText(balanceView.calculated) + '</span></div>' +
+          '<div class="tile-foot" style="color:var(--warn)">آخر رصيد مؤكد من البنك/المحفظة · فرق ' + amtText(balanceView.difference) + '</div>'
+        : '');
   }
   return '<div class="tile' + (size === 'sm' ? ' tile-sm' : '') + '" data-instrument-edit="' + inst.id + '">' +
     '<div class="tile-grad" style="background:' + grad + '"></div>' +
