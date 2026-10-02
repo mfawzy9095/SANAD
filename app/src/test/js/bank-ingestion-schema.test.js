@@ -230,4 +230,13 @@ function process(text,input,state){
   assert.ok(!html.includes("bankRegistryPickerHtml(selectedBankRegistryId,'cardBankRegistry')"),'credit card editor must not reference the account-editor variable');
 })();
 
+
+(function walletCardsRemainVisibleAndEditable(){
+  const html=fs.readFileSync(path.join(__dirname,'../../main/assets/index.html'),'utf8');
+  assert.ok(
+    html.includes("i.type === 'credit_card' || i.type === 'debit_card' || i.type === 'prepaid_card' || i.type === 'wallet_card'"),
+    'accounts view must include wallet_card instruments'
+  );
+})();
+
 console.log('bank ingestion schema integration tests: PASS');
