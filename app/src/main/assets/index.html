@@ -5863,6 +5863,86 @@ function openLiabilitiesList(){
 }
 
 /* ---------- CARD SHEET ---------- */
+function sameCardSourceForMerge(a,b){
+  if(!a||!b)return false;
+  const aa=Finance.getAccount(a.accountId),ba=Finance.getAccount(b.accountId);
+  const ai=(a.institutionId||(aa&&aa.institutionId))?Finance.getInstitution(a.institutionId||(aa&&aa.institutionId)):null;
+  const bi=(b.institutionId||(ba&&ba.institutionId))?Finance.getInstitution(b.institutionId||(ba&&ba.institutionId)):null;
+  if(!ai||!bi)return false;
+  if(ai.id===bi.id)return true;
+  const ab=Finance.registeredBankId(ai),bb=Finance.registeredBankId(bi);
+  if(ab&&bb)return ab===bb;
+  const ap=Finance.registeredProviderId(ai),bp=Finance.registeredProviderId(bi);
+  if(ap&&bp)return ap===bp;
+  return false;
+}
+function cardIdentityOverlapForMerge(a,b){
+  const av=[a&&a.first4,a&&a.last4].filter(v=>/^\d{4}$/.test(String(v||''))).map(String);
+  const bv=[b&&b.first4,b&&b.last4].filter(v=>/^\d{4}$/.test(String(v||''))).map(String);
+  return av.some(x=>bv.includes(x));
+}
+function duplicateCardMergeCandidates(sourceId){
+  const source=Finance.getInstrument(sourceId);
+  if(!source||source.archived)return [];
+  const sourceAcc=Finance.getAccount(source.accountId);
+  if(!sourceAcc)return [];
+  return S.paymentInstruments.filter(target=>{
+    if(!target||target.id===source.id||target.archived||target.type!==source.type||target.country!==source.country)return false;
+    const targetAcc=Finance.getAccount(target.accountId);
+    if(!targetAcc||targetAcc.archived||targetAcc.currency!==sourceAcc.currency)return false;
+    if(!sameCardSourceForMerge(source,target))return false;
+    if(!cardIdentityOverlapForMerge(source,target))return false;
+    if(source.network&&target.network&&source.network!=='other'&&target.network!=='other'&&source.network!==target.network)return false;
+    return true;
+  });
+}
+function openDuplicateCardMerge(sourceId){
+  const source=Finance.getInstrument(sourceId);
+  const candidates=duplicateCardMergeCandidates(sourceId);
+  if(!source||!candidates.length){toast('لا توجد بطاقة مكررة مؤكدة يمكن دمجها');return;}
+  const options=candidates.map(x=>{
+    const acc=Finance.getAccount(x.accountId);
+    const identity=maskedCardNumber(x)||('**** '+(x.last4||'—'));
+    return '<option value="'+esc(x.id)+'">'+esc((x.network&&x.network!=='other'?x.network.toUpperCase()+' · ':'')+cardTypeShortLabel(x.type)+' · '+identity+(acc?' · '+acc.name:''))+'</option>';
+  }).join('');
+  openSheet(
+    '<div class="sheet-head"><button type="button" class="close" data-act="close-sheet">✕</button><h2>دمج بطاقة مكررة</h2><div style="width:36px"></div></div>'+
+    '<div class="sheet-body">'+
+      '<div class="help-box warn"><span class="hi">🧩</span><div class="ht"><b>اختر البطاقة الصحيحة التي ستبقى</b>سيتم نقل معاملات وروابط البطاقة الحالية إليها ثم حذف النسخة المكررة. لا يتم حذف التاريخ المالي.</div></div>'+
+      '<div class="field"><label>البطاقة الحالية المراد دمجها</label><div style="padding:10px;border:1px solid var(--border);border-radius:12px">'+cardNetworkLogoHtml(source.network)+' <b style="margin-inline-start:8px">'+esc(cardTypeShortLabel(source.type)+' · '+(maskedCardNumber(source)||source.name))+'</b></div></div>'+
+      '<div class="field"><label>ادمجها داخل</label><select id="cardMergeTarget">'+options+'</select></div>'+
+      '<button type="button" class="btn primary" data-act="confirm-merge-card" data-id="'+esc(source.id)+'">دمج وإعادة الحساب</button>'+
+    '</div>',
+    'card-merge'
+  );
+}
+async function confirmDuplicateCardMerge(sourceId){
+  if(!canWrite()){toast('وضع القراءة فقط');return;}
+  const targetEl=document.getElementById('cardMergeTarget');
+  const targetId=targetEl?targetEl.value:'';
+  if(!targetId){toast('اختر البطاقة الصحيحة التي ستبقى');return;}
+  if(!duplicateCardMergeCandidates(sourceId).some(x=>x.id===targetId)){toast('الدمج غير آمن أو لم يعد متاحًا');return;}
+  const source=Finance.getInstrument(sourceId),target=Finance.getInstrument(targetId);
+  if(!source||!target)return;
+  const ok=await dialog({
+    emoji:'🧩',
+    title:'تأكيد دمج البطاقة',
+    msg:'سيتم دمج '+(maskedCardNumber(source)||source.name)+' داخل '+(maskedCardNumber(target)||target.name)+' ونقل التاريخ المالي المرتبط بها. البطاقة الحالية المكررة ستُحذف.',
+    okText:'دمج'
+  });
+  if(!ok)return;
+  showFinancialRecalcOverlay('جاري دمج البطاقة وإعادة الحساب');
+  await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,20)));
+  const result=await commitCriticalMutation(async()=>{
+    const merged=BankIngestionCore.mergeDuplicateInstrument(S,sourceId,targetId);
+    if(!merged.ok)return false;
+    Finance.ensureAllPrimaries();
+    return true;
+  });
+  hideFinancialRecalcOverlay();
+  if(!result.ok){render();toast('تعذر الدمج — لم يتم تغيير البيانات');return;}
+  closeSheet();render();toast('تم دمج البطاقة المكررة وإعادة الحساب');
+}
 function openInstrumentSheet(id, presetType, preserve){
   if (!canWrite()){ toast('وضع القراءة فقط'); return; }
   const isEdit = !!id;
@@ -5921,6 +6001,10 @@ function openInstrumentSheet(id, presetType, preserve){
     '<button type="button" class="country-opt ' + (data.country === c.code ? 'on' : '') + '" data-card-country="' + c.code + '">' +
       '<span class="flag">' + c.flag + '</span>' + c.name + '</button>').join('');
   const hasTx = isEdit && cardHasHistory(id);
+  const mergeCandidates = isEdit ? duplicateCardMergeCandidates(id) : [];
+  const mergeActionHtml = mergeCandidates.length
+    ? '<button type="button" class="btn" data-act="merge-duplicate-card" data-id="'+esc(id)+'" style="margin-top:8px">🧩 دمج بطاقة مكررة ('+mergeCandidates.length+')</button>'
+    : '';
   let headerBtn = '<div style="width:36px"></div>';
   if (isEdit){
     if (data.archived) headerBtn = '<button type="button" class="close" data-instrument-unarchive="' + id + '" title="استرجاع" style="color:var(--primary)">↩</button>';
@@ -6019,6 +6103,7 @@ function openInstrumentSheet(id, presetType, preserve){
       ((isDebit || isWalletCard) ? '<input type="hidden" id="cardCountry" value="' + data.country + '">' : '') +
       defaultToggleHtml +
       creditActionsHtml +
+      mergeActionHtml +
       '<button type="button" class="btn primary" data-act="save-card" data-id="' + (id||'') + '" data-type="' + type + '" style="margin-top:8px">' + (isEdit ? 'حفظ' : 'إضافة') + '</button>' +
     '</div>',
     'card'
@@ -6993,6 +7078,8 @@ function handleViewAction(act, dataset){
     case 'save-repayment-edit': return saveRepaymentEdit();
     case 'reconcile-liability': return openReconcileLiability(dataset.id);
     case 'topup-prepaid': return openPrepaidTopup(dataset.id);
+    case 'merge-duplicate-card': return openDuplicateCardMerge(dataset.id);
+    case 'confirm-merge-card': return confirmDuplicateCardMerge(dataset.id);
     case 'save-reconcile-liability': return saveReconcileLiability(dataset.id);
     case 'set-primary-account': return setPrimaryAccount(dataset.id);
     case 'edit-from-details': closeSheet(); setTimeout(() => openEditTx(dataset.id), 250); return;
