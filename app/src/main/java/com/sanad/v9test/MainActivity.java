@@ -459,8 +459,8 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public String importHistoricalFinancialSms(int days) {
-            return importHistoricalFinancialSmsInternal(days).toString();
+        public String importHistoricalFinancialSmsPage(int days, long afterDate, long afterId, int rawLimit) {
+            return importHistoricalFinancialSmsPageInternal(days, afterDate, afterId, rawLimit).toString();
         }
 
         @JavascriptInterface
@@ -496,7 +496,8 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private JSONObject importHistoricalFinancialSmsInternal(int days) {
+    private JSONObject importHistoricalFinancialSmsPageInternal(
+            int days, long afterDate, long afterId, int rawLimit) {
         JSONObject out = new JSONObject();
         try {
             if (checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
@@ -506,9 +507,12 @@ public final class MainActivity extends Activity {
             }
 
             int safeDays = Math.max(0, Math.min(days, 3650));
+            int safeLimit = Math.max(25, Math.min(rawLimit, 150));
             long cutoff = safeDays > 0
                     ? System.currentTimeMillis() - (long) safeDays * 24L * 60L * 60L * 1000L
                     : 0L;
+            long cursorDate = Math.max(0L, afterDate);
+            long cursorId = Math.max(0L, afterId);
 
             String[] projection = new String[]{
                     Telephony.Sms._ID,
@@ -516,39 +520,63 @@ public final class MainActivity extends Activity {
                     Telephony.Sms.BODY,
                     Telephony.Sms.DATE
             };
-            String selection = cutoff > 0L ? Telephony.Sms.DATE + ">=?" : null;
-            String[] selectionArgs = cutoff > 0L ? new String[]{String.valueOf(cutoff)} : null;
+
+            String selection;
+            String[] selectionArgs;
+            if (cutoff > 0L) {
+                selection = Telephony.Sms.DATE + ">=? AND (" +
+                        Telephony.Sms.DATE + ">? OR (" +
+                        Telephony.Sms.DATE + "=? AND " + Telephony.Sms._ID + ">?))";
+                selectionArgs = new String[]{
+                        String.valueOf(cutoff),
+                        String.valueOf(cursorDate),
+                        String.valueOf(cursorDate),
+                        String.valueOf(cursorId)
+                };
+            } else {
+                selection = Telephony.Sms.DATE + ">? OR (" +
+                        Telephony.Sms.DATE + "=? AND " + Telephony.Sms._ID + ">?)";
+                selectionArgs = new String[]{
+                        String.valueOf(cursorDate),
+                        String.valueOf(cursorDate),
+                        String.valueOf(cursorId)
+                };
+            }
 
             int scanned = 0;
             int candidates = 0;
             int added = 0;
-            long oldest = 0L;
-            long newest = 0L;
+            long nextDate = cursorDate;
+            long nextId = cursorId;
+            boolean hasMore = false;
 
             try (Cursor cursor = getContentResolver().query(
                     Telephony.Sms.Inbox.CONTENT_URI,
                     projection,
                     selection,
                     selectionArgs,
-                    Telephony.Sms.DATE + " ASC")) {
+                    Telephony.Sms.DATE + " ASC, " + Telephony.Sms._ID + " ASC")) {
                 if (cursor != null) {
+                    int idCol = cursor.getColumnIndex(Telephony.Sms._ID);
                     int addressCol = cursor.getColumnIndex(Telephony.Sms.ADDRESS);
                     int bodyCol = cursor.getColumnIndex(Telephony.Sms.BODY);
                     int dateCol = cursor.getColumnIndex(Telephony.Sms.DATE);
 
-                    while (cursor.moveToNext()) {
+                    while (scanned < safeLimit && cursor.moveToNext()) {
                         scanned++;
+                        long smsId = idCol >= 0 ? cursor.getLong(idCol) : 0L;
                         String address = addressCol >= 0 ? cursor.getString(addressCol) : "";
                         String body = bodyCol >= 0 ? cursor.getString(bodyCol) : "";
                         long at = dateCol >= 0 ? cursor.getLong(dateCol) : 0L;
+                        nextDate = Math.max(0L, at);
+                        nextId = Math.max(0L, smsId);
+
                         if (body == null || body.trim().isEmpty()) continue;
                         String safeAddress = address == null ? "" : address.trim();
                         String probe = (safeAddress + " " + body).trim();
                         if (!BankNotificationFilter.looksLikeCandidate(probe)) continue;
 
                         candidates++;
-                        if (oldest == 0L || (at > 0L && at < oldest)) oldest = at;
-                        if (at > newest) newest = at;
                         if (BankNotificationStore.enqueue(
                                 MainActivity.this,
                                 "sms:" + safeAddress,
@@ -557,6 +585,9 @@ public final class MainActivity extends Activity {
                                 at > 0L ? at : System.currentTimeMillis())) {
                             added++;
                         }
+                    }
+                    if (scanned >= safeLimit) {
+                        hasMore = cursor.moveToNext();
                     }
                 }
             }
@@ -567,8 +598,9 @@ public final class MainActivity extends Activity {
             out.put("scanned", scanned);
             out.put("financialCandidates", candidates);
             out.put("addedToInbox", added);
-            out.put("oldestAt", oldest);
-            out.put("newestAt", newest);
+            out.put("nextAfterDate", nextDate);
+            out.put("nextAfterId", nextId);
+            out.put("done", !hasMore);
             return out;
         } catch (SecurityException denied) {
             try {
