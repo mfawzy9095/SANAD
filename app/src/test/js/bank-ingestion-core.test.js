@@ -337,6 +337,25 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(s.accounts[0].institutionId,'new-i');
 }
 
+// Learned bank routes must not survive an explicit institution relink to another bank.
+{
+  const s={institutions:[
+    {id:'enbd',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd'},
+    {id:'adcb',name:'ADCB',country:'UAE',bankRegistryId:'adcb'}
+  ],accounts:[
+    {id:'a',institutionId:'enbd',country:'UAE',name:'Current',type:'bank',currency:'AED',openingBalance:0,archived:false,bankRefs:['1234']}
+  ],paymentInstruments:[],transactions:[],beneficiaries:[],settings:{}};
+  const first=P.parse({id:'learn-bank-relink-1',postedAt:940000,title:'Emirates NBD',text:'AED 100.00 credited to your account 1234. Available balance AED 200.00'});
+  assert.strictEqual(first.bankId,'emirates-nbd');
+  const learned=I.learnFromApproval(s,first,{status:'routed',account:s.accounts[0],confidence:1},{uid,now:941000});
+  assert.ok(learned);
+  assert.strictEqual(I.rebindAccountInstitution(s,'a','adcb').ok,true);
+  const next=P.parse({id:'learn-bank-relink-2',postedAt:950000,title:'Emirates NBD',text:'AED 50.00 credited to your account 1234. Available balance AED 250.00'});
+  const rule=I.matchLearnedRule(next,s);
+  assert.ok(rule);
+  assert.strictEqual(I.routeFromLearnedRule(next,s,rule),null);
+}
+
 // Duplicate bank accounts can be merged into the chosen canonical account without summing duplicate baselines.
 {
   const s={institutions:[{id:'enbd1',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd'},{id:'enbd2',name:'ENBD',country:'UAE',bankRegistryId:'emirates-nbd'}],accounts:[
