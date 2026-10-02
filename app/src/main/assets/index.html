@@ -4765,10 +4765,15 @@ function openCardTypePicker(){
   );
 }
 
+function registryUiLang(){return (S.settings&&S.settings.language==='en')?'en':'ar';}
+function bankUiName(bank){return UaeBankRegistryCore.bankDisplayName?UaeBankRegistryCore.bankDisplayName(bank,registryUiLang()):(bank&&bank.name||'');}
+function bankUiShort(bank){return UaeBankRegistryCore.bankShortName?UaeBankRegistryCore.bankShortName(bank):(bank&&bank.name||'');}
+function providerUiName(provider){return UaeBankRegistryCore.providerDisplayName?UaeBankRegistryCore.providerDisplayName(provider,registryUiLang()):(provider&&provider.name||'');}
+function providerUiShort(provider){return UaeBankRegistryCore.providerShortName?UaeBankRegistryCore.providerShortName(provider):(provider&&provider.name||'');}
 function bankRegistryOptions(selectedId){
   return '<option value="">— اختر البنك من سجل المصرف المركزي —</option>' +
     UaeBankRegistryCore.list().map(b =>
-      '<option value="' + esc(b.id) + '"' + (selectedId === b.id ? ' selected' : '') + '>' + esc(b.name) + '</option>'
+      '<option value="' + esc(b.id) + '"' + (selectedId === b.id ? ' selected' : '') + '>' + esc(bankUiName(b)+' · '+bankUiShort(b)) + '</option>'
     ).join('');
 }
 function bankLogoHtml(bank,size=34){
@@ -4781,12 +4786,13 @@ function bankLogoHtml(bank,size=34){
 function bankRegistryPickerHtml(selectedId,targetId){
   const selected=selectedId?UaeBankRegistryCore.get(selectedId):null;
   const rows=UaeBankRegistryCore.list().map(b=>{
-    const search=UaeBankRegistryCore.normalize([b.name].concat(b.aliases||[]).join(' '));
-    return '<button type="button" data-bank-option="'+esc(b.id)+'" data-bank-target="'+esc(targetId)+'" data-bank-search="'+esc(search)+'" style="width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border:0;border-bottom:1px solid var(--border);background:'+(selectedId===b.id?'var(--primary-soft)':'transparent')+';text-align:start;color:var(--text)">'+bankLogoHtml(b,36)+'<span style="min-width:0"><b style="display:block;font-size:13px">'+esc(b.name)+'</b><small style="color:var(--text-3)">'+esc((b.aliases||[]).slice(0,2).join(' · '))+'</small></span></button>';
+    const display=bankUiName(b),short=bankUiShort(b);
+    const search=UaeBankRegistryCore.normalize([b.name,display,short].concat(b.aliases||[]).join(' '));
+    return '<button type="button" data-bank-option="'+esc(b.id)+'" data-bank-target="'+esc(targetId)+'" data-bank-search="'+esc(search)+'" style="width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border:0;border-bottom:1px solid var(--border);background:'+(selectedId===b.id?'var(--primary-soft)':'transparent')+';text-align:start;color:var(--text)">'+bankLogoHtml(b,36)+'<span style="min-width:0"><b style="display:block;font-size:13px">'+esc(display)+'</b><small style="color:var(--text-3)">'+esc(short+(display!==b.name?' · '+b.name:''))+'</small></span></button>';
   }).join('');
   return '<select id="'+esc(targetId)+'" hidden>'+bankRegistryOptions(selectedId)+'</select>'+
     '<div data-bank-selected-for="'+esc(targetId)+'" style="display:flex;align-items:center;gap:10px;padding:9px 10px;margin-bottom:8px;border:1px solid var(--border);border-radius:12px;background:var(--surface)">'+
-      bankLogoHtml(selected,36)+'<div style="min-width:0"><b style="display:block">'+esc(selected?selected.name:'لم يتم اختيار بنك')+'</b><small style="color:var(--text-3)">يمكنك البحث بالاسم أو الاختصار</small></div></div>'+
+      bankLogoHtml(selected,36)+'<div style="min-width:0"><b style="display:block">'+esc(selected?bankUiName(selected):'لم يتم اختيار بنك')+'</b><small style="color:var(--text-3)">'+esc(selected?bankUiShort(selected):'يمكنك البحث بالاسم أو الاختصار')+'</small></div></div>'+
     '<input type="search" data-bank-filter="'+esc(targetId)+'List" placeholder="ابحث عن البنك… مثل ENBD أو ADCB" autocomplete="off" style="margin-bottom:8px">'+
     '<div id="'+esc(targetId)+'List" style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:12px;background:var(--surface)">'+rows+'</div>';
 }
@@ -4803,13 +4809,48 @@ function chooseBankRegistryOption(targetId,bankId){
   const list=document.getElementById(targetId+'List');
   if(list)list.querySelectorAll('[data-bank-option]').forEach(row=>{row.style.background=row.dataset.bankOption===bank.id?'var(--primary-soft)':'transparent';});
   const label=document.querySelector('[data-bank-selected-for="'+targetId+'"]');
-  if(label)label.innerHTML=bankLogoHtml(bank,36)+'<div style="min-width:0"><b style="display:block">'+esc(bank.name)+'</b><small style="color:var(--text-3)">تم اختيار البنك</small></div>';
+  if(label)label.innerHTML=bankLogoHtml(bank,36)+'<div style="min-width:0"><b style="display:block">'+esc(bankUiName(bank))+'</b><small style="color:var(--text-3)">'+esc(bankUiShort(bank))+'</small></div>';
 }
 function providerRegistryOptions(selectedId){
-  const providers=Array.isArray(UaeBankRegistryCore.PAYMENT_PROVIDERS)?UaeBankRegistryCore.PAYMENT_PROVIDERS:[];
+  const providers=UaeBankRegistryCore.listProviders?UaeBankRegistryCore.listProviders():(Array.isArray(UaeBankRegistryCore.PAYMENT_PROVIDERS)?UaeBankRegistryCore.PAYMENT_PROVIDERS:[]);
   return '<option value="">— اختر مزود المحفظة —</option>' + providers.map(p =>
-    '<option value="' + esc(p.id) + '"' + (selectedId === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>'
+    '<option value="' + esc(p.id) + '"' + (selectedId === p.id ? ' selected' : '') + '>' + esc(providerUiName(p)+' · '+providerUiShort(p)) + '</option>'
   ).join('');
+}
+function providerLogoHtml(provider,size=34){
+  if(!provider)return '<span style="width:'+size+'px;height:'+size+'px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center">👛</span>';
+  const letters=UaeBankRegistryCore.initials?UaeBankRegistryCore.initials(provider.short||provider.name):'👛';
+  const domain=UaeBankRegistryCore.logoDomain?UaeBankRegistryCore.logoDomain(provider.id):null;
+  const image=domain?'<img src="https://'+esc(domain)+'/favicon.ico" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'" style="position:absolute;inset:4px;width:calc(100% - 8px);height:calc(100% - 8px);object-fit:contain;background:#fff;border-radius:7px">':'';
+  return '<span style="position:relative;width:'+size+'px;height:'+size+'px;flex:0 0 '+size+'px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border);display:grid;place-items:center;font-size:10px;font-weight:800;overflow:hidden">'+esc(letters)+image+'</span>';
+}
+function providerRegistryPickerHtml(selectedId,targetId){
+  const providers=UaeBankRegistryCore.listProviders?UaeBankRegistryCore.listProviders():UaeBankRegistryCore.PAYMENT_PROVIDERS||[];
+  const selected=selectedId?UaeBankRegistryCore.getProvider(selectedId):null;
+  const rows=providers.map(p=>{
+    const display=providerUiName(p),short=providerUiShort(p);
+    const search=UaeBankRegistryCore.normalize([p.name,p.nameAr,short,p.legalName].concat(p.aliases||[]).join(' '));
+    return '<button type="button" data-provider-option="'+esc(p.id)+'" data-provider-target="'+esc(targetId)+'" data-provider-search="'+esc(search)+'" style="width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border:0;border-bottom:1px solid var(--border);background:'+(selectedId===p.id?'var(--primary-soft)':'transparent')+';text-align:start;color:var(--text)">'+providerLogoHtml(p,36)+'<span style="min-width:0"><b style="display:block;font-size:13px">'+esc(display)+'</b><small style="color:var(--text-3)">'+esc(short+(p.legalName?' · '+p.legalName:''))+'</small></span></button>';
+  }).join('');
+  return '<select id="'+esc(targetId)+'" hidden>'+providerRegistryOptions(selectedId)+'</select>'+
+    '<div data-provider-selected-for="'+esc(targetId)+'" style="display:flex;align-items:center;gap:10px;padding:9px 10px;margin-bottom:8px;border:1px solid var(--border);border-radius:12px;background:var(--surface)">'+
+      providerLogoHtml(selected,36)+'<div style="min-width:0"><b style="display:block">'+esc(selected?providerUiName(selected):'لم يتم اختيار محفظة')+'</b><small style="color:var(--text-3)">'+esc(selected?providerUiShort(selected):'ابحث بالاسم أو الاختصار')+'</small></div></div>'+
+    '<input type="search" data-provider-filter="'+esc(targetId)+'List" placeholder="ابحث عن المحفظة… مثل du Pay أو Payit" autocomplete="off" style="margin-bottom:8px">'+
+    '<div id="'+esc(targetId)+'List" style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:12px;background:var(--surface)">'+rows+'</div>';
+}
+function filterProviderRegistryList(listId,query){
+  const list=document.getElementById(listId);if(!list)return;
+  const q=UaeBankRegistryCore.normalize(query||'');
+  list.querySelectorAll('[data-provider-option]').forEach(row=>{row.hidden=!!q&&!String(row.dataset.providerSearch||'').includes(q);});
+}
+function chooseProviderRegistryOption(targetId,providerId){
+  const sel=document.getElementById(targetId),provider=UaeBankRegistryCore.getProvider(providerId);
+  if(!sel||!provider)return;
+  sel.value=provider.id;
+  const list=document.getElementById(targetId+'List');
+  if(list)list.querySelectorAll('[data-provider-option]').forEach(row=>{row.style.background=row.dataset.providerOption===provider.id?'var(--primary-soft)':'transparent';});
+  const label=document.querySelector('[data-provider-selected-for="'+targetId+'"]');
+  if(label)label.innerHTML=providerLogoHtml(provider,36)+'<div style="min-width:0"><b style="display:block">'+esc(providerUiName(provider))+'</b><small style="color:var(--text-3)">'+esc(providerUiShort(provider))+'</small></div>';
 }
 function parseBankRefsInput(value){
   return Array.from(new Set(String(value || '').split(/[\n,;]+/).map(v => v.trim()).filter(Boolean))).slice(0,8);
@@ -5050,8 +5091,8 @@ function openAccountSheet(id, presetType, preserve){
         bankRegistryPickerHtml(selectedBankRegistryId,'wBankRegistry') +
         '<div class="field-hint">القائمة من سجل البنوك المرخصة لدى مصرف الإمارات المركزي.</div></div>' +
       '<div class="field" id="wProviderRegistryWrap"' + (data.country === 'UAE' && type === 'ewallet' ? '' : ' hidden') + '><label>مزود المحفظة الإلكترونية</label>' +
-        '<select id="wProviderRegistry">' + officialProviderOptions + '</select>' +
-        '<div class="field-hint">مثال: du Pay. يتم استخدام المزود لتوجيه إشعارات المحفظة للحساب الصحيح.</div></div>' +
+        providerRegistryPickerHtml(selectedProviderRegistryId,'wProviderRegistry') +
+        '<div class="field-hint">قائمة محافظ ومزودي قيمة مخزنة موثقة في الإمارات؛ تستخدم أيضًا لتوجيه رسائل المحفظة للحساب الصحيح.</div></div>' +
       '<div class="field"><label>مؤسسة مخصصة (اختياري)</label>' +
         '<select id="wInst">' + instOptions + '</select>' +
         '<input type="text" id="wInstName" value="' + esc((preserve && preserve.institutionName) || '') + '" placeholder="جهة أخرى غير موجودة بالقائمة" maxlength="40" style="margin-top:8px">' +
@@ -9197,12 +9238,15 @@ const _sanadCoreExportData=exportData; exportData=async function(){const oldCrea
 /* interaction hooks owned by V9; core handler remains untouched */
 document.addEventListener('click',e=>{
   const bankOpt=e.target.closest&&e.target.closest('[data-bank-option]');if(bankOpt){e.preventDefault();e.stopPropagation();chooseBankRegistryOption(bankOpt.dataset.bankTarget,bankOpt.dataset.bankOption);return;}
+  const providerOpt=e.target.closest&&e.target.closest('[data-provider-option]');if(providerOpt){e.preventDefault();e.stopPropagation();chooseProviderRegistryOption(providerOpt.dataset.providerTarget,providerOpt.dataset.providerOption);return;}
   const el=e.target.closest&&e.target.closest('[data-sanad-act]');if(el){e.preventDefault();e.stopPropagation();SanadV9.click(el);return;}
   const sh=e.target.closest&&e.target.closest('[data-family-share-toggle]');if(sh){if(!SANAD_CLOUD_FAMILY_BETA_ENABLED)return;sh.classList.toggle('on');buzz(6);return;}
 },true);
 document.addEventListener('input',e=>{
-  const input=e.target.closest&&e.target.closest('[data-bank-filter]');
-  if(input)filterBankRegistryList(input.dataset.bankFilter,input.value);
+  const bankInput=e.target.closest&&e.target.closest('[data-bank-filter]');
+  if(bankInput){filterBankRegistryList(bankInput.dataset.bankFilter,bankInput.value);return;}
+  const providerInput=e.target.closest&&e.target.closest('[data-provider-filter]');
+  if(providerInput)filterProviderRegistryList(providerInput.dataset.providerFilter,providerInput.value);
 },true);
 
 
