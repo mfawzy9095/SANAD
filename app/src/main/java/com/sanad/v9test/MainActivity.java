@@ -507,7 +507,9 @@ public final class MainActivity extends Activity {
             }
 
             int safeDays = Math.max(0, Math.min(days, 3650));
-            int safeLimit = Math.max(25, Math.min(rawLimit, 150));
+            // JavascriptInterface calls are synchronous from WebView's point of view.
+            // Keep every provider query deliberately small so navigation never stalls for long.
+            int safeLimit = Math.max(10, Math.min(rawLimit, 50));
             long cutoff = safeDays > 0
                     ? System.currentTimeMillis() - (long) safeDays * 24L * 60L * 60L * 1000L
                     : 0L;
@@ -546,6 +548,7 @@ public final class MainActivity extends Activity {
             int scanned = 0;
             int candidates = 0;
             int added = 0;
+            int matchingRows = 0;
             long nextDate = cursorDate;
             long nextId = cursorId;
             boolean hasMore = false;
@@ -557,6 +560,7 @@ public final class MainActivity extends Activity {
                     selectionArgs,
                     Telephony.Sms.DATE + " ASC, " + Telephony.Sms._ID + " ASC")) {
                 if (cursor != null) {
+                    matchingRows = cursor.getCount();
                     int idCol = cursor.getColumnIndex(Telephony.Sms._ID);
                     int addressCol = cursor.getColumnIndex(Telephony.Sms.ADDRESS);
                     int bodyCol = cursor.getColumnIndex(Telephony.Sms.BODY);
@@ -596,6 +600,7 @@ public final class MainActivity extends Activity {
             out.put("status", "complete");
             out.put("days", safeDays);
             out.put("scanned", scanned);
+            out.put("matchingRows", matchingRows);
             out.put("financialCandidates", candidates);
             out.put("addedToInbox", added);
             out.put("nextAfterDate", nextDate);

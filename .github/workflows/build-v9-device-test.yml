@@ -589,6 +589,12 @@ jobs:
           grep -q "historicalSmsPermissionGranted" "app/src/main/java/com/sanad/v9test/MainActivity.java"
           grep -q "importHistoricalFinancialSms" "app/src/main/java/com/sanad/v9test/MainActivity.java"
           grep -q "Telephony.Sms.Inbox.CONTENT_URI" "app/src/main/java/com/sanad/v9test/MainActivity.java"
+          grep -q "Math.min(rawLimit, 50)" "app/src/main/java/com/sanad/v9test/MainActivity.java"
+          grep -q 'importHistoricalFinancialSmsPage(Number(days)||0,afterDate,afterId,25)' "app/src/main/assets/index.html"
+          grep -q "historicalCancelRequested" "app/src/main/assets/index.html"
+          grep -q "await this.yieldUi(24)" "app/src/main/assets/index.html"
+          grep -q "excludeIds:this._historicalReviewIds" "app/src/main/assets/index.html"
+          grep -q "cancelHistoricalImport('navigation')" "app/src/main/assets/index.html"
           ! grep -q 'android.service.notification.disabled_filter_types' "app/src/main/AndroidManifest.xml"
           grep -q "bankInboxOk = !!AndroidBridge.clearBankNotifications()" "app/src/main/assets/index.html"
           node --check app/src/main/assets/js/report-core.js
