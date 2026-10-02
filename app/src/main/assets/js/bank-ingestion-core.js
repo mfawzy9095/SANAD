@@ -571,9 +571,23 @@
     const toInst=institutions.find(i=>i&&i.id===(to.institutionId||toAcc.institutionId))||null;
     if(fromInst&&toInst&&!sameInstitutionSource(state,fromInst,toInst))return {ok:false,reason:'institution-mismatch'};
     const dedicated=['credit_card','prepaid_card'].includes(from.type);
+    const targetHadHistory=dedicated&&(
+      arr(state.transactions).some(t=>t&&(t.accountId===toAcc.id||t.fromAccountId===toAcc.id||t.toAccountId===toAcc.id))||
+      arr(state.recurring).some(r=>r&&r.accountId===toAcc.id)
+    );
     if(dedicated){
       const siblings=instruments.filter(i=>i&&!i.archived&&i.id!==from.id&&i.accountId===fromAcc.id);
       if(siblings.length)return {ok:false,reason:'source-account-shared'};
+      if(!targetHadHistory){
+        if(Math.abs(Number(toAcc.openingBalance)||0)<=0.001&&Math.abs(Number(fromAcc.openingBalance)||0)>0.001)
+          toAcc.openingBalance=Number(fromAcc.openingBalance)||0;
+        if(Math.abs(Number(toAcc.openingDebt)||0)<=0.001&&Math.abs(Number(fromAcc.openingDebt)||0)>0.001)
+          toAcc.openingDebt=Number(fromAcc.openingDebt)||0;
+      }
+      if((Number(toAcc.creditLimit)||0)<=0&&(Number(fromAcc.creditLimit)||0)>0)
+        toAcc.creditLimit=Number(fromAcc.creditLimit)||0;
+      if(!toAcc.defaultRepaymentAccountId&&fromAcc.defaultRepaymentAccountId)
+        toAcc.defaultRepaymentAccountId=fromAcc.defaultRepaymentAccountId;
     }
     let movedTransactions=0,movedRecurring=0;
     for(const tx of arr(state.transactions)){
