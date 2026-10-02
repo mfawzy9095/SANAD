@@ -81,6 +81,11 @@ const genericTransfer=P.parse({id:'g2',title:'Acme Wallet',text:'Transfer AED 75
 assert.strictEqual(genericTransfer.kind,'outgoing_transfer');
 assert.strictEqual(genericTransfer.beneficiaryName,'Ahmed Ali');
 assert.strictEqual(genericTransfer.availableBalance,25);
+assert.strictEqual(genericTransfer.accountRef,null);
+const packageHint=P.parse({id:'g3',packageName:'com.acmewallet.app',text:'Your account was credited AED 10.00. Available balance is AED 20.00'});
+assert.strictEqual(packageHint.ignored,false);
+assert.ok(packageHint.sourceHint.includes('com.acmewallet.app'));
+assert.strictEqual(packageHint.accountRef,null);
 
 const pkgBank=P.parse({id:'pkg1',postedAt:9000,packageName:'com.emiratesnbd.android',text:'Purchase AED 10.00 with card 4021 at TEST MERCHANT'});
 assert.strictEqual(pkgBank.bankId,'emirates-nbd');

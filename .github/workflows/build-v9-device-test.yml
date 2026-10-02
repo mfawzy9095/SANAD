@@ -570,6 +570,7 @@ jobs:
           grep -q "const BankIngestionCore = window.SanadBankIngestionCore" "app/src/main/assets/index.html"
           grep -q "BankIngestionCore.plan(parsed,S,{uid})" "app/src/main/assets/index.html"
           grep -q "BankIngestionCore.applyPlan(S,plan)" "app/src/main/assets/index.html"
+          grep -Fq "BankIngestionCore.sortNotifications(Array.isArray(rows)?rows:[])" "app/src/main/assets/index.html"
           grep -q "bankAutoImportEnabled" "app/src/main/assets/index.html"
           grep -q "مزامنة العمليات الجديدة الآن" "app/src/main/assets/index.html"
           grep -q "bankNotificationAccessEnabled" "app/src/main/java/com/sanad/v9test/MainActivity.java"

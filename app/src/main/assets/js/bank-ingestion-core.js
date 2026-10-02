@@ -47,9 +47,12 @@
   function findCustomInstitutionByHint(state,parsed){
     const hint=normalizeSource(parsed&&parsed.sourceHint);
     if(!hint)return null;
-    const matches=arr(state&&state.institutions).filter(inst=>institutionAliases(inst).some(alias=>
-      hint===alias||hint.includes(alias)||(hint.length>=4&&alias.includes(hint))
-    ));
+    const hintCompact=hint.replace(/\s+/g,'');
+    const matches=arr(state&&state.institutions).filter(inst=>institutionAliases(inst).some(alias=>{
+      const aliasCompact=alias.replace(/\s+/g,'');
+      return hint===alias||hint.includes(alias)||(hint.length>=4&&alias.includes(hint))||
+        (aliasCompact.length>=5&&hintCompact.includes(aliasCompact));
+    }));
     return matches.length===1?matches[0]:null;
   }
   function findInstitution(state,parsed){
@@ -72,6 +75,13 @@
       return p?p.name:parsed.providerId;
     }
     return 'Financial source';
+  }
+  function sortNotifications(events){
+    return arr(events).slice().sort((a,b)=>{
+      const at=Number(a&&a.postedAt)||0,bt=Number(b&&b.postedAt)||0;
+      if(at!==bt)return at-bt;
+      return String((a&&a.id)||'').localeCompare(String((b&&b.id)||''));
+    });
   }
   function duplicateOf(parsed,state){
     const key=MessageCore.dedupeKey(parsed);
@@ -364,6 +374,6 @@
   }
 
   return Object.freeze({
-    autoEligible,duplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint
+    autoEligible,duplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications
   });
 });

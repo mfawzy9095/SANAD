@@ -198,6 +198,18 @@ function process(text,input,state){
   assert.strictEqual(Finance.accountBalance(s,'acme-wallet'),125);
 })();
 
+(function customDebitCardAutoDiscoveryKeepsObservedBalance(){
+  const s=empty();
+  s.institutions.push({id:'acme-bank',name:'Acme Bank',country:'UAE',type:'bank'});
+  strictOk(s,'custom debit before ingest');
+  process('Purchase AED 10.00 at TEST STORE using debit card ending 7777. Available balance is AED 90.00',{id:'acme-debit',title:'Acme Bank'},s);
+  assert.strictEqual(s.accounts.length,1);
+  assert.strictEqual(s.accounts[0].type,'bank');
+  assert.strictEqual(s.accounts[0].openingBalance,100);
+  assert.strictEqual(s.paymentInstruments[0].type,'debit_card');
+  assert.strictEqual(Finance.accountBalance(s,s.accounts[0].id),90);
+})();
+
 (function transactionReferencePreventsDuplicate(){
   const s=empty();
   const text="Hello Mohamed Abd, You've received AED 9.00 to your du Pay wallet. Your available balance is now AED 110.28, and the transaction ID is: DG148RKIXI";

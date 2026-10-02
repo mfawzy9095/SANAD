@@ -81,12 +81,12 @@
     return null;
   }
   function result(base,input,raw){
-    return Object.assign({recognized:true,eventId:input&&input.id?String(input.id):null,postedAt:Number(input&&input.postedAt)||Date.now(),
+    return Object.assign({recognized:true,ignored:false,eventId:input&&input.id?String(input.id):null,postedAt:Number(input&&input.postedAt)||Date.now(),
       bankId:base.bankId||bankIdFrom(input,raw),providerId:base.providerId||providerIdFrom(input,raw),kind:base.kind,direction:base.direction||null,amount:Number(base.amount),
       currency:String(base.currency||'AED').toUpperCase(),merchant:base.merchant||'',category:base.category||'other',
       cardLast4:base.cardLast4||null,accountRef:base.accountRef||null,accountSuffix:base.accountSuffix||suffix(base.accountRef),
       transactionRef:base.transactionRef||null,transactionDate:base.transactionDate||null,beneficiaryName:base.beneficiaryName||null,
-      sourceHint:base.sourceHint||String((input&&(input.title||input.sender))||'').trim(),
+      sourceHint:base.sourceHint||[input&&input.title,input&&input.sender,input&&input.packageName].filter(Boolean).join(' ').trim(),
       fee:base.fee==null?0:Number(base.fee),vat:base.vat==null?0:Number(base.vat),
       availableBalance:base.availableBalance==null?null:Number(base.availableBalance),availableCredit:base.availableCredit==null?null:Number(base.availableCredit),
       raw:String(raw),confidence:Number(base.confidence||0.95)},base);
@@ -145,7 +145,8 @@
     else{m=x.match(/([\d,]+(?:\.\d+)?)\s*(AED|USD|EUR|GBP|SAR|EGP|MAD)/i);if(m){value=amount(m[1]);currency=m[2].toUpperCase();}}
     if(!value||!currency)return null;
     const card=(x.match(/(?:card|بطاق\S*)\D{0,40}(\d{4})/i)||[])[1]||null;
-    const acc=(x.match(/(?:account|حسابك|حساب)\s*[:.]?\s*([A-Za-z0-9Xx*]{2,30})/i)||[])[1]||null;
+    const accToken=(x.match(/(?:account|حسابك|حساب)\s*[:.]?\s*([A-Za-z0-9Xx*]{2,30})/i)||[])[1]||null;
+    const acc=accToken&&/[0-9Xx*]/.test(accToken)?accToken:null;
     let cardType=null;
     if(/credit\s+card|بطاق\S*\s+الائتمان/i.test(x))cardType='credit_card';
     else if(/debit\s+card|بطاق\S*\s+الخصم/i.test(x))cardType='debit_card';

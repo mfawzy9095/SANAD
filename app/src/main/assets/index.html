@@ -8223,7 +8223,7 @@ const SanadBankInbox = {
     if(!this.supported())return [];
     try{
       const rows=JSON.parse(AndroidBridge.getPendingBankNotifications()||'[]');
-      return Array.isArray(rows)?rows:[];
+      return BankIngestionCore.sortNotifications(Array.isArray(rows)?rows:[]);
     }catch(_){return [];}
   },
   kindLabel(kind){

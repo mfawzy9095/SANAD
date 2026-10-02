@@ -29,6 +29,12 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.transaction.instrumentId,'c9999');
 }
 
+// Notification queue must be oldest-first before balance baselines are inferred.
+{
+  const rows=I.sortNotifications([{id:'b',postedAt:300},{id:'a',postedAt:100},{id:'c',postedAt:300}]);
+  assert.deepStrictEqual(rows.map(x=>x.id),['a','b','c']);
+}
+
 // A custom wallet entered by the user routes a generic deposit by exact notification source name.
 {
   const p=P.parse({id:'custom-wallet',postedAt:1800,title:'Acme Wallet',text:'Your account was credited AED 50.00. Available balance is AED 125.00'});
@@ -36,6 +42,29 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   const plan=I.plan(p,s,{uid});
   assert.strictEqual(plan.action,'auto-save');
   assert.strictEqual(plan.transaction.accountId,'aw');
+}
+
+// A custom wallet with no account yet can be created from a trusted package/name match plus reported balance.
+{
+  const p=P.parse({id:'custom-wallet-new',postedAt:1825,packageName:'com.acmewallet.app',text:'Your account was credited AED 50.00. Available balance is AED 125.00'});
+  const s={institutions:[{id:'acme-new',name:'Acme Wallet',country:'UAE',type:'wallet_provider'}],accounts:[],paymentInstruments:[],transactions:[],beneficiaries:[]};
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.create.accounts.length,1);
+  assert.strictEqual(plan.create.accounts[0].type,'ewallet');
+  assert.strictEqual(plan.create.accounts[0].openingBalance,75);
+}
+
+// A custom bank can auto-discover a debit card and reconstruct its balance.
+{
+  const p=P.parse({id:'custom-debit',postedAt:1835,title:'Acme Bank',text:'Purchase AED 10.00 at TEST STORE using debit card ending 7777. Available balance is AED 90.00'});
+  const s={institutions:[{id:'acme-debit-bank',name:'Acme Bank',country:'UAE',type:'bank'}],accounts:[],paymentInstruments:[],transactions:[],beneficiaries:[]};
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.create.accounts[0].type,'bank');
+  assert.strictEqual(plan.create.accounts[0].openingBalance,100);
+  assert.strictEqual(plan.create.instruments[0].type,'debit_card');
+  assert.strictEqual(plan.create.instruments[0].last4,'7777');
 }
 
 // A custom bank entered by the user can auto-discover a new explicitly identified credit card.
@@ -164,6 +193,18 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
 }
 
 // Learned merchant rule overrides a built-in category after the user corrects it.
+{
+  const p=P.parse({id:'learn2',postedAt:8150,text:'تمت عملية شراء في AED 20.00 UNION COOP,DUBAI على البطاقة 4021 الائتمان المتوفر AED3,980.00'});
+  const s={institutions:[{id:'i1',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd'}],accounts:[
+    {id:'credit',institutionId:'i1',country:'UAE',name:'Credit',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:5000,archived:false}
+  ],paymentInstruments:[{id:'c4021',accountId:'credit',institutionId:'i1',country:'UAE',type:'credit_card',last4:'4021',archived:false}],
+  transactions:[{id:'oldcat2',type:'expense',accountId:'credit',instrumentId:'c4021',amount:5,walletAmount:5,currency:'AED',fxRate:1,cat:'home',note:'UNION COOP,DUBAI',tags:[],date:'2026-09-01',created:2}]};
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.transaction.cat,'home');
+}
+
+// A prior user category correction overrides a later built-in merchant guess.
 {
   const p=P.parse({id:'learn2',postedAt:8150,text:'تمت عملية شراء في AED 20.00 UNION COOP,DUBAI على البطاقة 4021 الائتمان المتوفر AED3,980.00'});
   const s={institutions:[{id:'i1',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd'}],accounts:[
