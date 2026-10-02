@@ -282,4 +282,13 @@ function process(text,input,state){
   assert.ok(html.includes('window.sanadAppBackgrounded=function(ts){try{SanadAmountPrivacy.onBackground();}catch(_){}'), 'backgrounding must revoke the temporary reveal');
 })();
 
+
+(function accountCardsUseInstitutionLogos(){
+  const html=fs.readFileSync(path.join(__dirname,'../../main/assets/index.html'),'utf8');
+  assert.ok(html.includes('function institutionLogoHtml(inst,size=34,fallbackIcon='),'accounts need a shared institution-logo renderer');
+  assert.ok(html.includes('institutionLogoHtml(inst,32,defaultAcc.icon)'),'home hero must use the bank/wallet logo');
+  assert.ok(html.includes('institutionLogoHtml(inst,32,a.icon)'),'account tiles must use the bank/wallet logo');
+  assert.ok(html.includes('institutionLogoHtml(cardInstitution,32,inst.icon || tInfo.icon)'),'card tiles must use their institution logo');
+})();
+
 console.log('bank ingestion schema integration tests: PASS');
