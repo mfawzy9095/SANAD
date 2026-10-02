@@ -342,32 +342,46 @@
   }
   function routeFromLearnedRule(parsed,state,rule){
     if(!rule)return null;
-    const accounts=arr(state&&state.accounts),instruments=arr(state&&state.paymentInstruments);
+    const accounts=arr(state&&state.accounts),instruments=arr(state&&state.paymentInstruments),institutions=arr(state&&state.institutions);
     const account=rule.accountId?accounts.find(a=>a&&a.id===rule.accountId&&!a.archived)||null:null;
     const fromAccount=rule.fromAccountId?accounts.find(a=>a&&a.id===rule.fromAccountId&&!a.archived)||null:null;
     const targetAccount=rule.targetAccountId?accounts.find(a=>a&&a.id===rule.targetAccountId&&!a.archived)||null:null;
     const instrument=rule.instrumentId?instruments.find(i=>i&&i.id===rule.instrumentId&&!i.archived)||null:null;
     const country=countryForParsed(parsed),currency=String(parsed.currency||'');
     const accountOk=a=>!a||(a.country===country&&(!currency||a.currency===currency));
+    const sourceInstitutionOk=inst=>{
+      if(!inst)return true;
+      const bank=institutionBankId(inst),provider=institutionProviderId(inst);
+      if(parsed.bankId&&(bank||provider))return bank===parsed.bankId;
+      if(parsed.providerId&&(provider||bank))return provider===parsed.providerId;
+      return true;
+    };
+    const accountSourceOk=a=>{
+      if(!a)return true;
+      const inst=a.institutionId?institutions.find(i=>i&&i.id===a.institutionId)||null:null;
+      return sourceInstitutionOk(inst);
+    };
     if(!accountOk(account)||!accountOk(fromAccount)||!accountOk(targetAccount))return null;
     if(instrument){
       const linked=accounts.find(a=>a&&a.id===instrument.accountId&&!a.archived)||null;
       if(!linked||linked.country!==country||(!currency||linked.currency!==currency))return null;
+      const instrumentInstitution=instrument.institutionId?institutions.find(i=>i&&i.id===instrument.institutionId)||null:null;
+      if(!accountSourceOk(linked)||!sourceInstitutionOk(instrumentInstitution))return null;
       if(parsed.cardFirst4&&String(instrument.first4||'')!==String(parsed.cardFirst4))return null;
       if(parsed.cardLast4&&String(instrument.last4||'')!==String(parsed.cardLast4))return null;
     }
     const kind=parsed.kind;
     if(['purchase','bill_payment','mobile_recharge','deposit','salary','refund','incoming_transfer'].includes(kind)){
       const a=account||(instrument?accounts.find(x=>x&&x.id===instrument.accountId&&!x.archived):null);
-      if(!a)return null;
+      if(!a||!accountSourceOk(a))return null;
       return {status:'routed',account:a,instrument:instrument||null,confidence:0.995,learnedRule:true,learningRuleId:rule.id};
     }
     if(kind==='outgoing_transfer'){
-      if(!fromAccount)return null;
+      if(!fromAccount||!accountSourceOk(fromAccount))return null;
       return {status:'routed',fromAccount,confidence:0.995,learnedRule:true,learningRuleId:rule.id};
     }
     if(['internal_transfer','card_repayment','cash_withdrawal'].includes(kind)){
-      if(!fromAccount||!targetAccount)return null;
+      if(!fromAccount||!targetAccount||!accountSourceOk(fromAccount))return null;
       return {status:'routed',fromAccount,targetAccount,instrument:instrument||null,confidence:0.995,learnedRule:true,learningRuleId:rule.id};
     }
     return null;
