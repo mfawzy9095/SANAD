@@ -586,9 +586,17 @@
         create.instruments.push(card);draft.paymentInstruments.push(card);
       }
     }else if(['deposit','salary','refund','incoming_transfer'].includes(parsed.kind)){
-      const acc=makeAssetAccount(parsed,institution.id,uid,parsed.kind,institution);
-      if(!acc)return {action:'review',reason:'observed-balance-required',confidence:0};
-      create.accounts.push(acc);draft.accounts.push(acc);
+      const expectedType=(parsed.providerId||institution.type==='wallet_provider')?'ewallet':'bank';
+      const sameSourceAccounts=draft.accounts.filter(a=>a&&!a.archived&&a.type===expectedType&&a.institutionId===institution.id&&a.country===countryForParsed(parsed)&&(!parsed.currency||a.currency===parsed.currency));
+      if(sameSourceAccounts.length===1){
+        route={status:'routed',account:sameSourceAccounts[0],instrument:null,confidence:0.98,sameSourceUnique:true};
+      }else if(sameSourceAccounts.length>1){
+        return {action:'review',reason:'ambiguous-existing-accounts',confidence:0,create};
+      }else{
+        const acc=makeAssetAccount(parsed,institution.id,uid,parsed.kind,institution);
+        if(!acc)return {action:'review',reason:'observed-balance-required',confidence:0};
+        create.accounts.push(acc);draft.accounts.push(acc);
+      }
     }else{
       return {action:'review',reason:direct.reason||'existing-source-required',confidence:0};
     }

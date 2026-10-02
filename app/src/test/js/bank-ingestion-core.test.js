@@ -168,6 +168,31 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.existingTransactionId,'old');
 }
 
+// A second incoming message for the same single known bank account must reuse it, never create a duplicate account.
+{
+  const s={institutions:[{id:'enbd-i',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd',type:'bank'}],accounts:[
+    {id:'enbd-a',institutionId:'enbd-i',country:'UAE',name:'ENBD Account',type:'bank',currency:'AED',openingBalance:100,openingDebt:0,creditLimit:0,archived:false}
+  ],paymentInstruments:[],transactions:[],beneficiaries:[]};
+  const parsed=P.parse({id:'salary-no-ref',postedAt:610000,title:'Emirates NBD',text:'Salary AED 9000.00 has been credited. Available balance AED 9100.00'});
+  const plan=I.plan(parsed,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual((plan.create.accounts||[]).length,0);
+  assert.strictEqual(plan.transaction.accountId,'enbd-a');
+}
+
+// Multiple same-source accounts with no exact ref must stay in review rather than auto-pick or create.
+{
+  const s={institutions:[{id:'enbd-i',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd',type:'bank'}],accounts:[
+    {id:'a1',institutionId:'enbd-i',country:'UAE',name:'A1',type:'bank',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:0,archived:false},
+    {id:'a2',institutionId:'enbd-i',country:'UAE',name:'A2',type:'bank',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:0,archived:false}
+  ],paymentInstruments:[],transactions:[],beneficiaries:[]};
+  const parsed=P.parse({id:'deposit-amb',postedAt:620000,title:'Emirates NBD',text:'AED 100.00 has been credited. Available balance AED 500.00'});
+  const plan=I.plan(parsed,s,{uid});
+  assert.strictEqual(plan.action,'review');
+  assert.strictEqual(plan.reason,'ambiguous-existing-accounts');
+  assert.strictEqual((plan.create.accounts||[]).length,0);
+}
+
 // Same transaction arriving once as a notification and once from SMS history must dedupe
 // even when the native event ids differ and the message has no transaction reference.
 {
