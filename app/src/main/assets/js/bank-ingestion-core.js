@@ -440,6 +440,7 @@
     const instrument=instruments.find(i=>i&&i.id===instrumentId&&!i.archived)||null;
     const target=accounts.find(a=>a&&a.id===targetAccountId&&!a.archived)||null;
     if(!instrument||!target)return {ok:false,reason:'instrument-or-account-not-found'};
+    if(!['debit_card','wallet_card'].includes(instrument.type))return {ok:false,reason:'instrument-rebind-unsupported'};
     const current=accounts.find(a=>a&&a.id===instrument.accountId)||null;
     if(!current)return {ok:false,reason:'current-account-not-found'};
     if(current.id===target.id)return {ok:true,changed:false,movedTransactions:0,movedRecurring:0};
