@@ -214,6 +214,35 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.reason,'ambiguous-existing-accounts');
 }
 
+// A manual approval can teach an exact sender/template/card route for future ambiguous messages.
+{
+  const s={institutions:[
+    {id:'i1',name:'Bank One',country:'UAE',type:'bank'},
+    {id:'i2',name:'Bank Two',country:'UAE',type:'bank'}
+  ],accounts:[
+    {id:'a1',institutionId:'i1',country:'UAE',name:'Card One',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:1000,archived:false},
+    {id:'a2',institutionId:'i2',country:'UAE',name:'Card Two',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:1000,archived:false}
+  ],paymentInstruments:[
+    {id:'c1',accountId:'a1',institutionId:'i1',country:'UAE',type:'credit_card',last4:'1234',archived:false},
+    {id:'c2',accountId:'a2',institutionId:'i2',country:'UAE',type:'credit_card',last4:'1234',archived:false}
+  ],transactions:[],beneficiaries:[],settings:{}};
+  const first=P.parse({id:'learn-route-1',postedAt:800000,title:'MYSTERYBANK',text:'Purchase AED 20.00 at SHOP ONE on your credit card ending 1234'});
+  const initial=I.plan(first,s,{uid});
+  assert.strictEqual(initial.action,'review');
+  const learned=I.learnFromApproval(s,first,{status:'routed',account:s.accounts[0],instrument:s.paymentInstruments[0],confidence:1},{uid,now:900000});
+  assert.ok(learned);
+  assert.strictEqual(s.settings.bankLearningRules.length,1);
+  const next=P.parse({id:'learn-route-2',postedAt:900000,title:'MYSTERYBANK',text:'Purchase AED 35.00 at SHOP TWO on your credit card ending 1234'});
+  assert.strictEqual(I.templateSignature(first),I.templateSignature(next));
+  const planned=I.plan(next,s,{uid});
+  assert.strictEqual(planned.action,'auto-save');
+  assert.strictEqual(planned.reason,'learned-rule');
+  assert.strictEqual(planned.transaction.accountId,'a1');
+  assert.strictEqual(planned.transaction.instrumentId,'c1');
+  const otherSender=P.parse({id:'learn-route-3',postedAt:910000,title:'OTHERBANK',text:'Purchase AED 35.00 at SHOP THREE on your credit card ending 1234'});
+  assert.strictEqual(I.plan(otherSender,s,{uid}).action,'review');
+}
+
 // User category choices become a local merchant rule for later auto-imports.
 {
   const p=P.parse({id:'learn1',postedAt:8100,text:'تمت عملية شراء في AED 12.00 MY SPECIAL SHOP على البطاقة 4021 الائتمان المتوفر AED4,000.00'});

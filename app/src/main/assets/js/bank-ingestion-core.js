@@ -280,6 +280,118 @@
   function normalizedPerson(value){
     return String(value||'').toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g,' ').replace(/\s+/g,' ').trim();
   }
+  function learningSourceKey(parsed){
+    if(!parsed)return null;
+    if(parsed.bankId)return 'bank:'+String(parsed.bankId);
+    if(parsed.providerId)return 'provider:'+String(parsed.providerId);
+    const hint=normalizeSource(parsed.sourceHint||'');
+    return hint?'hint:'+hint:null;
+  }
+  function templateSignature(parsed){
+    if(!parsed)return '';
+    let x=normalizeSource(parsed.raw||'');
+    if(!x)return '';
+    const dynamic=[
+      [parsed.transactionRef,'<ref>'],
+      [parsed.beneficiaryName,'<beneficiary>'],
+      [parsed.merchant,'<merchant>'],
+      [parsed.fromAccountRef,'<fromaccount>'],
+      [parsed.toAccountRef,'<toaccount>'],
+      [parsed.accountRef,'<account>'],
+      [parsed.cardLast4,'<card>']
+    ].map(([value,token])=>[normalizeSource(value||''),token])
+      .filter(([value])=>value&&value.length>=2)
+      .sort((a,b)=>b[0].length-a[0].length);
+    for(const [value,token] of dynamic)x=x.split(value).join(token);
+    x=x.replace(/\b(aed|egp|mad|usd|eur|gbp|sar)\s*-?[0-9][0-9,.]*/g,'$1 <amount>');
+    x=x.replace(/\b[0-9]{1,2}[\/-][0-9]{1,2}[\/-][0-9]{2,4}\b/g,'<date>');
+    x=x.replace(/\b[0-9]{1,2}:[0-9]{2}\b/g,'<time>');
+    x=x.replace(/\b[0-9][0-9,.]{3,}\b/g,'<number>');
+    return x.replace(/\s+/g,' ').trim().slice(0,800);
+  }
+  function learningRules(state){
+    return arr(state&&state.settings&&state.settings.bankLearningRules).filter(r=>r&&r.enabled!==false);
+  }
+  function matchLearnedRule(parsed,state){
+    const sourceKey=learningSourceKey(parsed),signature=templateSignature(parsed);
+    if(!sourceKey||signature.length<8)return null;
+    const country=countryForParsed(parsed),currency=String(parsed.currency||'').toUpperCase();
+    const card=String(parsed.cardLast4||''),account=String(parsed.accountRef||'');
+    const matches=learningRules(state).filter(r=>{
+      if(r.sourceKey!==sourceKey||r.templateSignature!==signature)return false;
+      if(r.country&&r.country!==country)return false;
+      if(r.currency&&String(r.currency).toUpperCase()!==currency)return false;
+      if(r.cardLast4&&String(r.cardLast4)!==card)return false;
+      if(r.accountRef&&String(r.accountRef)!==account)return false;
+      return true;
+    });
+    if(!matches.length)return null;
+    return matches.sort((a,b)=>(Number(b.updatedAt)||0)-(Number(a.updatedAt)||0))[0];
+  }
+  function routeFromLearnedRule(parsed,state,rule){
+    if(!rule)return null;
+    const accounts=arr(state&&state.accounts),instruments=arr(state&&state.paymentInstruments);
+    const account=rule.accountId?accounts.find(a=>a&&a.id===rule.accountId&&!a.archived)||null:null;
+    const fromAccount=rule.fromAccountId?accounts.find(a=>a&&a.id===rule.fromAccountId&&!a.archived)||null:null;
+    const targetAccount=rule.targetAccountId?accounts.find(a=>a&&a.id===rule.targetAccountId&&!a.archived)||null:null;
+    const instrument=rule.instrumentId?instruments.find(i=>i&&i.id===rule.instrumentId&&!i.archived)||null:null;
+    const country=countryForParsed(parsed),currency=String(parsed.currency||'');
+    const accountOk=a=>!a||(a.country===country&&(!currency||a.currency===currency));
+    if(!accountOk(account)||!accountOk(fromAccount)||!accountOk(targetAccount))return null;
+    if(instrument){
+      const linked=accounts.find(a=>a&&a.id===instrument.accountId&&!a.archived)||null;
+      if(!linked||linked.country!==country||(!currency||linked.currency!==currency))return null;
+      if(parsed.cardLast4&&String(instrument.last4||'')!==String(parsed.cardLast4))return null;
+    }
+    const kind=parsed.kind;
+    if(['purchase','bill_payment','mobile_recharge','deposit','salary','refund','incoming_transfer'].includes(kind)){
+      const a=account||(instrument?accounts.find(x=>x&&x.id===instrument.accountId&&!x.archived):null);
+      if(!a)return null;
+      return {status:'routed',account:a,instrument:instrument||null,confidence:0.995,learnedRule:true,learningRuleId:rule.id};
+    }
+    if(kind==='outgoing_transfer'){
+      if(!fromAccount)return null;
+      return {status:'routed',fromAccount,confidence:0.995,learnedRule:true,learningRuleId:rule.id};
+    }
+    if(['internal_transfer','card_repayment','cash_withdrawal'].includes(kind)){
+      if(!fromAccount||!targetAccount)return null;
+      return {status:'routed',fromAccount,targetAccount,instrument:instrument||null,confidence:0.995,learnedRule:true,learningRuleId:rule.id};
+    }
+    return null;
+  }
+  function learnFromApproval(state,parsed,route,options){
+    if(!state||!parsed||!route||route.status!=='routed')return null;
+    if(!state.settings||typeof state.settings!=='object')state.settings={};
+    if(!Array.isArray(state.settings.bankLearningRules))state.settings.bankLearningRules=[];
+    const sourceKey=learningSourceKey(parsed),signature=templateSignature(parsed);
+    if(!sourceKey||signature.length<8)return null;
+    const opts=options||{},now=Number(opts.now)||Date.now();
+    const kind=String(opts.kind||parsed.kind||'');
+    const spec={
+      sourceKey,templateSignature:signature,country:countryForParsed(parsed),currency:String(parsed.currency||'').toUpperCase(),
+      cardLast4:parsed.cardLast4?String(parsed.cardLast4):null,accountRef:parsed.accountRef?String(parsed.accountRef):null,
+      kind,
+      accountId:route.account&&route.account.id||null,
+      fromAccountId:route.fromAccount&&route.fromAccount.id||null,
+      targetAccountId:route.targetAccount&&route.targetAccount.id||null,
+      instrumentId:route.instrument&&route.instrument.id||null
+    };
+    const key=r=>[
+      r.sourceKey,r.templateSignature,r.country||'',String(r.currency||'').toUpperCase(),
+      r.cardLast4||'',r.accountRef||''
+    ].join('|');
+    const wantedKey=key(spec);
+    let rule=state.settings.bankLearningRules.find(r=>r&&key(r)===wantedKey)||null;
+    if(rule){
+      Object.assign(rule,spec,{enabled:true,updatedAt:now,approvals:(Number(rule.approvals)||0)+1});
+    }else{
+      const makeId=typeof opts.uid==='function'?opts.uid:(p=>String(p||'rule')+'_'+now);
+      rule=Object.assign({id:makeId('bankrule'),enabled:true,createdAt:now,updatedAt:now,approvals:1},spec);
+      state.settings.bankLearningRules.push(rule);
+      if(state.settings.bankLearningRules.length>200)state.settings.bankLearningRules.splice(0,state.settings.bankLearningRules.length-200);
+    }
+    return clone(rule);
+  }
   function attachBeneficiary(parsed,state,built,create,uid){
     if(!built||!built.ok||!built.transaction||built.transaction.type!=='external_transfer')return built;
     const name=String(parsed&&parsed.beneficiaryName||'').trim();
@@ -305,7 +417,8 @@
     const exactInstrument=!!(route.instrument&&parsed.cardLast4&&String(route.instrument.last4||'')===String(parsed.cardLast4));
     const exactAccountRef=!!(parsed.accountRef&&Number(route.confidence||0)>=0.95);
     const exactCustomSource=!!(route.customSourceMatch&&Number(route.confidence||0)>=0.96);
-    const minParsedConfidence=exactInstrument?0.70:(exactAccountRef?0.74:(exactCustomSource?0.72:0.95));
+    const learnedRoute=route.learnedRule===true;
+    const minParsedConfidence=learnedRoute?0.70:(exactInstrument?0.70:(exactAccountRef?0.74:(exactCustomSource?0.72:0.95)));
     if(Number(parsed.confidence||0)<minParsedConfidence)return {ok:false,reason:'low-confidence'};
     if(parsed.cardLast4&&parsed.cardType&&['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)&&!route.instrument)return {ok:false,reason:'instrument-missing'};
     if((num(parsed.fee)||0)+(num(parsed.vat)||0)>0)return {ok:false,reason:'fee-review-required'};
@@ -315,6 +428,10 @@
   function plan(parsed,state,options){
     const uid=idFactory(options);
     if(!parsed||!parsed.recognized)return {action:'review',reason:(parsed&&parsed.reason)||'unrecognized',confidence:0};
+    const learnedRule=matchLearnedRule(parsed,state);
+    if(learnedRule&&learnedRule.kind&&learnedRule.kind!==parsed.kind){
+      parsed=Object.assign({},parsed,{kind:learnedRule.kind});
+    }
     const dup=duplicateOf(parsed,state);
     if(dup)return {action:'duplicate',reason:'already-imported',existingTransactionId:dup.id,confidence:1};
 
@@ -324,7 +441,7 @@
     if(!Array.isArray(draft.paymentInstruments))draft.paymentInstruments=[];
     if(!Array.isArray(draft.transactions))draft.transactions=[];
 
-    let route=resolveCustomRoute(parsed,draft,MessageCore.resolveRoute(parsed,draft));
+    let route=routeFromLearnedRule(parsed,draft,learnedRule)||resolveCustomRoute(parsed,draft,MessageCore.resolveRoute(parsed,draft));
     const initialRoute=route;
     const direct=autoEligible(parsed,route);
     if(direct.ok){
@@ -332,7 +449,7 @@
       let built=applyLearnedCategory(parsed,state,MessageCore.buildTransaction(parsed,route,{uid}));
       if(!built.ok)return {action:'review',reason:built.reason||'build-failed',confidence:0};
       built=attachBeneficiary(parsed,state,built,create,uid);
-      return {action:'auto-save',reason:'exact-route',confidence:Math.min(1,Number(parsed.confidence||0)),transaction:built.transaction,create,observations:updateObservation(parsed,route)};
+      return {action:'auto-save',reason:route&&route.learnedRule?'learned-rule':'exact-route',confidence:Math.min(1,Number(parsed.confidence||0)),transaction:built.transaction,create,observations:updateObservation(parsed,route),learningRuleId:route&&route.learningRuleId||null};
     }
 
     const create={institutions:[],accounts:[],instruments:[],beneficiaries:[]};
@@ -451,6 +568,6 @@
   }
 
   return Object.freeze({
-    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications
+    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,learnFromApproval
   });
 });

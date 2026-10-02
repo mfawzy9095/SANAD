@@ -8384,7 +8384,9 @@ const SanadBankInbox = {
       'instrument-missing':'الكارت غير مسجل بعد',
       'fee-review-required':'العملية تحتوي رسومًا وتحتاج مراجعة',
       'fx-review-required':'العملة تحتاج مراجعة',
-      'existing-source-required':'يحتاج حسابًا موجودًا قبل الحفظ'
+      'existing-source-required':'يحتاج حسابًا موجودًا قبل الحفظ',
+      'existing-instrument-conflict':'الكارت موجود بالفعل ويحتاج تأكيد الربط بدل إنشاء نسخة ثانية',
+      'ambiguous-existing-instruments':'يوجد أكثر من كارت مطابق ويجب اختيار الصحيح'
     }[reason]||String(reason||'يحتاج مراجعة');
   },
   routeLabel(item){
@@ -8769,6 +8771,7 @@ const SanadBankInbox = {
     if(BankIngestionCore.duplicateOf(parsed,S)){this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
     const result=await commitCriticalMutation(async()=>{
       S.transactions.push(built.transaction);
+      BankIngestionCore.learnFromApproval(S,parsed,route,{uid});
       this.applyReconciliation(parsed,{transaction:built.transaction});
       return true;
     });
