@@ -536,6 +536,25 @@
     state.accounts=accounts.filter(a=>a&&a.id!==from.id);
     return {ok:true,fromAccountId:from.id,toAccountId:to.id,movedTransactions,movedRecurring,movedInstruments};
   }
+  function cardIdentity4(value){
+    const x=String(value||'');
+    return /^\d{4}$/.test(x)?x:'';
+  }
+  function cardIdentityCompatible(a,b){
+    if(!a||!b)return false;
+    const af=cardIdentity4(a.first4),al=cardIdentity4(a.last4);
+    const bf=cardIdentity4(b.first4),bl=cardIdentity4(b.last4);
+    const aFull=!!(af&&al),bFull=!!(bf&&bl);
+    if(aFull&&bFull)return af===bf&&al===bl;
+    if(af&&bf)return af===bf;
+    if(al&&bl&&al===bl)return true;
+    // Legacy SANAD could store a "starting with" prefix as last4. Allow only
+    // when that side has no first4, so two fully identified cards can never
+    // match merely because one card's first4 equals the other's last4.
+    if(!af&&al&&bf&&al===bf)return true;
+    if(!bf&&bl&&af&&bl===af)return true;
+    return false;
+  }
   function mergeDuplicateInstrument(state,fromInstrumentId,toInstrumentId){
     if(!state||fromInstrumentId===toInstrumentId)return {ok:false,reason:'invalid-merge'};
     const instruments=arr(state.paymentInstruments),accounts=arr(state.accounts),institutions=arr(state.institutions);
@@ -543,6 +562,9 @@
     const to=instruments.find(i=>i&&i.id===toInstrumentId&&!i.archived)||null;
     if(!from||!to)return {ok:false,reason:'instrument-not-found'};
     if(from.type!==to.type||from.country!==to.country)return {ok:false,reason:'instrument-type-country-mismatch'};
+    if(!cardIdentityCompatible(from,to))return {ok:false,reason:'instrument-identity-mismatch'};
+    if(from.network&&to.network&&from.network!=='other'&&to.network!=='other'&&from.network!==to.network)
+      return {ok:false,reason:'instrument-network-mismatch'};
     const fromAcc=accounts.find(a=>a&&a.id===from.accountId)||null,toAcc=accounts.find(a=>a&&a.id===to.accountId)||null;
     if(!fromAcc||!toAcc||fromAcc.currency!==toAcc.currency)return {ok:false,reason:'account-currency-mismatch'};
     const fromInst=institutions.find(i=>i&&i.id===(from.institutionId||fromAcc.institutionId))||null;
@@ -821,6 +843,6 @@
   }
 
   return Object.freeze({
-    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,mergeDuplicateInstrument,learnFromApproval
+    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
   });
 });

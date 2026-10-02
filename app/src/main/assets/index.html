@@ -5991,9 +5991,7 @@ function sameCardSourceForMerge(a,b){
   return false;
 }
 function cardIdentityOverlapForMerge(a,b){
-  const av=[a&&a.first4,a&&a.last4].filter(v=>/^\d{4}$/.test(String(v||''))).map(String);
-  const bv=[b&&b.first4,b&&b.last4].filter(v=>/^\d{4}$/.test(String(v||''))).map(String);
-  return av.some(x=>bv.includes(x));
+  return !!(BankIngestionCore.cardIdentityCompatible&&BankIngestionCore.cardIdentityCompatible(a,b));
 }
 function duplicateCardMergeCandidates(sourceId){
   const source=Finance.getInstrument(sourceId);
