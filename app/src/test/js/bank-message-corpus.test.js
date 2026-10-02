@@ -23,7 +23,7 @@ const recognized=[
   ['du-card-grocery','Hello Mohamed Abd, Your du Pay Card ending in 7105 has been used for AED 9.75 at FRESH CRAFT MINI MART. Your available balance is now AED 0.53 and your transaction ID is DG108RVT5U. Fee AED 0.00, VAT AED 0.00.','purchase',9.75,'7105','wallet_card','grocery'],
   ['du-withdrawal','You have successfully withdrawn AED 100.00 from your du Pay wallet. Transaction ID: DG198RKJGT Available balance: AED 10.28','cash_withdrawal',100,null,null,'other'],
   ['du-card-contabo','Hello Mohamed Abd, Your du Pay Card ending in 7105 has been used for AED 19.80 at CONTABO* HOLD ONLY. Your available balance is now AED 1.28 and your transaction ID is DF59845VHJ.','purchase',19.80,'7105','wallet_card','bills'],
-  ['du-card-talabat','Hello Mohamed Abd, Your du Pay Card ending in 7105 has been used for AED 29.01 at Talabat. Your available balance is now AED 21.08 and your transaction ID is DF4583P4L9.','purchase',29.01,'7105','wallet_card','other']
+  ['du-card-talabat','Hello Mohamed Abd, Your du Pay Card ending in 7105 has been used for AED 29.01 at Talabat. Your available balance is now AED 21.08 and your transaction ID is DF4583P4L9.','purchase',29.01,'7105','wallet_card','food']
 ];
 
 for(const [label,text,kind,amount,last4,cardType,cat] of recognized){
