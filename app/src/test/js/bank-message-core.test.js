@@ -198,4 +198,13 @@ for(const c of genericRemittanceCases){
   assert.strictEqual(p.beneficiaryName,c.beneficiary,c.id);
 }
 
+
+const merchantParsed=P.parse({id:'merchant-carrefour',postedAt:Date.UTC(2026,9,2,10,0),title:'ADCB',text:'Purchase AED 42.00 at Carrefour Market using debit card ending 7777. Available balance is AED 100.00'});
+const merchantState={institutions:[{id:'mi',name:'ADCB',country:'UAE',bankRegistryId:'adcb'}],accounts:[{id:'ma',institutionId:'mi',country:'UAE',name:'ADCB',type:'bank',currency:'AED',openingBalance:142,archived:false}],paymentInstruments:[{id:'mc',accountId:'ma',institutionId:'mi',country:'UAE',type:'debit_card',last4:'7777',archived:false}]};
+const merchantRoute=P.resolveRoute(merchantParsed,merchantState);
+const merchantTx=P.buildTransaction(merchantParsed,merchantRoute,{date:'2026-10-02',uid:()=> 'merchant-tx'});
+assert.strictEqual(merchantTx.ok,true);
+assert.strictEqual(merchantTx.transaction.merchantName,'Carrefour Market');
+assert.strictEqual(merchantTx.transaction.cat,'grocery');
+
 console.log('bank message parser regression tests: PASS');
