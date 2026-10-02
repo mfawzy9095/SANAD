@@ -34,14 +34,21 @@ public final class BankNotificationStore {
 
         long ts = postedAt > 0L ? postedAt : System.currentTimeMillis();
         String fingerprint = sha256(safePackage + "\n" + safeTitle + "\n" + safeText);
+        String contentFingerprint = sha256(safeText.replaceAll("\\s+", " ").trim());
         JSONArray current = read(context);
 
         for (int i = 0; i < current.length(); i++) {
             JSONObject old = current.optJSONObject(i);
             if (old == null) continue;
-            if (!fingerprint.equals(old.optString("fingerprint", ""))) continue;
             long oldTs = old.optLong("postedAt", 0L);
-            if (Math.abs(ts - oldTs) <= DEDUPE_WINDOW_MS) return false;
+            if (fingerprint.equals(old.optString("fingerprint", "")) &&
+                    Math.abs(ts - oldTs) <= DEDUPE_WINDOW_MS) return false;
+            String oldContent = old.optString("contentFingerprint", "");
+            if (oldContent.isEmpty()) {
+                oldContent = sha256(old.optString("text", "").replaceAll("\\s+", " ").trim());
+            }
+            if (contentFingerprint.equals(oldContent) &&
+                    Math.abs(ts - oldTs) <= 2L * 60L * 1000L) return false;
         }
 
         JSONArray next = new JSONArray();
@@ -59,6 +66,7 @@ public final class BankNotificationStore {
             event.put("text", safeText);
             event.put("postedAt", ts);
             event.put("fingerprint", fingerprint);
+            event.put("contentFingerprint", contentFingerprint);
         } catch (Exception e) {
             return false;
         }

@@ -14,9 +14,11 @@ import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
+import android.database.Cursor;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.provider.Settings;
+import android.provider.Telephony;
 import android.webkit.JavascriptInterface;
 import android.webkit.MimeTypeMap;
 import android.webkit.ValueCallback;
@@ -50,6 +52,7 @@ public final class MainActivity extends Activity {
     private static final int REQ_CREATE_DOCUMENT = 7002;
     private static final int REQ_NOTIFICATION_PERMISSION = 7003;
     private static final int REQ_DEVICE_AUTH = 7004;
+    private static final int REQ_READ_SMS = 7005;
     private static final String APP_URL = "https://appassets.androidplatform.net/assets/index.html";
 
     private WebView webView;
@@ -432,10 +435,32 @@ public final class MainActivity extends Activity {
                 JSONObject out = new JSONObject(BankNotificationStore.getDiagnosticsJson(MainActivity.this));
                 out.put("accessEnabled", bankNotificationAccessEnabled());
                 out.put("listenerConnected", BankNotificationListener.isConnected());
+                out.put("historicalSmsPermission", historicalSmsPermissionGranted());
                 return out.toString();
             } catch (Exception ignored) {
                 return "{}";
             }
+        }
+
+        @JavascriptInterface
+        public boolean historicalSmsPermissionGranted() {
+            return checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED;
+        }
+
+        @JavascriptInterface
+        public void requestHistoricalSmsPermission() {
+            runOnUiThread(() -> {
+                if (historicalSmsPermissionGranted()) {
+                    notifyJsHistoricalSmsPermissionResult(true);
+                    return;
+                }
+                requestPermissions(new String[]{Manifest.permission.READ_SMS}, REQ_READ_SMS);
+            });
+        }
+
+        @JavascriptInterface
+        public String importHistoricalFinancialSms(int days) {
+            return importHistoricalFinancialSmsInternal(days).toString();
         }
 
         @JavascriptInterface
@@ -469,6 +494,105 @@ public final class MainActivity extends Activity {
         public void toast(String message) {
             runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
         }
+    }
+
+    private JSONObject importHistoricalFinancialSmsInternal(int days) {
+        JSONObject out = new JSONObject();
+        try {
+            if (checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
+                out.put("ok", false);
+                out.put("status", "permission-required");
+                return out;
+            }
+
+            int safeDays = Math.max(0, Math.min(days, 3650));
+            long cutoff = safeDays > 0
+                    ? System.currentTimeMillis() - (long) safeDays * 24L * 60L * 60L * 1000L
+                    : 0L;
+
+            String[] projection = new String[]{
+                    Telephony.Sms._ID,
+                    Telephony.Sms.ADDRESS,
+                    Telephony.Sms.BODY,
+                    Telephony.Sms.DATE
+            };
+            String selection = cutoff > 0L ? Telephony.Sms.DATE + ">=?" : null;
+            String[] selectionArgs = cutoff > 0L ? new String[]{String.valueOf(cutoff)} : null;
+
+            int scanned = 0;
+            int candidates = 0;
+            int added = 0;
+            long oldest = 0L;
+            long newest = 0L;
+
+            try (Cursor cursor = getContentResolver().query(
+                    Telephony.Sms.Inbox.CONTENT_URI,
+                    projection,
+                    selection,
+                    selectionArgs,
+                    Telephony.Sms.DATE + " ASC")) {
+                if (cursor != null) {
+                    int addressCol = cursor.getColumnIndex(Telephony.Sms.ADDRESS);
+                    int bodyCol = cursor.getColumnIndex(Telephony.Sms.BODY);
+                    int dateCol = cursor.getColumnIndex(Telephony.Sms.DATE);
+
+                    while (cursor.moveToNext()) {
+                        scanned++;
+                        String address = addressCol >= 0 ? cursor.getString(addressCol) : "";
+                        String body = bodyCol >= 0 ? cursor.getString(bodyCol) : "";
+                        long at = dateCol >= 0 ? cursor.getLong(dateCol) : 0L;
+                        if (body == null || body.trim().isEmpty()) continue;
+                        String safeAddress = address == null ? "" : address.trim();
+                        String probe = (safeAddress + " " + body).trim();
+                        if (!BankNotificationFilter.looksLikeCandidate(probe)) continue;
+
+                        candidates++;
+                        if (oldest == 0L || (at > 0L && at < oldest)) oldest = at;
+                        if (at > newest) newest = at;
+                        if (BankNotificationStore.enqueue(
+                                MainActivity.this,
+                                "sms:" + safeAddress,
+                                safeAddress,
+                                body,
+                                at > 0L ? at : System.currentTimeMillis())) {
+                            added++;
+                        }
+                    }
+                }
+            }
+
+            out.put("ok", true);
+            out.put("status", "complete");
+            out.put("days", safeDays);
+            out.put("scanned", scanned);
+            out.put("financialCandidates", candidates);
+            out.put("addedToInbox", added);
+            out.put("oldestAt", oldest);
+            out.put("newestAt", newest);
+            return out;
+        } catch (SecurityException denied) {
+            try {
+                out.put("ok", false);
+                out.put("status", "permission-restricted");
+                out.put("message", "READ_SMS is restricted by Android or the installer");
+            } catch (Exception ignored) {}
+            return out;
+        } catch (Exception error) {
+            try {
+                out.put("ok", false);
+                out.put("status", "query-failed");
+                out.put("message", error.getClass().getSimpleName());
+            } catch (Exception ignored) {}
+            return out;
+        }
+    }
+
+    private void notifyJsHistoricalSmsPermissionResult(boolean allowed) {
+        if (webView == null) return;
+        webView.evaluateJavascript(
+                "window.sanadHistoricalSmsPermissionResult&&window.sanadHistoricalSmsPermissionResult(" + (allowed ? "true" : "false") + ");",
+                null
+        );
     }
 
     private void notifyJsPermissionResult(boolean allowed) {
@@ -537,6 +661,11 @@ public final class MainActivity extends Activity {
         if (requestCode == REQ_NOTIFICATION_PERMISSION) {
             boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
             notifyJsPermissionResult(granted);
+            return;
+        }
+        if (requestCode == REQ_READ_SMS) {
+            boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            notifyJsHistoricalSmsPermissionResult(granted);
         }
     }
 

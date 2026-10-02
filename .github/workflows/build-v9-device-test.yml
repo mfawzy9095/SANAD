@@ -582,7 +582,13 @@ jobs:
           grep -q "getDiagnosticsJson" "app/src/main/java/com/sanad/v9test/BankNotificationStore.java"
           grep -q "public boolean clearBankNotifications()" "app/src/main/java/com/sanad/v9test/MainActivity.java"
           grep -q "BankNotificationListener" "app/src/main/AndroidManifest.xml"
-          ! grep -q 'android.permission.READ_SMS' "app/src/main/AndroidManifest.xml"
+          grep -q 'android.permission.READ_SMS' "app/src/main/AndroidManifest.xml"
+          ! grep -q 'android.permission.RECEIVE_SMS' "app/src/main/AndroidManifest.xml"
+          ! grep -q 'android.permission.SEND_SMS' "app/src/main/AndroidManifest.xml"
+          ! grep -q 'android.permission.WRITE_SMS' "app/src/main/AndroidManifest.xml"
+          grep -q "historicalSmsPermissionGranted" "app/src/main/java/com/sanad/v9test/MainActivity.java"
+          grep -q "importHistoricalFinancialSms" "app/src/main/java/com/sanad/v9test/MainActivity.java"
+          grep -q "Telephony.Sms.Inbox.CONTENT_URI" "app/src/main/java/com/sanad/v9test/MainActivity.java"
           ! grep -q 'android.service.notification.disabled_filter_types' "app/src/main/AndroidManifest.xml"
           grep -q "bankInboxOk = !!AndroidBridge.clearBankNotifications()" "app/src/main/assets/index.html"
           node --check app/src/main/assets/js/report-core.js
@@ -624,7 +630,10 @@ jobs:
           grep -q "android.permission.POST_NOTIFICATIONS" apk-permissions.txt
           grep -q "android.permission.USE_BIOMETRIC" apk-permissions.txt
           grep -q "android.permission.RECEIVE_BOOT_COMPLETED" apk-permissions.txt
-          ! grep -q "android.permission.READ_SMS" apk-permissions.txt
+          grep -q "android.permission.READ_SMS" apk-permissions.txt
+          ! grep -q "android.permission.RECEIVE_SMS" apk-permissions.txt
+          ! grep -q "android.permission.SEND_SMS" apk-permissions.txt
+          ! grep -q "android.permission.WRITE_SMS" apk-permissions.txt
           ! grep -q "android.permission.RECORD_AUDIO" apk-permissions.txt
           ! grep -q "android.permission.CAMERA" apk-permissions.txt
           ! grep -q "android.permission.READ_EXTERNAL_STORAGE" apk-permissions.txt
