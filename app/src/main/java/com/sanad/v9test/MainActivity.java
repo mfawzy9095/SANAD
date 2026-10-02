@@ -66,6 +66,7 @@ public final class MainActivity extends Activity {
     private long backgroundedAtMs = 0L;
     private boolean authInProgress = false;
     private final ExecutorService historicalSmsExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService bankNotificationExecutor = Executors.newSingleThreadExecutor();
     private final Object historicalSmsLock = new Object();
     private CancellationSignal historicalSmsCancellation;
     private String historicalSmsRequestId;
@@ -430,10 +431,21 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public int rescanActiveBankNotifications() {
-            int added = BankNotificationListener.rescanActiveNow();
-            if (added < 0) BankNotificationListener.requestReconnect(MainActivity.this);
-            return added;
+        public void startRescanActiveBankNotifications(String requestId) {
+            String safeRequestId = requestId == null ? "" : requestId.trim();
+            if (safeRequestId.isEmpty() || safeRequestId.length() > 80) {
+                notifyJsBankRescanResult(safeRequestId, -2);
+                return;
+            }
+            try {
+                bankNotificationExecutor.execute(() -> {
+                    int added = BankNotificationListener.rescanActiveNow();
+                    if (added < 0) BankNotificationListener.requestReconnect(MainActivity.this);
+                    notifyJsBankRescanResult(safeRequestId, added);
+                });
+            } catch (Exception ignored) {
+                notifyJsBankRescanResult(safeRequestId, -2);
+            }
         }
 
         @JavascriptInterface
@@ -699,6 +711,18 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void notifyJsBankRescanResult(String requestId, int added) {
+        final String safeId = requestId == null ? "" : requestId;
+        runOnUiThread(() -> {
+            if (webView == null || isFinishing() || isDestroyed()) return;
+            webView.evaluateJavascript(
+                    "window.sanadBankRescanResult&&window.sanadBankRescanResult(" +
+                            JSONObject.quote(safeId) + "," + added + ");",
+                    null
+            );
+        });
+    }
+
     private void notifyJsHistoricalSmsPageResult(String requestId, JSONObject result) {
         final String safeId = requestId == null ? "" : requestId;
         final String payload = result == null ? "{}" : result.toString();
@@ -852,6 +876,7 @@ public final class MainActivity extends Activity {
             }
         }
         historicalSmsExecutor.shutdownNow();
+        bankNotificationExecutor.shutdownNow();
         if (webView != null) {
             webView.removeJavascriptInterface("AndroidBridge");
             webView.stopLoading();
