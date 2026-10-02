@@ -110,7 +110,7 @@
     return arr(state&&state.transactions).find(t=>{
       if(!t||t.type!==expected)return false;
       const created=Number(t.created);
-      if(!Number.isFinite(created)||Math.abs(created-ts)>120000)return false;
+      if(!Number.isFinite(created)||Math.abs(created-ts)>5*60*1000)return false;
       if(parsed.bankId&&String(t.bankId||'')!==String(parsed.bankId))return false;
       if(parsed.providerId&&String(t.providerId||'')!==String(parsed.providerId))return false;
       const txAmount=round2(expected==='expense'||expected==='income'?t.amount:t.fromAmount);
