@@ -5085,7 +5085,7 @@ async function saveAccount(id){
       if (bankRefs.length === 1) a.bankRef = bankRefs[0]; else delete a.bankRef;
       a.icon = i; a.color = c;
       a.openingBalance = openingBalance;
-      if (isLiab && !hasTx) a.openingDebt = openingDebt;
+      if (isLiab) a.openingDebt = openingDebt;
       if (isDebt){ a.creditor = creditor; a.dueDate = dueDate; }
       if (!hasTx && (countryChanged || instChanged)){
         S.paymentInstruments.forEach(inst => {
