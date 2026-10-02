@@ -60,7 +60,7 @@
     if(/pharmacy|medical|med cen|hospital|clinic|nmc|parla|صيدلي|مستشف/.test(x))return 'health';
     if(/taxi|uber|careem|metro|rta|fuel|petrol/.test(x))return 'transport';
     if(/cafe|cafet|cafeteria|coffee|starbucks/.test(x))return 'cafe';
-    if(/restaurant|restauran|chicken|caya|bakery|bakeires|mandi|burger|sweets|cake|noon food|food/.test(x))return 'food';
+    if(/restaurant|restauran|chicken|caya|bakery|bakeires|mandi|burger|sweets|cake|noon food|talabat|deliveroo|careem food|food/.test(x))return 'food';
     if(/grocery|union coop|carrefour|viva|mini mart|hyperma|hypermarket|noon minutes|nownow|souq al madina/.test(x))return 'grocery';
     if(/du google|etisalat|e&|telecom|internet|contabo/.test(x))return 'bills';
     if(/adidas|temu|alibaba|xpressions|day to day|amazon|shopping|discounts cen/.test(x))return 'shopping';
@@ -85,6 +85,7 @@
       bankId:base.bankId||bankIdFrom(input,raw),providerId:base.providerId||providerIdFrom(input,raw),kind:base.kind,direction:base.direction||null,amount:Number(base.amount),
       currency:String(base.currency||'AED').toUpperCase(),merchant:base.merchant||'',category:base.category||'other',
       cardLast4:base.cardLast4||null,accountRef:base.accountRef||null,accountSuffix:base.accountSuffix||suffix(base.accountRef),
+      fromAccountRef:base.fromAccountRef||null,toAccountRef:base.toAccountRef||null,
       transactionRef:base.transactionRef||null,transactionDate:base.transactionDate||null,beneficiaryName:base.beneficiaryName||null,
       sourceHint:base.sourceHint||[input&&input.title,input&&input.sender,input&&input.packageName].filter(Boolean).join(' ').trim(),
       fee:base.fee==null?0:Number(base.fee),vat:base.vat==null?0:Number(base.vat),
@@ -170,6 +171,11 @@
     const dateMatch=x.match(/(?:date\s*[:.-]?\s*|\bon\s+)?(\d{1,2}\/\d{1,2}\/\d{4})\b/i);
     if(dateMatch)transactionDate=isoDateFromDmy(dateMatch[1]);
     const base={bankId,providerId,amount:value,currency,cardLast4:card,cardType,accountRef:acc?normalizeRef(acc):null,merchant,availableBalance,availableCredit,beneficiaryName,transactionRef,transactionDate};
+    const ownTransfer=x.match(/(?:from\s+(?:your\s+)?account|من\s+حساب(?:ك)?)\s*[:.]?\s*([A-Za-z0-9Xx*]{2,30}).{0,100}?(?:to\s+(?:your\s+)?account|الى\s+حساب(?:ك)?|إلى\s+حساب(?:ك)?)\s*[:.]?\s*([A-Za-z0-9Xx*]{2,30})/i);
+    if(ownTransfer&&/[0-9Xx*]/.test(ownTransfer[1])&&/[0-9Xx*]/.test(ownTransfer[2])){
+      const fromRef=normalizeRef(ownTransfer[1]),toRef=normalizeRef(ownTransfer[2]);
+      return result(Object.assign(base,{kind:'internal_transfer',direction:'transfer',accountRef:fromRef,fromAccountRef:fromRef,toAccountRef:toRef,category:'other',confidence:0.99}),input,raw);
+    }
     if(/salary|payroll|راتب/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'salary',direction:'credit',category:'salary',confidence:sourceKnown?0.90:0.76}),input,raw);
     if(/refund|refunded|reversal|reversed|استرداد|مرتجع/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'refund',direction:'credit',category:'other',confidence:sourceKnown?0.90:0.75}),input,raw);
     if(/recharge|mobile\s+top.?up|airtime|شحن\s+رصيد/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'mobile_recharge',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);
@@ -217,6 +223,14 @@
       if(matches.length===1)fromAccount=matches[0];
     }
     if(!fromAccount&&activeAccounts.length===1)fromAccount=activeAccounts[0];
+    if(parsed.kind==='internal_transfer'){
+      const allActive=accounts.filter(a=>a&&!a.archived&&a.country==='UAE'&&(!parsed.currency||a.currency===parsed.currency));
+      const fromMatches=allActive.filter(a=>accountRefs(a).some(ref=>refMatches(ref,parsed.fromAccountRef||parsed.accountRef,suffix(parsed.fromAccountRef||parsed.accountRef))));
+      const toMatches=allActive.filter(a=>accountRefs(a).some(ref=>refMatches(ref,parsed.toAccountRef,suffix(parsed.toAccountRef))));
+      if(fromMatches.length===1&&toMatches.length===1&&fromMatches[0].id!==toMatches[0].id)
+        return {status:'routed',fromAccount:fromMatches[0],targetAccount:toMatches[0],confidence:0.99};
+      return {status:'needs-review',reason:'internal-transfer-route-not-found',confidence:0};
+    }
     if(parsed.kind==='purchase'||parsed.kind==='bill_payment'||parsed.kind==='mobile_recharge'){if((Number(parsed.fee)||0)+(Number(parsed.vat)||0)>0)return {status:'needs-review',reason:'fee-review-required',account,instrument,confidence:0};if(account)return {status:'routed',account,instrument,confidence:instrument?0.99:0.80};if(fromAccount)return {status:'routed',account:fromAccount,instrument:null,confidence:parsed.providerId?0.92:0.75};return {status:'needs-review',reason:'payment-source-not-found',confidence:0};}
     if(parsed.kind==='deposit'||parsed.kind==='salary'||parsed.kind==='refund'||parsed.kind==='incoming_transfer'){
       if(parsed.kind==='refund'&&account)return {status:'routed',account,instrument,confidence:instrument?0.99:0.90};
@@ -252,6 +266,10 @@
       const account=route.account;if(!account)return {ok:false,reason:'account-required'};if(account.currency!==parsed.currency)return {ok:false,reason:'fx-review-required'};
       const type=['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)?'expense':'income';
       return {ok:true,transaction:{id,type,amount:parsed.amount,currency:parsed.currency,accountId:account.id,instrumentId:route.instrument?route.instrument.id:null,walletAmount:parsed.amount,fxRate:1,cat:type==='income'?(parsed.kind==='salary'?'salary':'other'):(parsed.category||'other'),note:parsed.merchant||'',tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,bankTransactionRef:parsed.transactionRef||null}};
+    }
+    if(parsed.kind==='internal_transfer'){
+      const from=route.fromAccount,to=route.targetAccount;if(!from||!to)return {ok:false,reason:'internal-transfer-route-required'};if(from.currency!==parsed.currency||to.currency!==parsed.currency)return {ok:false,reason:'fx-review-required'};
+      return {ok:true,transaction:{id,type:'transfer',fromAccountId:from.id,fromAmount:parsed.amount,fromCurrency:from.currency,fromCountry:from.country,toAccountId:to.id,toAmount:parsed.amount,toCurrency:to.currency,toCountry:to.country,fxRate:1,fee:0,note:'تحويل بين الحسابات',tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,bankTransactionRef:parsed.transactionRef||null}};
     }
     if(parsed.kind==='card_repayment'){
       const from=route.fromAccount,to=route.targetAccount;if(!from||!to)return {ok:false,reason:'repayment-route-required'};if(from.currency!==parsed.currency||to.currency!==parsed.currency)return {ok:false,reason:'fx-review-required'};

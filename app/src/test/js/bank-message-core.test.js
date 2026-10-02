@@ -91,6 +91,11 @@ assert.strictEqual(packageHint.accountRef,null);
 const genericRef=P.parse({id:'g4',title:'Acme Bank',text:'Purchase AED 12.00 at TEST STORE on your credit card ending 8888. Transaction ID: TX-ABCD-1234 Date: 02/10/2026'});
 assert.strictEqual(genericRef.transactionRef,'TX-ABCD-1234');
 assert.strictEqual(genericRef.transactionDate,'2026-10-02');
+const ownTransfer=P.parse({id:'g5',title:'Acme Bank',text:'Transfer AED 100.00 from account 1111 to account 2222 was successful. Transaction ID: OWN-XFER-1'});
+assert.strictEqual(ownTransfer.kind,'internal_transfer');
+assert.strictEqual(ownTransfer.fromAccountRef,'1111');
+assert.strictEqual(ownTransfer.toAccountRef,'2222');
+assert.strictEqual(ownTransfer.transactionRef,'OWN-XFER-1');
 
 const pkgBank=P.parse({id:'pkg1',postedAt:9000,packageName:'com.emiratesnbd.android',text:'Purchase AED 10.00 with card 4021 at TEST MERCHANT'});
 assert.strictEqual(pkgBank.bankId,'emirates-nbd');

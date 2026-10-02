@@ -8229,7 +8229,7 @@ const SanadBankInbox = {
   kindLabel(kind){
     return {
       purchase:'شراء',salary:'راتب',deposit:'إيداع',refund:'استرداد',
-      incoming_transfer:'تحويل وارد',outgoing_transfer:'تحويل لشخص / جهة',
+      incoming_transfer:'تحويل وارد',outgoing_transfer:'تحويل لشخص / جهة',internal_transfer:'تحويل بين حساباتي',
       card_repayment:'سداد بطاقة',cash_withdrawal:'سحب نقدي',
       mobile_recharge:'شحن رصيد اتصال',bill_payment:'دفع فاتورة'
     }[kind]||'عملية مالية';
@@ -8243,6 +8243,7 @@ const SanadBankInbox = {
       'payment-source-not-found':'لم يتم العثور على الحساب أو البطاقة',
       'account-not-found':'لم يتم العثور على الحساب',
       'transfer-source-not-found':'لم يتم العثور على حساب التحويل',
+      'internal-transfer-route-not-found':'لم يتم العثور على حسابي التحويل',
       'repayment-route-not-found':'يحتاج ربط حساب السداد والبطاقة',
       'cash-destination-required':'حدد حساب الكاش مرة واحدة',
       'withdrawal-source-not-found':'لم يتم العثور على مصدر السحب',
@@ -8260,6 +8261,7 @@ const SanadBankInbox = {
     if(!r||r.status!=='routed')return 'يحتاج ربط الحساب/البطاقة';
     if(p.kind==='card_repayment')return 'من '+esc(r.fromAccount.name)+' إلى '+esc(r.targetAccount.name);
     if(p.kind==='outgoing_transfer')return 'من '+esc(r.fromAccount.name);
+    if(p.kind==='internal_transfer'&&r.fromAccount&&r.targetAccount)return 'من '+esc(r.fromAccount.name)+' إلى '+esc(r.targetAccount.name);
     if(p.kind==='cash_withdrawal'&&r.targetAccount)return 'من '+esc(r.fromAccount.name)+' إلى '+esc(r.targetAccount.name);
     return (r.instrument?esc(r.instrument.name)+' · ':'')+esc((r.account||{}).name||'');
   },

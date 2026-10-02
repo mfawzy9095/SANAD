@@ -118,4 +118,36 @@ function ingest(state,event){
   strict(state,'enbd final');
 })();
 
+(function ownAccountTransferRechargeAndBillAreTypedCorrectly(){
+  const state=empty();
+  state.institutions.push({id:'custom-bank',name:'Acme Bank',country:'UAE',type:'bank'});
+  state.accounts.push(
+    {id:'from',institutionId:'custom-bank',country:'UAE',name:'Checking',type:'bank',currency:'AED',openingBalance:1000,openingDebt:0,creditLimit:0,bankRefs:['1111'],archived:false},
+    {id:'to',institutionId:'custom-bank',country:'UAE',name:'Savings',type:'bank',currency:'AED',openingBalance:200,openingDebt:0,creditLimit:0,bankRefs:['2222'],archived:false},
+    {id:'credit',institutionId:'custom-bank',country:'UAE',name:'Credit',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:5000,archived:false}
+  );
+  state.paymentInstruments.push({id:'card8888',accountId:'credit',institutionId:'custom-bank',country:'UAE',type:'credit_card',last4:'8888',archived:false});
+  strict(state,'typed-flow initial');
+
+  const own=ingest(state,{id:'own1',postedAt:1000,title:'Acme Bank',text:'Transfer AED 100.00 from account 1111 to account 2222 was successful. Transaction ID: OWN-XFER-1'});
+  assert.strictEqual(own.parsed.kind,'internal_transfer');
+  assert.strictEqual(own.plan.transaction.type,'transfer');
+  assert.strictEqual(own.plan.transaction.fromAccountId,'from');
+  assert.strictEqual(own.plan.transaction.toAccountId,'to');
+  assert.strictEqual(Finance.accountBalance(state,'from'),900);
+  assert.strictEqual(Finance.accountBalance(state,'to'),300);
+
+  const recharge=ingest(state,{id:'rch1',postedAt:2000,title:'Acme Bank',text:'Mobile recharge AED 50.00 using credit card ending 8888. Transaction ID: RECH-1'});
+  assert.strictEqual(recharge.parsed.kind,'mobile_recharge');
+  assert.strictEqual(recharge.plan.transaction.type,'expense');
+  assert.strictEqual(recharge.plan.transaction.cat,'bills');
+
+  const bill=ingest(state,{id:'bill1',postedAt:3000,title:'Acme Bank',text:'Bill payment AED 120.00 using credit card ending 8888. Transaction ID: BILL-1'});
+  assert.strictEqual(bill.parsed.kind,'bill_payment');
+  assert.strictEqual(bill.plan.transaction.type,'expense');
+  assert.strictEqual(bill.plan.transaction.cat,'bills');
+  assert.strictEqual(Finance.accountDebt(state,'credit'),170);
+  strict(state,'typed-flow final');
+})();
+
 console.log('bank ingestion sequence stress tests: PASS');
