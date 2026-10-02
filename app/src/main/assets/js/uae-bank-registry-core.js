@@ -545,6 +545,34 @@
   const PAYMENT_PROVIDERS=Object.freeze([
     {id:'du-pay',name:'du Pay',aliases:['du Pay','duPay','du Pay wallet','duPay wallet','dupay.ae'],type:'digital_wallet',country:'UAE'}
   ].map(x=>Object.freeze(x)));
+  const LOGO_DOMAINS=Object.freeze({
+    'hsbc-middle-east':'hsbc.ae',
+    'standard-chartered':'sc.com',
+    'emirates-nbd':'emiratesnbd.com',
+    'mashreq':'mashreq.com',
+    'fab':'bankfab.com',
+    'cbd':'cbd.ae',
+    'banque-misr':'banquemisr.com',
+    'bank-of-sharjah':'bankofsharjah.com',
+    'arab-bank':'arabbank.com',
+    'dib':'dib.ae',
+    'sib':'sib.ae',
+    'uab':'uab.ae',
+    'investbank':'investbank.ae',
+    'al-masraf':'almasraf.ae',
+    'emirates-islamic':'emiratesislamic.ae',
+    'rakbank':'rakbank.ae',
+    'nbq':'nbq.ae',
+    'nbf':'nbf.ae',
+    'adcb':'adcb.com',
+    'cbi':'cbiuae.com',
+    'adib':'adib.ae',
+    'al-hilal':'alhilalbank.ae',
+    'ajman-bank':'ajmanbank.ae',
+    'mbank':'mbank.ae',
+    'wio':'wio.io',
+    'zand':'zand.ae'
+  });
   function normalize(value){
     return String(value==null?'':value).toLowerCase()
       .replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d))
@@ -563,6 +591,17 @@
   function get(id){return BANKS.find(b=>b.id===id)||null;}
   function getProvider(id){return PAYMENT_PROVIDERS.find(p=>p.id===id)||null;}
   function list(){return BANKS.slice().sort((a,b)=>{if(!!a.popular!==!!b.popular)return a.popular?-1:1;return a.name.localeCompare(b.name,'en');});}
+  function search(query){
+    const q=normalize(query);
+    if(!q)return list();
+    return list().filter(bank=>aliasesFor(bank).some(alias=>normalize(alias).includes(q)));
+  }
+  function logoDomain(id){return LOGO_DOMAINS[String(id||'')]||null;}
+  function initials(value){
+    const words=normalize(value).split(' ').filter(Boolean).filter(w=>!['bank','pjsc','psc','llc','limited'].includes(w));
+    if(!words.length)return '🏦';
+    return words.slice(0,2).map(w=>w.charAt(0).toUpperCase()).join('');
+  }
   function detect(text){
     let best=null;
     for(const bank of BANKS)for(const alias of aliasesFor(bank)){
@@ -581,5 +620,5 @@
     }
     return best;
   }
-  return Object.freeze({SOURCE,BANKS,PAYMENT_PROVIDERS,list,get,getProvider,detect,detectProvider,normalize});
+  return Object.freeze({SOURCE,BANKS,PAYMENT_PROVIDERS,LOGO_DOMAINS,list,search,get,getProvider,detect,detectProvider,normalize,logoDomain,initials});
 });
