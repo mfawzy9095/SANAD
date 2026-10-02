@@ -10,6 +10,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class BankNotificationStore {
     private static final String PREFS = "sanad_bank_notification_inbox_v1";
@@ -21,6 +23,8 @@ public final class BankNotificationStore {
     private static final int MAX_EVENTS = 200;
     private static final int MAX_TEXT = 4000;
     private static final long DEDUPE_WINDOW_MS = 15L * 60L * 1000L;
+    private static final Pattern PAN_CANDIDATE =
+            Pattern.compile("(?<!\\d)(?:\\d[ -]?){12,18}\\d(?!\\d)");
 
     private BankNotificationStore() {}
 
@@ -28,8 +32,8 @@ public final class BankNotificationStore {
             Context context, String packageName, String title, String text, long postedAt) {
         if (context == null) return false;
         String safePackage = trim(packageName, 180);
-        String safeTitle = trim(title, 300);
-        String safeText = trim(text, MAX_TEXT);
+        String safeTitle = trim(redactSensitiveCardNumbers(title), 300);
+        String safeText = trim(redactSensitiveCardNumbers(text), MAX_TEXT);
         if (safeText.isEmpty()) return false;
 
         long ts = postedAt > 0L ? postedAt : System.currentTimeMillis();
@@ -148,7 +152,26 @@ public final class BankNotificationStore {
     private static JSONArray read(Context context) {
         String raw = prefs(context).getString(KEY, "[]");
         try {
-            return new JSONArray(raw == null ? "[]" : raw);
+            JSONArray arr = new JSONArray(raw == null ? "[]" : raw);
+            boolean changed = false;
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject event = arr.optJSONObject(i);
+                if (event == null) continue;
+                String oldTitle = event.optString("title", "");
+                String oldText = event.optString("text", "");
+                String safeTitle = redactSensitiveCardNumbers(oldTitle);
+                String safeText = redactSensitiveCardNumbers(oldText);
+                if (!safeTitle.equals(oldTitle)) {
+                    event.put("title", safeTitle);
+                    changed = true;
+                }
+                if (!safeText.equals(oldText)) {
+                    event.put("text", safeText);
+                    changed = true;
+                }
+            }
+            if (changed) prefs(context).edit().putString(KEY, arr.toString()).apply();
+            return arr;
         } catch (Exception ignored) {
             return new JSONArray();
         }
@@ -160,6 +183,38 @@ public final class BankNotificationStore {
 
     private static SharedPreferences prefs(Context context) {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    static String redactSensitiveCardNumbers(String value) {
+        String input = value == null ? "" : value;
+        Matcher matcher = PAN_CANDIDATE.matcher(input);
+        StringBuffer out = new StringBuffer(input.length());
+        while (matcher.find()) {
+            String candidate = matcher.group();
+            String digits = candidate.replaceAll("\\D", "");
+            if (digits.length() < 13 || digits.length() > 19 || !passesLuhn(digits)) continue;
+            String masked = digits.substring(0, 4) + " XXXX XXXX " +
+                    digits.substring(digits.length() - 4);
+            matcher.appendReplacement(out, Matcher.quoteReplacement(masked));
+        }
+        matcher.appendTail(out);
+        return out.toString();
+    }
+
+    private static boolean passesLuhn(String digits) {
+        int sum = 0;
+        boolean doubleDigit = false;
+        for (int i = digits.length() - 1; i >= 0; i--) {
+            int d = digits.charAt(i) - '0';
+            if (d < 0 || d > 9) return false;
+            if (doubleDigit) {
+                d *= 2;
+                if (d > 9) d -= 9;
+            }
+            sum += d;
+            doubleDigit = !doubleDigit;
+        }
+        return sum % 10 == 0;
     }
 
     private static String trim(String value, int max) {
