@@ -4876,7 +4876,7 @@ function openAccountSheet(id, presetType, preserve){
   let amountField = '';
   if (isLiab){
     amountField = '<div class="field"><label>قيمة الدين عند البداية</label>' +
-      '<input type="number" inputmode="decimal" id="wDebt" value="' + (data.openingDebt || 0) + '" ' + (hasTx ? 'disabled' : '') + '>' +
+      '<input type="number" inputmode="decimal" id="wDebt" value="' + (data.openingDebt || 0) + '">' +
       '<div class="field-hint">' + (hasTx ? 'مقفل — استخدم "تسوية المديونية".' : 'قيمة الدين عند بداية استخدام التطبيق.') + '</div></div>';
   } else {
     amountField = '<div class="field"><label>الرصيد الافتتاحي</label>' +
