@@ -1594,6 +1594,28 @@ function getVisibleAssetAccounts(country){
     return true;
   });
 }
+function cardNetworkLogoHtml(network){
+  const n=String(network||'other').toLowerCase();
+  if(n==='visa')return '<span aria-label="Visa" style="display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:20px;padding:0 5px;border-radius:5px;background:#fff;color:#1434CB;font-weight:900;font-style:italic;font-size:13px;letter-spacing:.2px">VISA</span>';
+  if(n==='mastercard')return '<span aria-label="Mastercard" style="display:inline-flex;align-items:center;gap:0;min-width:38px;height:20px;position:relative"><span style="width:18px;height:18px;border-radius:50%;background:#EB001B;display:block"></span><span style="width:18px;height:18px;border-radius:50%;background:#F79E1B;display:block;margin-inline-start:-6px;opacity:.94"></span></span>';
+  if(n==='discover')return '<span aria-label="Discover" style="display:inline-flex;align-items:center;justify-content:center;height:20px;padding:0 5px;border-radius:5px;background:#fff;color:#111;font-weight:800;font-size:10px;letter-spacing:.3px">DISC<span style="color:#f58220">O</span>VER</span>';
+  return '<span aria-label="Card network" style="display:inline-flex;align-items:center;justify-content:center;height:20px;padding:0 6px;border-radius:5px;background:rgba(255,255,255,.18);font-size:10px;font-weight:700">CARD</span>';
+}
+function cardTypeShortLabel(type){
+  if(type==='credit_card')return 'Credit';
+  if(type==='debit_card')return 'Debit';
+  if(type==='wallet_card')return 'Wallet';
+  if(type==='prepaid_card')return 'Prepaid';
+  return 'Card';
+}
+function maskedCardNumber(instrument){
+  const first=String(instrument&&instrument.first4||'').replace(/\D/g,'').slice(0,4);
+  const last=String(instrument&&instrument.last4||'').replace(/\D/g,'').slice(-4);
+  if(first&&last)return first+' XXXX XXXX '+last;
+  if(last)return 'XXXX XXXX XXXX '+last;
+  if(first)return first+' XXXX XXXX XXXX';
+  return '';
+}
 function buildCardSource(instrument){
   const acc = Finance.getAccount(instrument.accountId);
   const isCredit = instrument.type === 'credit_card';
@@ -1612,9 +1634,10 @@ function buildCardSource(instrument){
   } else {
     side = (inst ? inst.name : '') || (acc ? acc.name : '');
   }
+  const masked=maskedCardNumber(instrument);
   return {kind:'instrument', id:instrument.id, accountId:instrument.accountId,
-    name: instrument.name + (instrument.last4 ? ' ••' + instrument.last4 : ''),
-    sub: (isCredit ? 'ائتمان' : (isPrepaid ? 'مدفوعة مقدمًا' : 'ديبت')) + (inst ? ' · ' + inst.name : ''),
+    name: instrument.name + (masked ? ' · ' + masked : ''),
+    sub: cardTypeShortLabel(instrument.type) + (instrument.network&&instrument.network!=='other' ? ' · '+String(instrument.network).toUpperCase() : '') + (inst ? ' · ' + inst.name : ''),
     side, icon: instrument.icon || tInfo.icon, color, isCredit, isPrepaid, isLiability: isCredit};
 }
 function buildAccountSource(account){
@@ -2272,7 +2295,7 @@ function instrumentTileHtml(inst, size){
   const cInfo = countryInfo(acc.country);
   const tInfo = instrumentTypeInfo(inst.type);
   const bal = Finance.accountBalance(acc.id);
-  const last4Txt = inst.last4 ? ' ••' + inst.last4 : '';
+  const masked=maskedCardNumber(inst);
   const cardColor = inst.color || acc.color || '#00695C';
   const grad = tintGradient(cardColor);
   const isDefault = S.settings.defaultInstrumentByCountry[acc.country] === inst.id;
@@ -2291,8 +2314,13 @@ function instrumentTileHtml(inst, size){
   return '<div class="tile' + (size === 'sm' ? ' tile-sm' : '') + '" data-instrument-edit="' + inst.id + '">' +
     '<div class="tile-grad" style="background:' + grad + '"></div>' +
     '<div class="tile-head"><div class="tile-ico">' + (inst.icon || tInfo.icon) + '</div>' +
-      '<div style="flex:1;min-width:0"><div class="tile-name">' + cInfo.flag + ' ' + esc(inst.name) + last4Txt + '</div>' +
-        '<div class="tile-sub">' + tInfo.name + '</div></div></div>' +
+      '<div style="flex:1;min-width:0"><div class="tile-name">' + cInfo.flag + ' ' + esc(inst.name) + '</div>' +
+        '<div class="tile-sub" style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">' +
+          cardNetworkLogoHtml(inst.network) +
+          '<span>' + esc(cardTypeShortLabel(inst.type)) + '</span>' +
+        '</div>' +
+        (masked?'<div style="margin-top:7px;font-size:12px;letter-spacing:.8px;font-variant-numeric:tabular-nums">'+esc(masked)+'</div>':'') +
+      '</div></div>' +
     '<div><div class="tile-amount amt-val">' + amountHtml + '</div>' +
       (isDefault ? '<div class="tile-badges"><span class="badge-primary">⭐ افتراضية</span></div>' : '') + extraHtml + '</div></div>';
 }
@@ -5843,12 +5871,16 @@ function openInstrumentSheet(id, presetType, preserve){
   const typeDef = instrumentTypeInfo(type);
   const data = inst ? {...inst} : {
     id:null, accountId:null, institutionId:null,
-    name:'', type, last4:'', country:S.activeCountry,
+    name:'', type, first4:'', last4:'', network:'other', country:S.activeCountry,
     icon: typeDef.icon, color:'#00695C', archived:false
   };
+  if(!data.network)data.network='other';
+  if(!data.first4)data.first4='';
   if (preserve){
     if (preserve.name != null) data.name = preserve.name;
+    if (preserve.first4 != null) data.first4 = preserve.first4;
     if (preserve.last4 != null) data.last4 = preserve.last4;
+    if (preserve.network != null) data.network = preserve.network;
     if (preserve.i) data.icon = preserve.i;
     if (preserve.c) data.color = preserve.c;
   }
@@ -5970,8 +6002,18 @@ function openInstrumentSheet(id, presetType, preserve){
         '<div class="field"><label>مؤسسة مخصصة (اختياري)</label><select id="cardInst">' + instOptions + '</select>' +
         '<input type="text" id="cardInstName" placeholder="جهة أخرى غير موجودة بالقائمة" maxlength="40" style="margin-top:8px"></div>' : '') +
       amountFields +
-      '<div class="field"><label>آخر 4 أرقام (اختياري)</label>' +
-        '<input type="text" id="cardLast4" maxlength="4" inputmode="numeric" value="' + esc(data.last4 || '') + '" placeholder="1234"></div>' +
+      '<div class="field"><label>شبكة البطاقة</label><select id="cardNetwork">' +
+        '<option value="visa"' + (data.network==='visa'?' selected':'') + '>Visa</option>' +
+        '<option value="mastercard"' + (data.network==='mastercard'?' selected':'') + '>Mastercard</option>' +
+        '<option value="discover"' + (data.network==='discover'?' selected':'') + '>Discover</option>' +
+        '<option value="other"' + (data.network==='other'?' selected':'') + '>Other / غير معروف</option>' +
+      '</select><div style="margin-top:8px">'+cardNetworkLogoHtml(data.network)+'</div></div>' +
+      '<div class="field"><label>رقم البطاقة المقنّع</label>' +
+        '<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center">' +
+          '<input type="text" id="cardFirst4" maxlength="4" inputmode="numeric" value="' + esc(data.first4 || '') + '" placeholder="4578">' +
+          '<span style="font-size:12px;color:var(--text-3);white-space:nowrap">XXXX XXXX</span>' +
+          '<input type="text" id="cardLast4" maxlength="4" inputmode="numeric" value="' + esc(data.last4 || '') + '" placeholder="0308">' +
+        '</div><div class="field-hint">يحفظ SANAD أول 4 وآخر 4 فقط. لا يتم حفظ الرقم الكامل أو تاريخ الانتهاء أو CVV.</div></div>' +
       '<div class="field"><label>الأيقونة</label><div class="icon-grid">' + icons + '</div><input type="hidden" id="cardIco" value="' + data.icon + '"></div>' +
       '<div class="field"><label>اللون</label><div class="color-row">' + colors + '</div><input type="hidden" id="cardCol" value="' + data.color + '"></div>' +
       ((isDebit || isWalletCard) ? '<input type="hidden" id="cardCountry" value="' + data.country + '">' : '') +
@@ -6069,8 +6111,16 @@ async function saveCard(id, presetType){
     const instEl = document.getElementById('cardInst');
     institutionId = instEl ? (instEl.value || null) : null;
   }
+  const first4El = document.getElementById('cardFirst4');
   const last4El = document.getElementById('cardLast4');
-  const last4 = last4El && last4El.value ? (last4El.value.trim() || null) : null;
+  const first4Raw = first4El && first4El.value ? first4El.value.trim() : '';
+  const last4Raw = last4El && last4El.value ? last4El.value.trim() : '';
+  if(first4Raw && !/^\d{4}$/.test(first4Raw)){toast('أول 4 أرقام يجب أن تكون 4 أرقام بالضبط');return;}
+  if(last4Raw && !/^\d{4}$/.test(last4Raw)){toast('آخر 4 أرقام يجب أن تكون 4 أرقام بالضبط');return;}
+  const first4 = first4Raw || null;
+  const last4 = last4Raw || null;
+  const networkEl=document.getElementById('cardNetwork');
+  const network=networkEl&&['visa','mastercard','discover','other'].includes(networkEl.value)?networkEl.value:'other';
   const icon = (document.getElementById('cardIco') || {}).value || '💳';
   const color = (document.getElementById('cardCol') || {}).value || '#00695C';
   const shouldBeDefault = !!S.form._cardDefaultToggle;
@@ -6188,7 +6238,9 @@ async function saveCard(id, presetType){
           inst.institutionId = (isDebit || isWalletCard) ? (linkedAccount ? linkedAccount.institutionId : null) : institutionId;
         }
         inst.name = name;
+        inst.first4 = first4;
         inst.last4 = last4;
+        inst.network = network;
         const finalAcc = Finance.getAccount(accountId);
         inst.country = finalAcc ? finalAcc.country : country;
         inst.icon = icon; inst.color = color;
@@ -6202,7 +6254,7 @@ async function saveCard(id, presetType){
       S.paymentInstruments.push({
         id: savedInstId, accountId,
         institutionId: (isDebit || isWalletCard) ? (linkedAccount ? linkedAccount.institutionId : null) : institutionId,
-        name, type: presetType, last4, country: finalAcc.country,
+        name, type: presetType, first4, last4, network, country: finalAcc.country,
         icon, color, archived: false, created: isoToday(),
         defaultTopupAccountId: isPrepaid ? prepaidFundingSourceId : null
       });
