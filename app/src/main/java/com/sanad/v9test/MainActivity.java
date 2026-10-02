@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import org.json.JSONObject;
 import android.os.Build;
 import android.os.CancellationSignal;
+import android.os.OperationCanceledException;
 import android.hardware.biometrics.BiometricPrompt;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
@@ -46,6 +47,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import android.util.Base64;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
     private static final int REQ_FILE_CHOOSER = 7001;
@@ -62,6 +65,10 @@ public final class MainActivity extends Activity {
     private byte[] pendingDownloadBytes;
     private long backgroundedAtMs = 0L;
     private boolean authInProgress = false;
+    private final ExecutorService historicalSmsExecutor = Executors.newSingleThreadExecutor();
+    private final Object historicalSmsLock = new Object();
+    private CancellationSignal historicalSmsCancellation;
+    private String historicalSmsRequestId;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -459,8 +466,67 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public String importHistoricalFinancialSmsPage(int days, long afterDate, long afterId, int rawLimit) {
-            return importHistoricalFinancialSmsPageInternal(days, afterDate, afterId, rawLimit).toString();
+        public void startHistoricalFinancialSmsPage(
+                String requestId, int days, long afterDate, long afterId, int rawLimit) {
+            String safeRequestId = requestId == null ? "" : requestId.trim();
+            if (safeRequestId.isEmpty() || safeRequestId.length() > 80) {
+                JSONObject error = new JSONObject();
+                try {
+                    error.put("ok", false);
+                    error.put("status", "invalid-request");
+                } catch (Exception ignored) {}
+                notifyJsHistoricalSmsPageResult(safeRequestId, error);
+                return;
+            }
+
+            CancellationSignal signal = new CancellationSignal();
+            synchronized (historicalSmsLock) {
+                if (historicalSmsCancellation != null) {
+                    try { historicalSmsCancellation.cancel(); } catch (Exception ignored) {}
+                }
+                historicalSmsCancellation = signal;
+                historicalSmsRequestId = safeRequestId;
+            }
+
+            try {
+                historicalSmsExecutor.execute(() -> {
+                    JSONObject result = importHistoricalFinancialSmsPageInternal(
+                            days, afterDate, afterId, rawLimit, signal);
+                    synchronized (historicalSmsLock) {
+                        if (historicalSmsCancellation == signal) {
+                            historicalSmsCancellation = null;
+                            historicalSmsRequestId = null;
+                        }
+                    }
+                    notifyJsHistoricalSmsPageResult(safeRequestId, result);
+                });
+            } catch (Exception error) {
+                synchronized (historicalSmsLock) {
+                    if (historicalSmsCancellation == signal) {
+                        historicalSmsCancellation = null;
+                        historicalSmsRequestId = null;
+                    }
+                }
+                JSONObject out = new JSONObject();
+                try {
+                    out.put("ok", false);
+                    out.put("status", "worker-unavailable");
+                } catch (Exception ignored) {}
+                notifyJsHistoricalSmsPageResult(safeRequestId, out);
+            }
+        }
+
+        @JavascriptInterface
+        public void cancelHistoricalSmsImport() {
+            CancellationSignal signal;
+            synchronized (historicalSmsLock) {
+                signal = historicalSmsCancellation;
+                historicalSmsCancellation = null;
+                historicalSmsRequestId = null;
+            }
+            if (signal != null) {
+                try { signal.cancel(); } catch (Exception ignored) {}
+            }
         }
 
         @JavascriptInterface
@@ -497,7 +563,7 @@ public final class MainActivity extends Activity {
     }
 
     private JSONObject importHistoricalFinancialSmsPageInternal(
-            int days, long afterDate, long afterId, int rawLimit) {
+            int days, long afterDate, long afterId, int rawLimit, CancellationSignal cancellationSignal) {
         JSONObject out = new JSONObject();
         try {
             if (checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
@@ -507,9 +573,9 @@ public final class MainActivity extends Activity {
             }
 
             int safeDays = Math.max(0, Math.min(days, 3650));
-            // JavascriptInterface calls are synchronous from WebView's point of view.
-            // Keep every provider query deliberately small so navigation never stalls for long.
-            int safeLimit = Math.max(10, Math.min(rawLimit, 50));
+            // The provider query runs on a dedicated worker thread. Keep each page small
+            // so cancellation and progress callbacks remain fast even on very large inboxes.
+            int safeLimit = Math.max(10, Math.min(rawLimit, 40));
             long cutoff = safeDays > 0
                     ? System.currentTimeMillis() - (long) safeDays * 24L * 60L * 60L * 1000L
                     : 0L;
@@ -558,16 +624,18 @@ public final class MainActivity extends Activity {
                     projection,
                     selection,
                     selectionArgs,
-                    Telephony.Sms.DATE + " ASC, " + Telephony.Sms._ID + " ASC")) {
+                    Telephony.Sms.DATE + " ASC, " + Telephony.Sms._ID + " ASC",
+                    cancellationSignal)) {
                 if (cursor != null) {
-                    matchingRows = cursor.getCount();
                     int idCol = cursor.getColumnIndex(Telephony.Sms._ID);
                     int addressCol = cursor.getColumnIndex(Telephony.Sms.ADDRESS);
                     int bodyCol = cursor.getColumnIndex(Telephony.Sms.BODY);
                     int dateCol = cursor.getColumnIndex(Telephony.Sms.DATE);
 
                     while (scanned < safeLimit && cursor.moveToNext()) {
+                        if (cancellationSignal != null) cancellationSignal.throwIfCanceled();
                         scanned++;
+                        matchingRows++;
                         long smsId = idCol >= 0 ? cursor.getLong(idCol) : 0L;
                         String address = addressCol >= 0 ? cursor.getString(addressCol) : "";
                         String body = bodyCol >= 0 ? cursor.getString(bodyCol) : "";
@@ -591,6 +659,7 @@ public final class MainActivity extends Activity {
                         }
                     }
                     if (scanned >= safeLimit) {
+                        if (cancellationSignal != null) cancellationSignal.throwIfCanceled();
                         hasMore = cursor.moveToNext();
                     }
                 }
@@ -607,6 +676,12 @@ public final class MainActivity extends Activity {
             out.put("nextAfterId", nextId);
             out.put("done", !hasMore);
             return out;
+        } catch (OperationCanceledException cancelled) {
+            try {
+                out.put("ok", false);
+                out.put("status", "cancelled");
+            } catch (Exception ignored) {}
+            return out;
         } catch (SecurityException denied) {
             try {
                 out.put("ok", false);
@@ -622,6 +697,19 @@ public final class MainActivity extends Activity {
             } catch (Exception ignored) {}
             return out;
         }
+    }
+
+    private void notifyJsHistoricalSmsPageResult(String requestId, JSONObject result) {
+        final String safeId = requestId == null ? "" : requestId;
+        final String payload = result == null ? "{}" : result.toString();
+        runOnUiThread(() -> {
+            if (webView == null || isFinishing() || isDestroyed()) return;
+            webView.evaluateJavascript(
+                    "window.sanadHistoricalSmsPageResult&&window.sanadHistoricalSmsPageResult(" +
+                            JSONObject.quote(safeId) + "," + payload + ");",
+                    null
+            );
+        });
     }
 
     private void notifyJsHistoricalSmsPermissionResult(boolean allowed) {
@@ -756,6 +844,14 @@ public final class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         cancelOutstandingChooser();
+        synchronized (historicalSmsLock) {
+            if (historicalSmsCancellation != null) {
+                try { historicalSmsCancellation.cancel(); } catch (Exception ignored) {}
+                historicalSmsCancellation = null;
+                historicalSmsRequestId = null;
+            }
+        }
+        historicalSmsExecutor.shutdownNow();
         if (webView != null) {
             webView.removeJavascriptInterface("AndroidBridge");
             webView.stopLoading();

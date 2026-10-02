@@ -8240,7 +8240,8 @@ const SanadBankInbox = {
       return !!(window.AndroidBridge &&
         typeof AndroidBridge.historicalSmsPermissionGranted === 'function' &&
         typeof AndroidBridge.requestHistoricalSmsPermission === 'function' &&
-        typeof AndroidBridge.importHistoricalFinancialSmsPage === 'function');
+        typeof AndroidBridge.startHistoricalFinancialSmsPage === 'function' &&
+        typeof AndroidBridge.cancelHistoricalSmsImport === 'function');
     }catch(_){return false;}
   },
   historicalPermission(){try{return this.historicalSupported()&&!!AndroidBridge.historicalSmsPermissionGranted();}catch(_){return false;}},
@@ -8249,11 +8250,49 @@ const SanadBankInbox = {
   historicalCancelRequested:false,
   historicalProgress:null,
   _historicalReviewIds:new Set(),
+  _historicalPageSeq:0,
+  _historicalPageWaiters:new Map(),
   yieldUi(ms=18){return new Promise(resolve=>setTimeout(resolve,Math.max(0,Number(ms)||0)));},
+  requestHistoricalPage(days,afterDate,afterId,rawLimit){
+    if(!this.historicalSupported())return Promise.resolve({ok:false,status:'unsupported'});
+    const requestId='sms-'+Date.now()+'-'+(++this._historicalPageSeq);
+    return new Promise(resolve=>{
+      let settled=false;
+      const finish=(value)=>{
+        if(settled)return;
+        settled=true;
+        clearTimeout(timer);
+        this._historicalPageWaiters.delete(requestId);
+        resolve(value&&typeof value==='object'?value:{ok:false,status:'invalid-result'});
+      };
+      const timer=setTimeout(()=>{
+        try{AndroidBridge.cancelHistoricalSmsImport();}catch(_){}
+        finish({ok:false,status:'timeout'});
+      },15000);
+      this._historicalPageWaiters.set(requestId,finish);
+      try{
+        AndroidBridge.startHistoricalFinancialSmsPage(
+          requestId,Number(days)||0,Number(afterDate)||0,Number(afterId)||0,Math.max(10,Math.min(Number(rawLimit)||20,40))
+        );
+      }catch(_){
+        finish({ok:false,status:'query-failed'});
+      }
+    });
+  },
+  onHistoricalPageResult(requestId,payload){
+    const id=String(requestId||'');
+    const finish=this._historicalPageWaiters.get(id);
+    if(finish)finish(payload||{ok:false,status:'invalid-result'});
+  },
   cancelHistoricalImport(reason){
     if(!this.historicalImporting)return false;
     this.historicalCancelRequested=true;
     this.historicalCancelReason=reason||'cancelled';
+    try{if(this.historicalSupported())AndroidBridge.cancelHistoricalSmsImport();}catch(_){}
+    for(const finish of this._historicalPageWaiters.values()){
+      try{finish({ok:false,status:'cancelled'});}catch(_){}
+    }
+    this._historicalPageWaiters.clear();
     return true;
   },
   autoEnabled(){return !S.settings || S.settings.bankAutoImportEnabled !== false;},
@@ -8500,11 +8539,15 @@ const SanadBankInbox = {
         pages++;
         let page=null;
         try{
-          page=JSON.parse(AndroidBridge.importHistoricalFinancialSmsPage(Number(days)||0,afterDate,afterId,25)||'{}');
+          page=await this.requestHistoricalPage(Number(days)||0,afterDate,afterId,20);
         }catch(_){
           page={ok:false,status:'query-failed'};
         }
-        if(!page.ok){status=page.status||'query-failed';break;}
+        if(!page.ok){
+          status=page.status||'query-failed';
+          if(status==='cancelled')status='cancelled';
+          break;
+        }
 
         total.scanned+=Number(page.scanned||0);
         total.matchingRows=Math.max(total.matchingRows,Number(page.matchingRows||0));
@@ -8548,6 +8591,8 @@ const SanadBankInbox = {
     else if(status==='complete')toast('تم فحص '+total.scanned+' SMS · وجد '+total.financialCandidates+' مالية · أضيف '+total.added+' · مراجعة '+total.review,6000);
     else if(status==='permission-restricted')toast('Android منع صلاحية قراءة SMS لهذه النسخة أو طريقة التثبيت',5000);
     else if(status==='query-failed')toast('تعذر قراءة صندوق SMS من Android',5000);
+    else if(status==='timeout')toast('قراءة SMS استغرقت وقتًا طويلًا وتم إيقافها بدون تجميد التطبيق',5200);
+    else if(status==='worker-unavailable')toast('خدمة قراءة SMS غير متاحة الآن · أعد فتح التطبيق',5200);
     else toast('توقف استيراد SMS قبل الاكتمال · فُحص '+total.scanned+' رسالة',5000);
     return this.lastHistoricalImport;
   },
@@ -8623,6 +8668,7 @@ const SanadBankInbox = {
 };
 
 window.sanadHistoricalSmsPermissionResult = function(granted){try{SanadBankInbox.onHistoricalPermissionResult(!!granted);}catch(_){}};
+window.sanadHistoricalSmsPageResult = function(requestId,payload){try{SanadBankInbox.onHistoricalPageResult(String(requestId||''),payload||{});}catch(_){}};
 const _sanadBankBaseForeground = window.sanadAppForegrounded;
 window.sanadAppForegrounded = function(ts){
   try{if(typeof _sanadBankBaseForeground === 'function')_sanadBankBaseForeground(ts);}catch(_){}
