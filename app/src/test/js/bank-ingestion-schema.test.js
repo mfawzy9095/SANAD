@@ -152,6 +152,41 @@ function process(text,input,state){
   assert.strictEqual(Finance.accountBalance(s,'cash'),100);
 })();
 
+(function duPayPersonTransferCreatesBeneficiaryAndValidLedger(){
+  const s=empty();
+  s.institutions.push({id:'dui2',name:'du Pay',country:'UAE',type:'wallet_provider',providerRegistryId:'du-pay'});
+  s.accounts.push({id:'wallet2',institutionId:'dui2',country:'UAE',name:'du Pay Wallet',type:'ewallet',currency:'AED',openingBalance:500,openingDebt:0,creditLimit:0,archived:false});
+  strictOk(s,'pre person transfer');
+  process(
+    'Your request to transfer AED 149.00 to Mohamed Abdelrahman Fawzy is successfully processed and the amount has been credited in the beneficiary account. TID: PERSONLEDGER1',
+    {id:'person-ledger'},s
+  );
+  assert.strictEqual(s.beneficiaries.length,1);
+  assert.strictEqual(s.beneficiaries[0].name,'Mohamed Abdelrahman Fawzy');
+  assert.strictEqual(s.transactions[0].type,'external_transfer');
+  assert.strictEqual(s.transactions[0].beneficiaryId,s.beneficiaries[0].id);
+  assert.strictEqual(Finance.accountBalance(s,'wallet2'),351);
+})();
+
+(function refundToKnownCreditCardReducesDebt(){
+  const s=empty();
+  s.institutions.push({id:'nbd-ref',name:'Emirates NBD',country:'UAE',type:'bank',bankRegistryId:'emirates-nbd'});
+  s.accounts.push(
+    {id:'bank-ref',institutionId:'nbd-ref',country:'UAE',name:'Bank',type:'bank',currency:'AED',openingBalance:1000,openingDebt:0,creditLimit:0,archived:false},
+    {id:'credit-ref',institutionId:'nbd-ref',country:'UAE',name:'Credit',type:'credit',currency:'AED',openingBalance:0,openingDebt:100,creditLimit:5000,archived:false}
+  );
+  s.paymentInstruments.push({id:'card-ref',accountId:'credit-ref',institutionId:'nbd-ref',country:'UAE',type:'credit_card',last4:'4021',archived:false});
+  strictOk(s,'pre refund');
+  const parsed=Message.parse({id:'refund1',postedAt:Date.UTC(2026,9,1,12,0),title:'Emirates NBD',text:'Refund AED 25.00 to credit card 4021'});
+  assert.strictEqual(parsed.kind,'refund');
+  const plan=Ingest.plan(parsed,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.transaction.accountId,'credit-ref');
+  Ingest.applyPlan(s,plan);
+  strictOk(s,'post refund');
+  assert.strictEqual(Finance.accountDebt(s,'credit-ref'),75);
+})();
+
 (function transactionReferencePreventsDuplicate(){
   const s=empty();
   const text="Hello Mohamed Abd, You've received AED 9.00 to your du Pay wallet. Your available balance is now AED 110.28, and the transaction ID is: DG148RKIXI";

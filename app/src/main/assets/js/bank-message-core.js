@@ -202,7 +202,11 @@
     }
     if(!fromAccount&&activeAccounts.length===1)fromAccount=activeAccounts[0];
     if(parsed.kind==='purchase'||parsed.kind==='bill_payment'||parsed.kind==='mobile_recharge'){if((Number(parsed.fee)||0)+(Number(parsed.vat)||0)>0)return {status:'needs-review',reason:'fee-review-required',account,instrument,confidence:0};if(account)return {status:'routed',account,instrument,confidence:instrument?0.99:0.80};if(fromAccount)return {status:'routed',account:fromAccount,instrument:null,confidence:parsed.providerId?0.92:0.75};return {status:'needs-review',reason:'payment-source-not-found',confidence:0};}
-    if(parsed.kind==='deposit'||parsed.kind==='salary'||parsed.kind==='refund'||parsed.kind==='incoming_transfer'){if(fromAccount)return {status:'routed',account:fromAccount,instrument:null,confidence:parsed.accountRef?0.95:(parsed.providerId?0.92:0.78)};return {status:'needs-review',reason:'account-not-found',confidence:0};}
+    if(parsed.kind==='deposit'||parsed.kind==='salary'||parsed.kind==='refund'||parsed.kind==='incoming_transfer'){
+      if(parsed.kind==='refund'&&account)return {status:'routed',account,instrument,confidence:instrument?0.99:0.90};
+      if(fromAccount)return {status:'routed',account:fromAccount,instrument:null,confidence:parsed.accountRef?0.95:(parsed.providerId?0.92:0.78)};
+      return {status:'needs-review',reason:'account-not-found',confidence:0};
+    }
     if(parsed.kind==='card_repayment'){targetAccount=account;if(fromAccount&&targetAccount&&targetAccount.type==='credit')return {status:'routed',fromAccount,targetAccount,instrument,confidence:0.99};return {status:'needs-review',reason:'repayment-route-not-found',fromAccount,targetAccount,instrument,confidence:0};}
     if(parsed.kind==='outgoing_transfer'){
       if(fromAccount)return {status:'routed',fromAccount,confidence:parsed.accountRef?0.97:(parsed.providerId?0.95:0.80)};

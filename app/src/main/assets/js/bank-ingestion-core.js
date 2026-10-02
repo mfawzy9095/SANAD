@@ -168,6 +168,26 @@
     if(learned)built.transaction.cat=learned;
     return built;
   }
+  function normalizedPerson(value){
+    return String(value||'').toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g,' ').replace(/\s+/g,' ').trim();
+  }
+  function attachBeneficiary(parsed,state,built,create,uid){
+    if(!built||!built.ok||!built.transaction||built.transaction.type!=='external_transfer')return built;
+    const name=String(parsed&&parsed.beneficiaryName||'').trim();
+    if(!name)return built;
+    const key=normalizedPerson(name);
+    let bene=arr(state&&state.beneficiaries).find(b=>b&&normalizedPerson(b.name)===key)||null;
+    if(!bene){
+      bene={
+        id:uid('bene'),name,country:'UAE',defaultCurrency:parsed.currency||'AED',
+        note:'Auto-discovered from financial notification',type:'person',archived:false,
+        created:new Date(parsed.postedAt||Date.now()).toISOString().slice(0,10),autoDiscovered:true
+      };
+      create.beneficiaries.push(bene);
+    }
+    built.transaction.beneficiaryId=bene.id;
+    return built;
+  }
   function autoEligible(parsed,route){
     if(!parsed||!parsed.recognized)return {ok:false,reason:'unrecognized'};
     if(parsed.ignored)return {ok:false,reason:parsed.reason||'ignored'};
@@ -198,12 +218,14 @@
     const initialRoute=route;
     const direct=autoEligible(parsed,route);
     if(direct.ok){
-      const built=applyLearnedCategory(parsed,state,MessageCore.buildTransaction(parsed,route,{uid}));
+      const create={institutions:[],accounts:[],instruments:[],beneficiaries:[]};
+      let built=applyLearnedCategory(parsed,state,MessageCore.buildTransaction(parsed,route,{uid}));
       if(!built.ok)return {action:'review',reason:built.reason||'build-failed',confidence:0};
-      return {action:'auto-save',reason:'exact-route',confidence:Math.min(1,Number(parsed.confidence||0)),transaction:built.transaction,create:{institutions:[],accounts:[],instruments:[]},observations:updateObservation(parsed,route)};
+      built=attachBeneficiary(parsed,state,built,create,uid);
+      return {action:'auto-save',reason:'exact-route',confidence:Math.min(1,Number(parsed.confidence||0)),transaction:built.transaction,create,observations:updateObservation(parsed,route)};
     }
 
-    const create={institutions:[],accounts:[],instruments:[]};
+    const create={institutions:[],accounts:[],instruments:[],beneficiaries:[]};
     if(Number(parsed.confidence||0)<0.95)return {action:'review',reason:'low-confidence',confidence:Number(parsed.confidence||0)};
     if(!parsed.bankId&&!parsed.providerId)return {action:'review',reason:'source-not-identified',confidence:0};
 
@@ -251,8 +273,9 @@
     route=MessageCore.resolveRoute(parsed,draft);
     const eligible=autoEligible(parsed,route);
     if(!eligible.ok)return {action:'review',reason:eligible.reason,confidence:0,create};
-    const built=applyLearnedCategory(parsed,state,MessageCore.buildTransaction(parsed,route,{uid}));
+    let built=applyLearnedCategory(parsed,state,MessageCore.buildTransaction(parsed,route,{uid}));
     if(!built.ok)return {action:'review',reason:built.reason||'build-failed',confidence:0,create};
+    built=attachBeneficiary(parsed,state,built,create,uid);
     return {
       action:'auto-save',reason:'safe-auto-discovery',confidence:Math.min(0.99,Number(parsed.confidence||0)),
       transaction:built.transaction,create,observations:updateObservation(parsed,route),discovered:true
@@ -264,6 +287,8 @@
     arr(create.institutions).forEach(x=>state.institutions.push(clone(x)));
     arr(create.accounts).forEach(x=>state.accounts.push(clone(x)));
     arr(create.instruments).forEach(x=>state.paymentInstruments.push(clone(x)));
+    if(!Array.isArray(state.beneficiaries))state.beneficiaries=[];
+    arr(create.beneficiaries).forEach(x=>state.beneficiaries.push(clone(x)));
     if(plan.transaction)state.transactions.push(clone(plan.transaction));
     for(const o of arr(plan.observations)){
       const a=state.accounts.find(x=>x&&x.id===o.accountId);

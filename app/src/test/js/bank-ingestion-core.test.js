@@ -143,4 +143,19 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.transaction.cat,'shopping');
 }
 
+// Named person transfers automatically link/create a beneficiary, without duplicating the same name.
+{
+  const p=P.parse({id:'person1',postedAt:8200,text:'Your request to transfer AED 149.00 to Mohamed Abdelrahman Fawzy is successfully processed and the amount has been credited in the beneficiary account. TID: PERSONREF1'});
+  const s={institutions:[{id:'dui',name:'du Pay',country:'UAE',type:'wallet_provider',providerRegistryId:'du-pay'}],accounts:[
+    {id:'w',institutionId:'dui',country:'UAE',name:'du Pay Wallet',type:'ewallet',currency:'AED',openingBalance:500,openingDebt:0,creditLimit:0,archived:false}
+  ],paymentInstruments:[],transactions:[],beneficiaries:[]};
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.create.beneficiaries.length,1);
+  assert.strictEqual(plan.create.beneficiaries[0].name,'Mohamed Abdelrahman Fawzy');
+  assert.strictEqual(plan.transaction.beneficiaryId,plan.create.beneficiaries[0].id);
+  I.applyPlan(s,plan);
+  assert.strictEqual(s.beneficiaries.length,1);
+}
+
 console.log('bank ingestion core regression tests: PASS');
