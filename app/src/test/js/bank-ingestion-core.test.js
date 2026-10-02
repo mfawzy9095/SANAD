@@ -427,6 +427,28 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(s.accounts.length,2);
 }
 
+// Dedicated credit merge preserves a source baseline when the canonical account is empty.
+{
+  const s={institutions:[{id:'ei',name:'Emirates Islamic',country:'UAE',bankRegistryId:'emirates-islamic'}],accounts:[
+    {id:'bank',institutionId:'ei',country:'UAE',name:'Repayment',type:'bank',currency:'AED',openingBalance:1000,openingDebt:0,creditLimit:0,archived:false},
+    {id:'dup-a',institutionId:'ei',country:'UAE',name:'Credit duplicate',type:'credit',currency:'AED',openingBalance:0,openingDebt:120,creditLimit:5000,defaultRepaymentAccountId:'bank',archived:false},
+    {id:'keep-a',institutionId:'ei',country:'UAE',name:'Credit keep',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:0,defaultRepaymentAccountId:null,archived:false}
+  ],paymentInstruments:[
+    {id:'dup-c',accountId:'dup-a',institutionId:'ei',country:'UAE',type:'credit_card',first4:'4578',last4:'0308',network:'visa',archived:false},
+    {id:'keep-c',accountId:'keep-a',institutionId:'ei',country:'UAE',type:'credit_card',first4:'4578',last4:'0308',network:'visa',archived:false}
+  ],transactions:[
+    {id:'t1',type:'expense',accountId:'dup-a',instrumentId:'dup-c',amount:25,walletAmount:25,currency:'AED',fxRate:1,cat:'other',note:'TEST',tags:[],date:'2026-10-01',created:1}
+  ],recurring:[],settings:{}};
+  const out=I.mergeDuplicateInstrument(s,'dup-c','keep-c');
+  assert.strictEqual(out.ok,true);
+  const keep=s.accounts.find(a=>a.id==='keep-a');
+  assert.ok(keep);
+  assert.strictEqual(keep.openingDebt,120);
+  assert.strictEqual(keep.creditLimit,5000);
+  assert.strictEqual(keep.defaultRepaymentAccountId,'bank');
+  assert.strictEqual(s.accounts.some(a=>a.id==='dup-a'),false);
+}
+
 // A debit card may be relinked after history exists; only that card's own history moves.
 {
   const s={institutions:[{id:'b',name:'Bank',country:'UAE',type:'bank'}],accounts:[
