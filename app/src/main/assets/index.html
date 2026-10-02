@@ -4841,6 +4841,79 @@ function refreshOfficialBankField(kind,country){
   }
 }
 
+function sameAccountSourceForMerge(a,b){
+  if(!a||!b)return false;
+  if(a.institutionId&&b.institutionId&&a.institutionId===b.institutionId)return true;
+  const ai=a.institutionId?Finance.getInstitution(a.institutionId):null;
+  const bi=b.institutionId?Finance.getInstitution(b.institutionId):null;
+  if(!ai||!bi)return false;
+  const ab=Finance.registeredBankId(ai),bb=Finance.registeredBankId(bi);
+  if(ab&&bb)return ab===bb;
+  const ap=Finance.registeredProviderId(ai),bp=Finance.registeredProviderId(bi);
+  if(ap&&bp)return ap===bp;
+  return false;
+}
+function accountMergeCandidates(sourceId){
+  const source=Finance.getAccount(sourceId);
+  if(!source||source.archived||!['bank','ewallet'].includes(source.type))return [];
+  return S.accounts.filter(target=>{
+    if(!target||target.id===source.id||target.archived)return false;
+    if(target.type!==source.type||target.country!==source.country||target.currency!==source.currency)return false;
+    if(!sameAccountSourceForMerge(source,target))return false;
+    const direct=S.transactions.some(t=>t&&t.type==='transfer'&&(
+      (t.fromAccountId===source.id&&t.toAccountId===target.id)||
+      (t.fromAccountId===target.id&&t.toAccountId===source.id)
+    ));
+    return !direct;
+  });
+}
+function accountIdentityLabel(account){
+  const refs=accountBankRefsText(account);
+  const inst=account&&account.institutionId?Finance.getInstitution(account.institutionId):null;
+  return (inst?inst.name+' · ':'')+(account?account.name:'')+(refs?' · '+refs:'');
+}
+function openDuplicateAccountMerge(sourceId){
+  const source=Finance.getAccount(sourceId),candidates=accountMergeCandidates(sourceId);
+  if(!source||!candidates.length){toast('لا يوجد حساب مطابق آمن للدمج');return;}
+  const options=candidates.map(x=>
+    '<option value="'+esc(x.id)+'">'+esc(accountIdentityLabel(x)+' · '+amtFull(Finance.accountBalance(x.id),x.currency))+'</option>'
+  ).join('');
+  openSheet(
+    '<div class="sheet-head"><button type="button" class="close" data-act="close-sheet">✕</button><h2>دمج حساب مكرر</h2><div style="width:36px"></div></div>'+
+    '<div class="sheet-body">'+
+      '<div class="help-box warn"><span class="hi">🧩</span><div class="ht"><b>اختر الحساب الصحيح الذي سيبقى</b>سينقل SANAD المعاملات والبطاقات والمراجع إلى الحساب المختار ويعيد الحساب. لن يجمع opening balances تلقائيًا حتى لا يضاعف الرصيد.</div></div>'+
+      '<div class="field"><label>الحساب الحالي المراد دمجه</label><div style="padding:10px;border:1px solid var(--border);border-radius:12px"><b>'+esc(accountIdentityLabel(source))+'</b><div class="amt-val" style="margin-top:5px">'+amtFull(Finance.accountBalance(source.id),source.currency)+'</div></div></div>'+
+      '<div class="field"><label>ادمجه داخل</label><select id="accountMergeTarget">'+options+'</select></div>'+
+      '<button type="button" class="btn primary" data-act="confirm-merge-account" data-id="'+esc(source.id)+'">دمج وإعادة الحساب</button>'+
+    '</div>',
+    'account-merge'
+  );
+}
+async function confirmDuplicateAccountMerge(sourceId){
+  if(!canWrite()){toast('وضع القراءة فقط');return;}
+  const targetEl=document.getElementById('accountMergeTarget'),targetId=targetEl?targetEl.value:'';
+  if(!targetId||!accountMergeCandidates(sourceId).some(x=>x.id===targetId)){toast('اختر حسابًا صالحًا للدمج');return;}
+  const source=Finance.getAccount(sourceId),target=Finance.getAccount(targetId);
+  if(!source||!target)return;
+  const ok=await dialog({
+    emoji:'🧩',title:'تأكيد دمج الحساب',
+    msg:'سيتم دمج '+source.name+' داخل '+target.name+'. المعاملات والبطاقات ستنتقل للحساب الصحيح، والنسخة المكررة ستُحذف.',
+    okText:'دمج'
+  });
+  if(!ok)return;
+  showFinancialRecalcOverlay('جاري دمج الحساب وإعادة الحساب');
+  await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,20)));
+  const result=await commitCriticalMutation(async()=>{
+    const merged=BankIngestionCore.mergeDuplicateAccount(S,sourceId,targetId);
+    if(!merged.ok)return false;
+    Finance.ensureAllPrimaries();
+    return true;
+  });
+  hideFinancialRecalcOverlay();
+  if(!result.ok){render();toast('تعذر الدمج — لم يتم تغيير البيانات');return;}
+  closeSheet();render();toast('تم دمج الحساب المكرر وإعادة الحساب');
+}
+
 function openAccountSheet(id, presetType, preserve){
   if (!canWrite()){ toast('وضع القراءة فقط'); return; }
   const isEdit = !!id;
@@ -4927,7 +5000,9 @@ function openAccountSheet(id, presetType, preserve){
     else if (hasRefs) headerBtn = '<button type="button" class="danger" data-account-archive="' + id + '" title="أرشفة">📦</button>';
     else headerBtn = '<button type="button" class="danger" data-account-delete="' + id + '" title="حذف">🗑</button>';
   }
+  const accountMergeList=(isEdit&&!isArchived&&['bank','ewallet'].includes(type))?accountMergeCandidates(id):[];
   let footerBtns = '<button type="button" class="btn primary" data-act="save-account" data-id="' + (id||'') + '" style="margin-top:8px">' + (isEdit ? 'حفظ' : 'إضافة') + '</button>';
+  if(accountMergeList.length)footerBtns += '<button type="button" class="btn" data-act="merge-duplicate-account" data-id="' + id + '" style="margin-top:8px">🧩 دمج حساب مكرر ('+accountMergeList.length+')</button>';
   const isDefault = S.settings.defaultAccountByCountry[data.country] === data.id;
   const isPrimary = S.settings.primaryAccountByCountry[data.country] === data.id;
   const canBeDefault = !isArchived && typeDef.asset === true && !data.ownedByInstrumentId;
@@ -7078,6 +7153,8 @@ function handleViewAction(act, dataset){
     case 'save-repayment-edit': return saveRepaymentEdit();
     case 'reconcile-liability': return openReconcileLiability(dataset.id);
     case 'topup-prepaid': return openPrepaidTopup(dataset.id);
+    case 'merge-duplicate-account': return openDuplicateAccountMerge(dataset.id);
+    case 'confirm-merge-account': return confirmDuplicateAccountMerge(dataset.id);
     case 'merge-duplicate-card': return openDuplicateCardMerge(dataset.id);
     case 'confirm-merge-card': return confirmDuplicateCardMerge(dataset.id);
     case 'save-reconcile-liability': return saveReconcileLiability(dataset.id);
