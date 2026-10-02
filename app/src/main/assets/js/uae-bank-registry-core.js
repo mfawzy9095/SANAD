@@ -542,8 +542,88 @@
     "popular": false
   }
 ].map(x=>Object.freeze(x)));
+  const BANK_LOCALIZATION=Object.freeze({
+    'hsbc-middle-east':{ar:'إتش إس بي سي الشرق الأوسط',short:'HSBC'},
+    'standard-chartered':{ar:'ستاندرد تشارترد',short:'SCB'},
+    'emirates-nbd':{ar:'الإمارات دبي الوطني',short:'ENBD'},
+    'citibank':{ar:'سيتي بنك',short:'Citi'},
+    'mashreq':{ar:'المشرق',short:'Mashreq'},
+    'habib-bank-ltd':{ar:'حبيب بنك',short:'HBL'},
+    'united-bank-ltd':{ar:'يونايتد بنك ليمتد',short:'UBL'},
+    'fab':{ar:'بنك أبوظبي الأول',short:'FAB'},
+    'bank-saderat-iran':{ar:'بنك صادرات إيران',short:'BSI'},
+    'cbd':{ar:'بنك دبي التجاري',short:'CBD'},
+    'abk':{ar:'البنك الأهلي الكويتي',short:'ABK'},
+    'aaib':{ar:'البنك العربي الأفريقي الدولي',short:'AAIB'},
+    'banque-misr':{ar:'بنك مصر',short:'Banque Misr'},
+    'bank-of-sharjah':{ar:'بنك الشارقة',short:'BOS'},
+    'arab-bank':{ar:'البنك العربي',short:'Arab Bank'},
+    'bnp-paribas':{ar:'بي إن بي باريبا',short:'BNP Paribas'},
+    'al-khaliji-france':{ar:'الخليجي فرنسا',short:'Al Khaliji'},
+    'rafidain-bank':{ar:'مصرف الرافدين',short:'Rafidain'},
+    'bank-of-baroda':{ar:'بنك أوف بارودا',short:'BOB'},
+    'janata-bank':{ar:'بنك جاناتا',short:'Janata'},
+    'habib-bank-ag-zurich':{ar:'حبيب بنك إيه جي زيورخ',short:'HBZ'},
+    'banorient':{ar:'بنك بان أورينت',short:'Banorient'},
+    'dib':{ar:'بنك دبي الإسلامي',short:'DIB'},
+    'sib':{ar:'مصرف الشارقة الإسلامي',short:'SIB'},
+    'uab':{ar:'البنك العربي المتحد',short:'UAB'},
+    'investbank':{ar:'إنفست بنك',short:'InvestBank'},
+    'credit-agricole-cib':{ar:'كريدي أجريكول للاستثمار',short:'CACIB'},
+    'al-masraf':{ar:'المصرف',short:'Al Masraf'},
+    'emirates-islamic':{ar:'مصرف الإمارات الإسلامي',short:'EI'},
+    'rakbank':{ar:'راك بنك',short:'RAKBANK'},
+    'emirates-investment-bank':{ar:'بنك الإمارات للاستثمار',short:'EIB'},
+    'el-nilein-bank':{ar:'بنك النيلين',short:'El Nilein'},
+    'national-bank-oman':{ar:'البنك الوطني العماني',short:'NBO'},
+    'nbq':{ar:'بنك أم القيوين الوطني',short:'NBQ'},
+    'national-bank-bahrain':{ar:'بنك البحرين الوطني',short:'NBB'},
+    'nbf':{ar:'بنك الفجيرة الوطني',short:'NBF'},
+    'adcb':{ar:'بنك أبوظبي التجاري',short:'ADCB'},
+    'cbi':{ar:'البنك التجاري الدولي',short:'CBI'},
+    'adib':{ar:'مصرف أبوظبي الإسلامي',short:'ADIB'},
+    'al-hilal':{ar:'مصرف الهلال',short:'Al Hilal'},
+    'doha-bank':{ar:'بنك الدوحة',short:'Doha Bank'},
+    'snb':{ar:'البنك الأهلي السعودي',short:'SNB'},
+    'ajman-bank':{ar:'مصرف عجمان',short:'Ajman Bank'},
+    'nbk':{ar:'بنك الكويت الوطني',short:'NBK'},
+    'icbc':{ar:'البنك الصناعي والتجاري الصيني',short:'ICBC'},
+    'deutsche-bank':{ar:'دويتشه بنك',short:'Deutsche'},
+    'keb-hana':{ar:'بنك هانا',short:'Hana'},
+    'barclays':{ar:'باركليز',short:'Barclays'},
+    'bank-of-china':{ar:'بنك الصين',short:'BOC'},
+    'gib':{ar:'بنك الخليج الدولي',short:'GIB'},
+    'mcb-bank':{ar:'إم سي بي بنك',short:'MCB'},
+    'intesa-sanpaolo':{ar:'إنتيسا سان باولو',short:'Intesa'},
+    'agricultural-bank-china':{ar:'البنك الزراعي الصيني',short:'ABC China'},
+    'bank-alfalah':{ar:'بنك الفلاح',short:'Bank Alfalah'},
+    'bok-international':{ar:'بنك بي أو كي الدولي',short:'BOK'},
+    'mbank':{ar:'إم بنك',short:'Mbank'},
+    'wio':{ar:'بنك ويو',short:'Wio'},
+    'zand':{ar:'بنك زند',short:'Zand'},
+    'idb-uae':{ar:'البنك الدولي للتنمية',short:'IDB'},
+    'ruya':{ar:'مصرف رؤيا المجتمعي الإسلامي',short:'Ruya'},
+    'reem-community-bank':{ar:'بنك ريم المجتمعي',short:'Reem'},
+    'iraqi-islamic-bank':{ar:'المصرف العراقي الإسلامي',short:'IIB'}
+  });
   const PAYMENT_PROVIDERS=Object.freeze([
-    {id:'du-pay',name:'du Pay',aliases:['du Pay','duPay','du Pay wallet','duPay wallet','dupay.ae'],type:'digital_wallet',country:'UAE'}
+    {id:'e-money',name:'e& money',nameAr:'إي آند موني',short:'e& money',aliases:['e& money','eandmoney','e money','Digital Financial Services LLC','المحفظة e& money'],type:'digital_wallet',country:'UAE',legalName:'Digital Financial Services L.L.C.',logoDomain:'eandmoney.com',popular:true},
+    {id:'botim-money',name:'BOTIM Money',nameAr:'بوتيم موني',short:'BOTIM Money',aliases:['BOTIM Money','Botim Money','Botim wallet','PayBy','Botim Money Technology LLC'],type:'digital_wallet',country:'UAE',legalName:'Botim Money Technology L.L.C',logoDomain:'botim.me',popular:true},
+    {id:'noqodi',name:'noqodi',nameAr:'نقودي',short:'noqodi',aliases:['noqodi','noqodi wallet','نقودي','Noqodi LLC'],type:'digital_wallet',country:'UAE',legalName:'Noqodi LLC',logoDomain:'noqodi.com',popular:true},
+    {id:'myzoi',name:'myZoi',nameAr:'ماي زوي',short:'myZoi',aliases:['myZoi','myZoi wallet','MyZoi Financial Inclusion Technologies'],type:'digital_wallet',country:'UAE',legalName:'MyZoi Financial Inclusion Technologies L.L.C.',logoDomain:'myzoi.com',popular:false},
+    {id:'whizmo',name:'Whizmo',nameAr:'ويزمو',short:'Whizmo',aliases:['Whizmo','Whizpay','Whizpay Technology','ويزمو'],type:'digital_wallet',country:'UAE',legalName:'Whizpay Technology L.L.C.',logoDomain:'whizmo.ae',popular:true},
+    {id:'du-pay',name:'du Pay',nameAr:'دو باي',short:'du Pay',aliases:['du Pay','duPay','du Pay wallet','duPay wallet','dupay.ae','EITC Financial Services'],type:'digital_wallet',country:'UAE',legalName:'EITC Financial Services L.L.C',logoDomain:'dupay.ae',popular:true},
+    {id:'ziina',name:'Ziina',nameAr:'زينة',short:'Ziina',aliases:['Ziina','Ziina Wallet','Ziina Payments','زينة'],type:'digital_wallet',country:'UAE',legalName:'Ziina Payments L.L.C',logoDomain:'ziina.com',popular:true},
+    {id:'comera-pay',name:'Comera Pay',nameAr:'كوميرا باي',short:'Comera Pay',aliases:['Comera Pay','ComeraPay','Comera Pay LLC'],type:'digital_wallet',country:'UAE',legalName:'Comera Pay L.L.C',logoDomain:'comerapay.com',popular:false},
+    {id:'pay10',name:'Pay10',nameAr:'باي 10',short:'Pay10',aliases:['Pay10','Pay 10','Pay Ten','Pay Ten Payment Services Provider'],type:'digital_wallet',country:'UAE',legalName:'Pay Ten Payment Services Provider L.L.C.',logoDomain:'pay10.ae',popular:false},
+    {id:'huru',name:'Huru',nameAr:'هورو',short:'Huru',aliases:['Huru','Huru Money','Huru Payment Services Provider'],type:'digital_wallet',country:'UAE',legalName:'Huru Payment Services Provider L.L.C',logoDomain:'huru.co',popular:false},
+    {id:'al-ansari-wallet',name:'Al Ansari Wallet',nameAr:'محفظة الأنصاري',short:'Al Ansari',aliases:['Al Ansari Wallet','Al Ansari Digital Pay','الأنصاري','محفظة الأنصاري'],type:'digital_wallet',country:'UAE',legalName:'Al Ansari Digital Pay L.L.C',logoDomain:'alansariwallet.com',popular:true},
+    {id:'wise',name:'Wise',nameAr:'وايز',short:'Wise',aliases:['Wise','Wise Fintech Network'],type:'digital_wallet',country:'UAE',legalName:'Wise Fintech Network L.L.C',logoDomain:'wise.com',popular:true},
+    {id:'revolut',name:'Revolut',nameAr:'ريفولوت',short:'Revolut',aliases:['Revolut','Revolut Stored Value Services'],type:'digital_wallet',country:'UAE',legalName:'Revolut Stored Value Services L.L.C',logoDomain:'revolut.com',popular:true},
+    {id:'beyon-money',name:'Beyon Money',nameAr:'بيون موني',short:'Beyon Money',aliases:['Beyon Money','BeyonMoney','Beyon Money Financial Services'],type:'digital_wallet',country:'UAE',legalName:'Beyon Money Financial Services L.L.C',logoDomain:'beyonmoney.ae',popular:false},
+    {id:'kamelpay',name:'KamelPay',nameAr:'كامل باي',short:'KamelPay',aliases:['KamelPay','Kamel Pay','H A Q Kamel Pay Services'],type:'digital_wallet',country:'UAE',legalName:'H A Q Kamel Pay Services L.L.C',logoDomain:'kamelpay.com',popular:false},
+    {id:'payit-fab',name:'Payit',nameAr:'باييت',short:'Payit',aliases:['Payit','Payit Wallet','FAB Payit','باييت'],type:'bank_wallet',country:'UAE',legalName:'First Abu Dhabi Bank P.J.S.C',bankId:'fab',logoDomain:'payit.ae',popular:true},
+    {id:'noon-digital-pay',name:'Noon Digital Pay',nameAr:'نون ديجيتال باي',short:'Noon Pay',aliases:['Noon Digital Pay','Noon Pay'],type:'stored_value_provider',country:'UAE',legalName:'Noon Digital Pay L.L.C',logoDomain:null,popular:false}
   ].map(x=>Object.freeze(x)));
   const LOGO_DOMAINS=Object.freeze({
     'hsbc-middle-east':'hsbc.ae',
@@ -587,16 +667,57 @@
     if(a.length<=4&&!a.includes(' '))return new RegExp('(?:^|\\s)'+escapeRegExp(a)+'(?:$|\\s)','i').test(normalize(haystack));
     return h.includes(' '+a+' ');
   }
-  function aliasesFor(bank){return [bank.name].concat(bank.aliases||[]);}
+  function bankMeta(bankOrId){
+    const bank=typeof bankOrId==='string'?get(bankOrId):bankOrId;
+    return bank?(BANK_LOCALIZATION[bank.id]||{}):{};
+  }
+  function aliasesFor(bank){
+    const meta=bankMeta(bank);
+    return [bank.name,meta.ar,meta.short].concat(bank.aliases||[]).filter(Boolean);
+  }
+  function providerAliases(provider){
+    return [provider&&provider.name,provider&&provider.nameAr,provider&&provider.short,provider&&provider.legalName].concat(provider&&provider.aliases||[]).filter(Boolean);
+  }
   function get(id){return BANKS.find(b=>b.id===id)||null;}
   function getProvider(id){return PAYMENT_PROVIDERS.find(p=>p.id===id)||null;}
+  function bankDisplayName(bankOrId,lang){
+    const bank=typeof bankOrId==='string'?get(bankOrId):bankOrId;
+    if(!bank)return '';
+    const meta=bankMeta(bank);
+    return String(lang||'en').toLowerCase().startsWith('ar')?(meta.ar||bank.name):bank.name;
+  }
+  function bankShortName(bankOrId){
+    const bank=typeof bankOrId==='string'?get(bankOrId):bankOrId;
+    if(!bank)return '';
+    return bankMeta(bank).short||bank.name;
+  }
+  function providerDisplayName(providerOrId,lang){
+    const p=typeof providerOrId==='string'?getProvider(providerOrId):providerOrId;
+    if(!p)return '';
+    return String(lang||'en').toLowerCase().startsWith('ar')?(p.nameAr||p.name):p.name;
+  }
+  function providerShortName(providerOrId){
+    const p=typeof providerOrId==='string'?getProvider(providerOrId):providerOrId;
+    return p?(p.short||p.name):'';
+  }
   function list(){return BANKS.slice().sort((a,b)=>{if(!!a.popular!==!!b.popular)return a.popular?-1:1;return a.name.localeCompare(b.name,'en');});}
+  function listProviders(){return PAYMENT_PROVIDERS.slice().sort((a,b)=>{if(!!a.popular!==!!b.popular)return a.popular?-1:1;return a.name.localeCompare(b.name,'en');});}
   function search(query){
     const q=normalize(query);
     if(!q)return list();
     return list().filter(bank=>aliasesFor(bank).some(alias=>normalize(alias).includes(q)));
   }
-  function logoDomain(id){return LOGO_DOMAINS[String(id||'')]||null;}
+  function searchProviders(query){
+    const q=normalize(query);
+    if(!q)return listProviders();
+    return listProviders().filter(provider=>providerAliases(provider).some(alias=>normalize(alias).includes(q)));
+  }
+  function logoDomain(id){
+    const key=String(id||'');
+    if(LOGO_DOMAINS[key])return LOGO_DOMAINS[key];
+    const p=getProvider(key);
+    return p&&p.logoDomain?p.logoDomain:null;
+  }
   function initials(value){
     const words=normalize(value).split(' ').filter(Boolean).filter(w=>!['bank','pjsc','psc','llc','limited'].includes(w));
     if(!words.length)return '🏦';
@@ -613,12 +734,12 @@
   }
   function detectProvider(text){
     let best=null;
-    for(const provider of PAYMENT_PROVIDERS)for(const alias of [provider.name].concat(provider.aliases||[])){
+    for(const provider of PAYMENT_PROVIDERS)for(const alias of providerAliases(provider)){
       if(!containsAlias(text,alias))continue;
       const score=normalize(alias).length;
       if(!best||score>best.score)best={provider,alias,score};
     }
     return best;
   }
-  return Object.freeze({SOURCE,BANKS,PAYMENT_PROVIDERS,LOGO_DOMAINS,list,search,get,getProvider,detect,detectProvider,normalize,logoDomain,initials});
+  return Object.freeze({SOURCE,BANKS,BANK_LOCALIZATION,PAYMENT_PROVIDERS,LOGO_DOMAINS,list,listProviders,search,searchProviders,get,getProvider,detect,detectProvider,normalize,logoDomain,initials,bankDisplayName,bankShortName,providerDisplayName,providerShortName});
 });
