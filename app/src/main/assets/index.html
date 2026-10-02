@@ -2328,7 +2328,7 @@ function viewAccounts(){
   const country = S.activeCountry;
   const accounts = Finance.getCountryAccounts(country);
   const instruments = Finance.getCountryInstruments(country);
-  const cards = instruments.filter(i => i.type === 'credit_card' || i.type === 'debit_card' || i.type === 'prepaid_card');
+  const cards = instruments.filter(i => i.type === 'credit_card' || i.type === 'debit_card' || i.type === 'prepaid_card' || i.type === 'wallet_card');
   const assetAccounts = accounts.filter(a => isAssetAccount(a) && !a.ownedByInstrumentId);
   const debtAccounts = accounts.filter(a => a.type === 'debt');
   const archivedAccounts = S.accounts.filter(a => a.archived && a.country === country && !a.ownedByInstrumentId);
