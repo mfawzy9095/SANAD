@@ -6135,7 +6135,8 @@ async function saveCard(id, presetType){
           if (acc){
             const hasTx = cardHasHistory(id);
             acc.name = name;
-            if (!hasTx){ acc.country = country; acc.currency = cardCur; acc.openingDebt = debt; }
+            if (!hasTx){ acc.country = country; acc.currency = cardCur; }
+            acc.openingDebt = debt;
             acc.institutionId = institutionId;
             acc.creditLimit = limit;
             acc.defaultRepaymentAccountId = repayId;
