@@ -6002,6 +6002,7 @@ function duplicateCardMergeCandidates(sourceId){
     if(!target||target.id===source.id||target.archived||target.type!==source.type||target.country!==source.country)return false;
     const targetAcc=Finance.getAccount(target.accountId);
     if(!targetAcc||targetAcc.archived||targetAcc.currency!==sourceAcc.currency)return false;
+    if(['debit_card','wallet_card'].includes(source.type)&&targetAcc.id!==sourceAcc.id)return false;
     if(!sameCardSourceForMerge(source,target))return false;
     if(!cardIdentityOverlapForMerge(source,target))return false;
     if(source.network&&target.network&&source.network!=='other'&&target.network!=='other'&&source.network!==target.network)return false;

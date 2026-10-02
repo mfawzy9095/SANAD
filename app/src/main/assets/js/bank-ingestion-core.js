@@ -572,6 +572,7 @@
     const toInst=institutions.find(i=>i&&i.id===(to.institutionId||toAcc.institutionId))||null;
     if(fromInst&&toInst&&!sameInstitutionSource(state,fromInst,toInst))return {ok:false,reason:'institution-mismatch'};
     const dedicated=['credit_card','prepaid_card'].includes(from.type);
+    if(!dedicated&&fromAcc.id!==toAcc.id)return {ok:false,reason:'shared-card-account-mismatch'};
     const targetHadHistory=dedicated&&(
       arr(state.transactions).some(t=>t&&(t.accountId===toAcc.id||t.fromAccountId===toAcc.id||t.toAccountId===toAcc.id))||
       arr(state.recurring).some(r=>r&&r.accountId===toAcc.id)
