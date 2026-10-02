@@ -267,6 +267,25 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(rr.targetAccount.id,'credit');
 }
 
+// A debit card may be relinked after history exists; only that card's own history moves.
+{
+  const s={institutions:[{id:'b',name:'Bank',country:'UAE',type:'bank'}],accounts:[
+    {id:'old',institutionId:'b',country:'UAE',name:'Old',type:'bank',currency:'AED',openingBalance:100,openingDebt:0,creditLimit:0,archived:false},
+    {id:'new',institutionId:'b',country:'UAE',name:'New',type:'bank',currency:'AED',openingBalance:200,openingDebt:0,creditLimit:0,archived:false}
+  ],paymentInstruments:[{id:'d1',accountId:'old',institutionId:'b',country:'UAE',type:'debit_card',last4:'1111',archived:false}],
+  transactions:[{id:'t1',type:'expense',accountId:'old',instrumentId:'d1',amount:10,walletAmount:10,currency:'AED',fxRate:1,cat:'other',note:'',tags:[],date:'2026-10-01',created:1},
+    {id:'t2',type:'expense',accountId:'old',instrumentId:null,amount:5,walletAmount:5,currency:'AED',fxRate:1,cat:'other',note:'',tags:[],date:'2026-10-01',created:2}],
+  recurring:[{id:'r1',type:'expense',accountId:'old',instrumentId:'d1',active:true}],settings:{bankLearningRules:[{id:'lr',instrumentId:'d1',accountId:'old'}]}};
+  const out=I.rebindInstrumentAccount(s,'d1','new');
+  assert.strictEqual(out.ok,true);
+  assert.strictEqual(out.movedTransactions,1);
+  assert.strictEqual(s.paymentInstruments[0].accountId,'new');
+  assert.strictEqual(s.transactions[0].accountId,'new');
+  assert.strictEqual(s.transactions[1].accountId,'old');
+  assert.strictEqual(s.recurring[0].accountId,'new');
+  assert.strictEqual(s.settings.bankLearningRules[0].accountId,'new');
+}
+
 // User category choices become a local merchant rule for later auto-imports.
 {
   const p=P.parse({id:'learn1',postedAt:8100,text:'تمت عملية شراء في AED 12.00 MY SPECIAL SHOP على البطاقة 4021 الائتمان المتوفر AED4,000.00'});
