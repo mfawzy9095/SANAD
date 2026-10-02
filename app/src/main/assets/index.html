@@ -8449,7 +8449,7 @@ const SanadBankInbox = {
     if(this.syncing)return this.lastSummary;
     if(!this.supported()){this.items=[];return this.lastSummary;}
     this.syncing=true;
-    const summary={added:0,duplicates:0,ignored:0,review:0,discovered:0,reconcileWarnings:0,activeRescanAdded:0,at:Date.now()};
+    const summary={parsed:0,added:0,duplicates:0,ignored:0,review:0,discovered:0,reconcileWarnings:0,activeRescanAdded:0,at:Date.now()};
     const ackIds=[],reviews=[];
     try{
       if(opts.userInitiated){
@@ -8475,6 +8475,7 @@ const SanadBankInbox = {
           if(opts.cooperative&&processedRows%4===0)await this.yieldUi(0);
           continue;
         }
+        summary.parsed++;
         let plan=BankIngestionCore.plan(parsed,S,{uid});
         if(plan.action==='duplicate'){
           ackIds.push(n.id);summary.duplicates++;continue;
@@ -8527,9 +8528,19 @@ const SanadBankInbox = {
     const captureDesc=!supported?'غير متاح على هذه النسخة':(!enabled?'غير مفعّل · اضغط للتفعيل':(diag.listenerConnected?'مفعّل · خدمة الالتقاط متصلة':'مفعّل · خدمة الالتقاط تنتظر الاتصال'));
     const lastCapture=diag.lastCapturedAt?new Date(Number(diag.lastCapturedAt)).toLocaleString('ar-AE'):'لم يتم التقاط عملية بعد';
     const histSupported=this.historicalSupported(),histGranted=this.historicalPermission(),hist=this.lastHistoricalImport||{},histTotal=hist.total||{},hp=this.historicalProgress||{};
+    const histStats=this.historicalImporting?hp:histTotal;
+    const histScanned=Number(histStats.scanned||0),histCandidates=Number(histStats.financialCandidates||0);
+    const histParsed=Number(histStats.parsed||0),histAdded=Number(histStats.added||0),histReview=Number(histStats.review||0);
+    const histDuplicates=Number(histStats.duplicates||0),histParserIgnored=Number(histStats.ignored||0);
+    const histIgnored=Math.max(0,histScanned-histCandidates)+histParserIgnored;
+    const permissionState=!histSupported?'Unsupported':(histGranted?'Granted':(hist.status==='permission-restricted'?'Restricted':'Denied'));
+    const histStatus=this.historicalImporting?'Running':(hist.status||'Not started');
     const histDesc=this.historicalImporting
-      ? ('جاري الفحص · '+Number(hp.scanned||0)+' SMS · '+Number(hp.financialCandidates||0)+' مالية · اضغط للإيقاف')
-      : (!histSupported?'غير متاح على هذه النسخة':(histGranted?(hist.at?('آخر استيراد: '+Number(histTotal.scanned||0)+' SMS · '+Number(histTotal.financialCandidates||0)+' مالية · '+Number(histTotal.added||0)+' مضافة'):'مسموح · اضغط لقراءة SMS السابقة'):'اضغط للسماح وقراءة SMS السابقة'));
+      ? ('جاري الفحص · '+histScanned+' SMS · '+histCandidates+' مالية · اضغط للإيقاف')
+      : (!histSupported?'غير متاح على هذه النسخة':(histGranted?(hist.at?('آخر استيراد: '+histScanned+' SMS · '+histCandidates+' مالية · '+histAdded+' مضافة'):'مسموح · اضغط لقراءة SMS السابقة'):'اضغط للسماح وقراءة SMS السابقة'));
+    const histDiagnostics='SMS permission: '+permissionState+' · Status: '+histStatus+
+      ' · Scanned: '+histScanned+' · Financial: '+histCandidates+' · Parsed: '+histParsed+
+      ' · Duplicates: '+histDuplicates+' · Added: '+histAdded+' · Review: '+histReview+' · Ignored: '+histIgnored;
     return '<div class="sec"><h2>المزامنة البنكية التلقائية</h2></div><div class="list">' +
       '<div class="list-item" data-sanad-act="bank-access"><div class="li-ico">🏦</div><div class="li-body"><b>الوصول لإشعارات البنوك والمحافظ</b><span>' +
         captureDesc +
@@ -8542,6 +8553,7 @@ const SanadBankInbox = {
       '</span></div><div class="switch '+(auto?'on':'')+'"></div></div>' +
       '<div class="list-item" data-sanad-act="bank-sync"><div class="li-ico">🔄</div><div class="li-body"><b>مزامنة العمليات الجديدة الآن</b><span>'+syncDesc+'</span></div><div class="li-arrow">›</div></div>' +
       '<div class="list-item" data-sanad-act="bank-sms-history"><div class="li-ico">💬</div><div class="li-body"><b>استيراد رسائل SMS السابقة</b><span>'+esc(histDesc)+'</span></div><div class="li-arrow">›</div></div>' +
+      '<div class="list-item"><div class="li-ico">🧪</div><div class="li-body"><b>تشخيص استيراد SMS</b><span style="direction:ltr;text-align:left;white-space:normal">'+esc(histDiagnostics)+'</span></div></div>' +
       '<div class="list-item" data-sanad-act="bank-inbox"><div class="li-ico">📥</div><div class="li-body"><b>عمليات تحتاج مراجعة</b><span>' +
         (count?count+' عملية':'لا توجد عمليات تحتاج مراجعة') +
       '</span></div><div class="li-arrow">›</div></div></div>';
@@ -8621,7 +8633,7 @@ const SanadBankInbox = {
     this._historicalReviewIds=new Set();
     const startTab=S.tab;
     let afterDate=0,afterId=0,pages=0;
-    const total={scanned:0,matchingRows:0,financialCandidates:0,added:0,review:0,duplicates:0,ignored:0,discovered:0};
+    const total={scanned:0,matchingRows:0,financialCandidates:0,parsed:0,added:0,review:0,duplicates:0,ignored:0,discovered:0};
     let status='complete';
     this.historicalProgress=Object.assign({pages:0},total);
     if(S.tab==='settings')render();
@@ -8657,6 +8669,7 @@ const SanadBankInbox = {
           excludeIds:this._historicalReviewIds
         });
         for(const id of (batch.reviewIds||[]))this._historicalReviewIds.add(String(id));
+        total.parsed+=Number(batch.parsed||0);
         total.added+=Number(batch.added||0);
         total.review+=Number(batch.review||0);
         total.duplicates+=Number(batch.duplicates||0);
@@ -8679,12 +8692,12 @@ const SanadBankInbox = {
       this.historicalProgress=null;
     }
 
-    this.lastHistoricalImport={at:Date.now(),status,pages,total,nextAfterDate:afterDate,nextAfterId:afterId};
+    this.lastHistoricalImport={at:Date.now(),status,days:Number(days)||0,pages,total,nextAfterDate:afterDate,nextAfterId:afterId};
     if(S.tab==='settings')render();
 
     if(status==='cancelled')toast('تم إيقاف استيراد SMS · فُحص '+total.scanned+' رسالة',4200);
     else if(status==='complete'&&total.scanned===0)toast('Android لم يُرجع أي SMS من صندوق الرسائل',5000);
-    else if(status==='complete')toast('تم فحص '+total.scanned+' SMS · وجد '+total.financialCandidates+' مالية · أضيف '+total.added+' · مراجعة '+total.review,6000);
+    else if(status==='complete')toast('تم فحص '+total.scanned+' SMS · مالية '+total.financialCandidates+' · parsed '+total.parsed+' · أضيف '+total.added+' · مراجعة '+total.review+' · مكرر '+total.duplicates,6500);
     else if(status==='permission-restricted')toast('Android منع صلاحية قراءة SMS لهذه النسخة أو طريقة التثبيت',5000);
     else if(status==='query-failed')toast('تعذر قراءة صندوق SMS من Android',5000);
     else if(status==='timeout')toast('قراءة SMS استغرقت وقتًا طويلًا وتم إيقافها بدون تجميد التطبيق',5200);
