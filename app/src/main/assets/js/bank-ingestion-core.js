@@ -18,6 +18,11 @@
   function round2(v){const n=num(v);return n==null?null:Math.round(n*100)/100;}
   function clone(v){return JSON.parse(JSON.stringify(v));}
   function arr(v){return Array.isArray(v)?v:[];}
+  function countryForParsed(parsed){
+    return (parsed&&parsed.country)||
+      (MessageCore.countryForCurrency?MessageCore.countryForCurrency(parsed&&parsed.currency):null)||
+      'UAE';
+  }
   function idFactory(options){
     if(options&&typeof options.uid==='function')return options.uid;
     let seq=0;
@@ -47,8 +52,9 @@
   function findCustomInstitutionByHint(state,parsed){
     const hint=normalizeSource(parsed&&parsed.sourceHint);
     if(!hint)return null;
+    const country=countryForParsed(parsed);
     const hintCompact=hint.replace(/\s+/g,'');
-    const matches=arr(state&&state.institutions).filter(inst=>institutionAliases(inst).some(alias=>{
+    const matches=arr(state&&state.institutions).filter(inst=>inst&&inst.country===country&&institutionAliases(inst).some(alias=>{
       const aliasCompact=alias.replace(/\s+/g,'');
       return hint===alias||hint.includes(alias)||(hint.length>=4&&alias.includes(hint))||
         (aliasCompact.length>=5&&hintCompact.includes(aliasCompact));
@@ -57,11 +63,12 @@
   }
   function findInstitution(state,parsed){
     const institutions=arr(state&&state.institutions);
+    const country=countryForParsed(parsed);
     if(parsed.bankId){
-      return institutions.find(i=>institutionBankId(i)===parsed.bankId)||null;
+      return institutions.find(i=>i&&i.country===country&&institutionBankId(i)===parsed.bankId)||null;
     }
     if(parsed.providerId){
-      return institutions.find(i=>institutionProviderId(i)===parsed.providerId)||null;
+      return institutions.find(i=>i&&i.country===country&&institutionProviderId(i)===parsed.providerId)||null;
     }
     return null;
   }
@@ -109,15 +116,16 @@
     return null;
   }
   function makeInstitution(parsed,uid){
+    const country=countryForParsed(parsed);
     if(parsed.bankId){
       const b=Registry.get(parsed.bankId);
       if(!b)return null;
-      return {id:uid('inst'),name:b.name,country:'UAE',type:'bank',bankRegistryId:b.id,autoDiscovered:true};
+      return {id:uid('inst'),name:b.name,country,type:'bank',bankRegistryId:b.id,autoDiscovered:true};
     }
     if(parsed.providerId&&Registry.getProvider){
       const p=Registry.getProvider(parsed.providerId);
       if(!p)return null;
-      return {id:uid('inst'),name:p.name,country:p.country||'UAE',type:'wallet_provider',providerRegistryId:p.id,autoDiscovered:true};
+      return {id:uid('inst'),name:p.name,country:parsed.country||p.country||country,type:'wallet_provider',providerRegistryId:p.id,autoDiscovered:true};
     }
     return null;
   }
@@ -132,7 +140,7 @@
       ? display+' Wallet'
       : display+(ref?' • '+String(ref):' Account');
     const out={
-      id:uid('a'),institutionId:institutionId||null,country:'UAE',name,
+      id:uid('a'),institutionId:institutionId||null,country:countryForParsed(parsed),name,
       type:accountType,currency:parsed.currency||'AED',
       openingBalance:opening,openingDebt:0,creditLimit:0,defaultRepaymentAccountId:null,
       icon:provider?'📱':'🏦',color:'#00695C',archived:false,created:new Date(parsed.postedAt||Date.now()).toISOString().slice(0,10),
@@ -145,7 +153,7 @@
   function makeCreditAccount(parsed,institutionId,uid){
     if(!parsed.cardLast4)return null;
     return {
-      id:uid('a'),institutionId:institutionId||null,country:'UAE',
+      id:uid('a'),institutionId:institutionId||null,country:countryForParsed(parsed),
       name:sourceDisplay(parsed)+' • Credit ****'+parsed.cardLast4,
       type:'credit',currency:parsed.currency||'AED',
       openingBalance:0,openingDebt:0,creditLimit:0,defaultRepaymentAccountId:null,
@@ -170,7 +178,8 @@
     if(baseRoute&&baseRoute.status==='routed'&&Number(baseRoute.confidence||0)>=0.90)return baseRoute;
     const inst=findCustomInstitutionByHint(state,parsed);
     if(!inst)return baseRoute;
-    const accounts=arr(state&&state.accounts).filter(a=>a&&!a.archived&&a.institutionId===inst.id&&a.country==='UAE'&&(!parsed.currency||a.currency===parsed.currency));
+    const country=countryForParsed(parsed);
+    const accounts=arr(state&&state.accounts).filter(a=>a&&!a.archived&&a.institutionId===inst.id&&a.country===country&&(!parsed.currency||a.currency===parsed.currency));
     const instruments=arr(state&&state.paymentInstruments).filter(i=>i&&!i.archived);
     if(parsed.cardLast4){
       const cards=instruments.filter(i=>String(i.last4||'')===String(parsed.cardLast4)&&
@@ -234,7 +243,7 @@
     let bene=arr(state&&state.beneficiaries).find(b=>b&&normalizedPerson(b.name)===key)||null;
     if(!bene){
       bene={
-        id:uid('bene'),name,country:'UAE',defaultCurrency:parsed.currency||'AED',
+        id:uid('bene'),name,country:countryForParsed(parsed),defaultCurrency:parsed.currency||'AED',
         note:'Auto-discovered from financial notification',type:'person',archived:false,
         created:new Date(parsed.postedAt||Date.now()).toISOString().slice(0,10),autoDiscovered:true
       };
@@ -283,7 +292,8 @@
 
     const create={institutions:[],accounts:[],instruments:[],beneficiaries:[]};
     const customInstitution=findCustomInstitutionByHint(draft,parsed);
-    const discoveryMinConfidence=customInstitution?0.72:0.95;
+    const registeredSource=!!(parsed.bankId||parsed.providerId);
+    const discoveryMinConfidence=customInstitution?0.72:(registeredSource?0.86:0.95);
     if(Number(parsed.confidence||0)<discoveryMinConfidence)return {action:'review',reason:'low-confidence',confidence:Number(parsed.confidence||0)};
     if(!parsed.bankId&&!parsed.providerId&&!customInstitution)return {action:'review',reason:'source-not-identified',confidence:0};
 

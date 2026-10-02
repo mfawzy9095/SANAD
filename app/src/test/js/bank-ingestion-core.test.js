@@ -231,4 +231,40 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(s.beneficiaries.length,1);
 }
 
+// Registered-bank generic messages can safely auto-discover when transaction + balance + instrument are explicit.
+{
+  const p=P.parse({id:'adcb-generic',postedAt:8300,title:'ADCB',text:'Purchase AED 10.00 at TEST STORE using debit card ending 7777. Available balance is AED 90.00'});
+  const s=empty();
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(p.bankId,'adcb');
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.create.accounts[0].country,'UAE');
+  assert.strictEqual(plan.create.instruments[0].last4,'7777');
+}
+
+// Currency decides the country bucket: EGP routes/creates in Egypt, not UAE.
+{
+  const p=P.parse({id:'egy-generic',postedAt:8400,title:'Banque Misr',text:'Purchase EGP 25.00 at TEST STORE using debit card ending 1234. Available balance is EGP 975.00'});
+  const s=empty();
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(p.country,'EGY');
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.create.institutions[0].country,'EGY');
+  assert.strictEqual(plan.create.accounts[0].country,'EGY');
+  assert.strictEqual(plan.create.accounts[0].currency,'EGP');
+}
+
+// MAD exact-card traffic stays in Morocco even when another-country accounts exist.
+{
+  const p=P.parse({id:'mar-card',postedAt:8500,title:'My Morocco Bank',text:'Purchase MAD 20.00 at TEST STORE on your credit card ending 9090'});
+  const s={institutions:[{id:'mar-inst',name:'My Morocco Bank',country:'MAR',type:'bank'}],accounts:[
+    {id:'mar-credit',institutionId:'mar-inst',country:'MAR',name:'Morocco Credit',type:'credit',currency:'MAD',openingBalance:0,openingDebt:0,creditLimit:1000,archived:false},
+    {id:'uae-other',institutionId:null,country:'UAE',name:'UAE',type:'bank',currency:'AED',openingBalance:100,openingDebt:0,creditLimit:0,archived:false}
+  ],paymentInstruments:[{id:'mar9090',accountId:'mar-credit',institutionId:'mar-inst',country:'MAR',type:'credit_card',last4:'9090',archived:false}],transactions:[],beneficiaries:[]};
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(p.country,'MAR');
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.transaction.accountId,'mar-credit');
+}
+
 console.log('bank ingestion core regression tests: PASS');

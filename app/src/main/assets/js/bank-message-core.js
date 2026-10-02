@@ -80,10 +80,18 @@
     if(/has been suspended|has been resumed|request to freeze|successfully reactivated|registered.+google pay|suspended from google pay|resumed to google pay|suspended from merchant|resumed to merchant|تم تسجيل بطاقتك.+google pay/.test(x))return 'card-status';
     return null;
   }
+  function countryForCurrency(value){
+    const code=String(value||'').toUpperCase();
+    if(code==='AED')return 'UAE';
+    if(code==='EGP')return 'EGY';
+    if(code==='MAD')return 'MAR';
+    return null;
+  }
   function result(base,input,raw){
+    const resolvedCurrency=String(base.currency||'AED').toUpperCase();
     return Object.assign({recognized:true,ignored:false,eventId:input&&input.id?String(input.id):null,postedAt:Number(input&&input.postedAt)||Date.now(),
       bankId:base.bankId||bankIdFrom(input,raw),providerId:base.providerId||providerIdFrom(input,raw),kind:base.kind,direction:base.direction||null,amount:Number(base.amount),
-      currency:String(base.currency||'AED').toUpperCase(),merchant:base.merchant||'',category:base.category||'other',
+      currency:resolvedCurrency,country:base.country||countryForCurrency(resolvedCurrency),merchant:base.merchant||'',category:base.category||'other',
       cardLast4:base.cardLast4||null,accountRef:base.accountRef||null,accountSuffix:base.accountSuffix||suffix(base.accountRef),
       fromAccountRef:base.fromAccountRef||null,toAccountRef:base.toAccountRef||null,
       transactionRef:base.transactionRef||null,transactionDate:base.transactionDate||null,beneficiaryName:base.beneficiaryName||null,
@@ -210,8 +218,9 @@
   }
   function resolveRoute(parsed,state){
     const institutions=Array.isArray(state&&state.institutions)?state.institutions:[],accounts=Array.isArray(state&&state.accounts)?state.accounts:[],instruments=Array.isArray(state&&state.paymentInstruments)?state.paymentInstruments:[];
+    const country=(parsed&&parsed.country)||countryForCurrency(parsed&&parsed.currency)||'UAE';
     const institutionIds=new Set(institutions.filter(i=>{if(parsed.bankId&&institutionBankId(i)!==parsed.bankId)return false;if(parsed.providerId&&institutionProviderId(i)!==parsed.providerId)return false;return true;}).map(i=>i.id));
-    const activeAccounts=accounts.filter(a=>{if(!a||a.archived||a.country!=='UAE')return false;if(parsed.bankId&&!institutionIds.has(a.institutionId))return false;if(parsed.providerId&&!institutionIds.has(a.institutionId)&&accountProviderId(a,institutions)!==parsed.providerId)return false;return true;});
+    const activeAccounts=accounts.filter(a=>{if(!a||a.archived||a.country!==country)return false;if(parsed.bankId&&!institutionIds.has(a.institutionId))return false;if(parsed.providerId&&!institutionIds.has(a.institutionId)&&accountProviderId(a,institutions)!==parsed.providerId)return false;return true;});
     let instrument=null,account=null,fromAccount=null,targetAccount=null;
     if(parsed.cardLast4){
       let cards=instruments.filter(i=>i&&!i.archived&&String(i.last4||'')===String(parsed.cardLast4));
@@ -224,7 +233,7 @@
     }
     if(!fromAccount&&activeAccounts.length===1)fromAccount=activeAccounts[0];
     if(parsed.kind==='internal_transfer'){
-      const allActive=accounts.filter(a=>a&&!a.archived&&a.country==='UAE'&&(!parsed.currency||a.currency===parsed.currency));
+      const allActive=accounts.filter(a=>a&&!a.archived&&a.country===country&&(!parsed.currency||a.currency===parsed.currency));
       const fromMatches=allActive.filter(a=>accountRefs(a).some(ref=>refMatches(ref,parsed.fromAccountRef||parsed.accountRef,suffix(parsed.fromAccountRef||parsed.accountRef))));
       const toMatches=allActive.filter(a=>accountRefs(a).some(ref=>refMatches(ref,parsed.toAccountRef,suffix(parsed.toAccountRef))));
       if(fromMatches.length===1&&toMatches.length===1&&fromMatches[0].id!==toMatches[0].id)
@@ -287,5 +296,5 @@
     }
     return {ok:false,reason:'manual-review-required'};
   }
-  return Object.freeze({parse,resolveRoute,buildTransaction,dedupeKey,categoryForMerchant,ignoredReason,suffix,normalizeRef});
+  return Object.freeze({parse,resolveRoute,buildTransaction,dedupeKey,categoryForMerchant,ignoredReason,suffix,normalizeRef,countryForCurrency});
 });

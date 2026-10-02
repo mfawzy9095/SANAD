@@ -102,4 +102,10 @@ assert.strictEqual(pkgBank.bankId,'emirates-nbd');
 const pkgWallet=P.parse({id:'pkg2',postedAt:9001,packageName:'ae.dupay.app',text:'Your du Pay Card ending in 7105 has been used for AED 2.00 at TEST. Your available balance is now AED 8.00 and your transaction ID is PKGTEST1.'});
 assert.strictEqual(pkgWallet.providerId,'du-pay');
 
+assert.strictEqual(P.countryForCurrency('AED'),'UAE');
+assert.strictEqual(P.countryForCurrency('EGP'),'EGY');
+assert.strictEqual(P.countryForCurrency('MAD'),'MAR');
+assert.strictEqual(P.parse({text:'Your account 1234 was credited EGP 50.00'}).country,'EGY');
+assert.strictEqual(P.parse({text:'Purchase MAD 20.00 at TEST STORE on your credit card ending 9999'}).country,'MAR');
+
 console.log('bank message parser regression tests: PASS');
