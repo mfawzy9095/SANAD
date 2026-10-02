@@ -449,6 +449,30 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(s.accounts.some(a=>a.id==='dup-a'),false);
 }
 
+// Shared-balance card merge across different accounts must be rejected.
+{
+  for(const type of ['debit_card','wallet_card']){
+    const accountType=type==='debit_card'?'bank':'ewallet';
+    const s={institutions:[{id:'b',name:'Source',country:'UAE',type:accountType==='bank'?'bank':'wallet_provider'}],accounts:[
+      {id:'a1',institutionId:'b',country:'UAE',name:'A1',type:accountType,currency:'AED',openingBalance:100,openingDebt:0,creditLimit:0,archived:false},
+      {id:'a2',institutionId:'b',country:'UAE',name:'A2',type:accountType,currency:'AED',openingBalance:200,openingDebt:0,creditLimit:0,archived:false}
+    ],paymentInstruments:[
+      {id:'c1',accountId:'a1',institutionId:'b',country:'UAE',type,first4:'5123',last4:'7105',network:'mastercard',archived:false},
+      {id:'c2',accountId:'a2',institutionId:'b',country:'UAE',type,first4:'5123',last4:'7105',network:'mastercard',archived:false}
+    ],transactions:[
+      {id:'t1',type:'expense',accountId:'a1',instrumentId:'c1',amount:10,walletAmount:10,currency:'AED',fxRate:1,cat:'other',note:'TEST',tags:[],date:'2026-10-01',created:1}
+    ],recurring:[{id:'r1',type:'expense',accountId:'a1',instrumentId:'c1',active:true}],settings:{}};
+    const out=I.mergeDuplicateInstrument(s,'c1','c2');
+    assert.strictEqual(out.ok,false);
+    assert.strictEqual(out.reason,'shared-card-account-mismatch');
+    assert.strictEqual(s.paymentInstruments.length,2);
+    assert.strictEqual(s.transactions[0].instrumentId,'c1');
+    assert.strictEqual(s.transactions[0].accountId,'a1');
+    assert.strictEqual(s.recurring[0].instrumentId,'c1');
+    assert.strictEqual(s.recurring[0].accountId,'a1');
+  }
+}
+
 // Dedicated credit and prepaid cards must never use shared-account rebind.
 {
   for(const type of ['credit_card','prepaid_card']){
