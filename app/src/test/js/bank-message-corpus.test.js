@@ -11,7 +11,7 @@ const recognized=[
   ['enbd-repayment-4021','تم خصم مبلغ AED 684.19 من حسابك 012XXX50XXX01 لتسديد مستحقات بطاقتك الائتمانية4021.','card_repayment',684.19,'4021',null,'other'],
   ['enbd-repayment-0308','تم خصم مبلغ AED 1,650.00 من حسابك 012XXX50XXX01 لتسديد مستحقات بطاقتك الائتمانية0308.','card_repayment',1650,'0308',null,'other'],
   ['enbd-debit-nmc','تمت عملية شراء بقيمة AED 5.10 لدى NMC MED CEN SHJ BR ,SHARJAH باستخدام بطاقة خصم تنتهي أرقامها بـ 3993. الرصيد المتوفر هو AED 2,684.31.','purchase',5.10,'3993','debit_card','health'],
-  ['enbd-debit-tap','لقد تمّ تحويل مبلغ 100.00AED باستخدام بطاقة الخصم الخاصة بك والمنتهية أرقامها بـ 3993 لدى TAPT*Mohamed Abdelrahm. رصيدك الحالي هو AED 123.83.','purchase',100,'3993','debit_card','other'],
+  ['enbd-debit-tap','لقد تمّ تحويل مبلغ 100.00AED باستخدام بطاقة الخصم الخاصة بك والمنتهية أرقامها بـ 3993 لدى TAPT*Mohamed Abdelrahm. رصيدك الحالي هو AED 123.83.','outgoing_transfer',100,'3993','debit_card','externalTransfer'],
   ['ei-0308-mini-mart','عملية دفع ببطاقة الائتمان\nالمنتهية بالرقم: 0308\nلدى: FRESH CRAFT MINI MART, DUBAI\nالمبلغ: AED 2.50\nالتاريخ: 01/10/2026, 06:44\nالحد المتوفر: 457.04 AED','purchase',2.50,'0308','credit_card','grocery'],
   ['ei-0308-taxi','عملية دفع ببطاقة الائتمان المنتهية بالرقم: 0308 لدى: CITI TAXI, SHARJAH المبلغ: AED 17.50 التاريخ: 27/09/2026, 23:34 الحد المتوفر: 516.40 AED','purchase',17.50,'0308','credit_card','transport'],
   ['ei-0308-mandi-negative','عملية دفع ببطاقة الائتمان المنتهية بالرقم: 0308 لدى: WARSAN MANDI RESTAURAN, SHARJAH المبلغ: AED 39.00 التاريخ: 05/09/2026, 22:51 الحد المتوفر: -608.56 AED','purchase',39,'0308','credit_card','food'],
