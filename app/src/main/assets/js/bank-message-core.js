@@ -164,7 +164,12 @@
     let bm=x.match(/(?:transfer(?:red)?|sent)(?:\s+(?:amount\s+of\s+)?)?(?:[A-Za-z]{3}\s*[\d,.]+\s+)?to\s+(.+?)(?=\s+(?:is\s+successfully|was\s+successful|reference|ref\b|tid\b|transaction\s+id|available\s+balance)|[.;]|$)/i);
     if(!bm)bm=x.match(/(?:تحويل|حول)(?:\s+مبلغ)?(?:\s+[\d,.]+\s*[A-Za-z]{3})?\s+(?:الى|إلى)\s+(.+?)(?=\s+(?:بنجاح|الرقم\s+المرجعي|مرجع|الرصيد)|[.;]|$)/i);
     if(bm)beneficiaryName=bm[1].replace(/\s+/g,' ').trim();
-    const base={bankId,providerId,amount:value,currency,cardLast4:card,cardType,accountRef:acc?normalizeRef(acc):null,merchant,availableBalance,availableCredit,beneficiaryName};
+    let transactionRef=null,transactionDate=null;
+    const refMatch=x.match(/\b(?:transaction\s*(?:id|reference)|reference(?:\s+number)?|ref|tid)\b\s*[:#-]?\s*([A-Za-z0-9-]{4,40})/i);
+    if(refMatch)transactionRef=refMatch[1];
+    const dateMatch=x.match(/(?:date\s*[:.-]?\s*|\bon\s+)?(\d{1,2}\/\d{1,2}\/\d{4})\b/i);
+    if(dateMatch)transactionDate=isoDateFromDmy(dateMatch[1]);
+    const base={bankId,providerId,amount:value,currency,cardLast4:card,cardType,accountRef:acc?normalizeRef(acc):null,merchant,availableBalance,availableCredit,beneficiaryName,transactionRef,transactionDate};
     if(/salary|payroll|راتب/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'salary',direction:'credit',category:'salary',confidence:sourceKnown?0.90:0.76}),input,raw);
     if(/refund|refunded|reversal|reversed|استرداد|مرتجع/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'refund',direction:'credit',category:'other',confidence:sourceKnown?0.90:0.75}),input,raw);
     if(/recharge|mobile\s+top.?up|airtime|شحن\s+رصيد/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'mobile_recharge',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);

@@ -86,6 +86,9 @@ const packageHint=P.parse({id:'g3',packageName:'com.acmewallet.app',text:'Your a
 assert.strictEqual(packageHint.ignored,false);
 assert.ok(packageHint.sourceHint.includes('com.acmewallet.app'));
 assert.strictEqual(packageHint.accountRef,null);
+const genericRef=P.parse({id:'g4',title:'Acme Bank',text:'Purchase AED 12.00 at TEST STORE on your credit card ending 8888. Transaction ID: TX-ABCD-1234 Date: 02/10/2026'});
+assert.strictEqual(genericRef.transactionRef,'TX-ABCD-1234');
+assert.strictEqual(genericRef.transactionDate,'2026-10-02');
 
 const pkgBank=P.parse({id:'pkg1',postedAt:9000,packageName:'com.emiratesnbd.android',text:'Purchase AED 10.00 with card 4021 at TEST MERCHANT'});
 assert.strictEqual(pkgBank.bankId,'emirates-nbd');
