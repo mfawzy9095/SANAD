@@ -411,6 +411,22 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(s.settings.bankLearningRules[0].accountId,'good-a');
 }
 
+// Fully identified cards with cross-position digits are not duplicates.
+{
+  const s={institutions:[{id:'b',name:'Bank',country:'UAE',bankRegistryId:'emirates-islamic'}],accounts:[
+    {id:'a1',institutionId:'b',country:'UAE',name:'Card A',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:1000,archived:false},
+    {id:'a2',institutionId:'b',country:'UAE',name:'Card B',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:1000,archived:false}
+  ],paymentInstruments:[
+    {id:'c1',accountId:'a1',institutionId:'b',country:'UAE',type:'credit_card',first4:'4578',last4:'0308',network:'visa',archived:false},
+    {id:'c2',accountId:'a2',institutionId:'b',country:'UAE',type:'credit_card',first4:'9999',last4:'4578',network:'visa',archived:false}
+  ],transactions:[],recurring:[],settings:{}};
+  const out=I.mergeDuplicateInstrument(s,'c1','c2');
+  assert.strictEqual(out.ok,false);
+  assert.strictEqual(out.reason,'instrument-identity-mismatch');
+  assert.strictEqual(s.paymentInstruments.length,2);
+  assert.strictEqual(s.accounts.length,2);
+}
+
 // A debit card may be relinked after history exists; only that card's own history moves.
 {
   const s={institutions:[{id:'b',name:'Bank',country:'UAE',type:'bank'}],accounts:[
