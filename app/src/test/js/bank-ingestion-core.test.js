@@ -635,4 +635,22 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.transaction.accountId,'mar-credit');
 }
 
+
+// Overlapping historical import windows must stay idempotent even if the same
+// SMS is surfaced with a different native queue id and a small timestamp skew.
+{
+  const text='Purchase AED 20.00 at TEST STORE using debit card ending 7777. Available balance is AED 80.00';
+  const base=P.parse({id:'history-30d',postedAt:Date.UTC(2026,9,2,8,0,0),title:'ADCB',text});
+  const s={institutions:[{id:'adcb-i2',name:'ADCB',country:'UAE',bankRegistryId:'adcb'}],accounts:[
+    {id:'adcb-a2',institutionId:'adcb-i2',country:'UAE',name:'ADCB',type:'bank',currency:'AED',openingBalance:100,openingDebt:0,creditLimit:0,archived:false}
+  ],paymentInstruments:[{id:'adcb-c2',accountId:'adcb-a2',institutionId:'adcb-i2',country:'UAE',type:'debit_card',last4:'7777',archived:false}],transactions:[]};
+  const first=I.plan(base,s,{uid});
+  assert.strictEqual(first.action,'auto-save');
+  I.applyPlan(s,first);
+  const overlap=P.parse({id:'history-90d-different-native-id',postedAt:Date.UTC(2026,9,2,8,4,0),title:'ADCB',text});
+  assert.strictEqual(I.plan(overlap,s,{uid}).action,'duplicate');
+  const legitimateLater=P.parse({id:'later-repeat',postedAt:Date.UTC(2026,9,2,8,20,0),title:'ADCB',text});
+  assert.notStrictEqual(I.plan(legitimateLater,s,{uid}).action,'duplicate');
+}
+
 console.log('bank ingestion core regression tests: PASS');
