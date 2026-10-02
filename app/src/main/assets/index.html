@@ -1835,7 +1835,7 @@ function viewHome(){
       : '';
     heroHtml = '<div class="wallet-hero ' + maskCls + '" data-account-open="' + defaultAcc.id + '">' +
       '<div class="wh-link" data-act="go-accounts">كل الحسابات ›</div>' +
-      '<div class="wh-top"><div class="wh-ico">' + defaultAcc.icon + '</div>' +
+      '<div class="wh-top"><div class="wh-ico">' + institutionLogoHtml(inst,32,defaultAcc.icon) + '</div>' +
         '<div style="flex:1"><div class="wh-name">' + cInfo.flag + ' ' + esc(defaultAcc.name) + '</div>' +
           '<div class="wh-cur">' + (inst ? esc(inst.name) + ' · ' : '') + Finance.curInfo(defaultAcc.currency).name + '</div></div>' +
       '</div>' +
@@ -2267,6 +2267,18 @@ function txListHtml(){
   return html;
 }
 
+function institutionLogoHtml(inst,size=34,fallbackIcon='🏦'){
+  if(inst&&inst.bankRegistryId){
+    const bank=UaeBankRegistryCore.get&&UaeBankRegistryCore.get(inst.bankRegistryId);
+    if(bank)return bankLogoHtml(bank,size);
+  }
+  if(inst&&inst.providerRegistryId){
+    const provider=UaeBankRegistryCore.getProvider&&UaeBankRegistryCore.getProvider(inst.providerRegistryId);
+    if(provider)return providerLogoHtml(provider,size);
+  }
+  return '<span style="width:'+size+'px;height:'+size+'px;display:grid;place-items:center;font-size:18px">'+esc(String(fallbackIcon||'🏦'))+'</span>';
+}
+
 function accountTileHtml(a, size){
   const isLiab = isLiabilityAccount(a);
   const bal = Finance.accountBalance(a.id);
@@ -2300,7 +2312,7 @@ function accountTileHtml(a, size){
   }
   return '<div class="' + tileCls + '" data-account-edit="' + a.id + '">' +
     '<div class="tile-grad" style="background:' + grad + '"></div>' +
-    '<div class="tile-head"><div class="tile-ico">' + a.icon + '</div>' +
+    '<div class="tile-head"><div class="tile-ico">' + institutionLogoHtml(inst,32,a.icon) + '</div>' +
       '<div style="flex:1;min-width:0"><div class="tile-name">' + cInfo.flag + ' ' + esc(a.name) + '</div>' +
         '<div class="tile-sub">' + (inst ? esc(inst.name) + ' · ' : '') + Finance.curInfo(a.currency).name + '</div></div></div>' +
     '<div><div class="tile-amount amt-val">' + amountHtml + '</div>' +
@@ -2312,6 +2324,7 @@ function instrumentTileHtml(inst, size){
   const isCredit = inst.type === 'credit_card';
   const cInfo = countryInfo(acc.country);
   const tInfo = instrumentTypeInfo(inst.type);
+  const cardInstitution = Finance.getInstitution(inst.institutionId || acc.institutionId);
   const bal = Finance.accountBalance(acc.id);
   const balanceView = !isCredit ? Finance.accountBalancePresentation(acc.id) : null;
   const masked=maskedCardNumber(inst);
@@ -2337,7 +2350,7 @@ function instrumentTileHtml(inst, size){
   }
   return '<div class="tile' + (size === 'sm' ? ' tile-sm' : '') + '" data-instrument-edit="' + inst.id + '">' +
     '<div class="tile-grad" style="background:' + grad + '"></div>' +
-    '<div class="tile-head"><div class="tile-ico">' + (inst.icon || tInfo.icon) + '</div>' +
+    '<div class="tile-head"><div class="tile-ico">' + institutionLogoHtml(cardInstitution,32,inst.icon || tInfo.icon) + '</div>' +
       '<div style="flex:1;min-width:0"><div class="tile-name">' + cInfo.flag + ' ' + esc(inst.name) + '</div>' +
         '<div class="tile-sub" style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">' +
           cardNetworkLogoHtml(inst.network) +
