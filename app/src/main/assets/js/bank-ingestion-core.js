@@ -429,6 +429,83 @@
     }
     return {ok:true,changed:true,fromAccountId:current.id,toAccountId:target.id,movedTransactions,movedRecurring};
   }
+  function sameInstitutionSource(state,a,b){
+    if(!a||!b)return false;
+    if(a.id===b.id)return true;
+    const ab=institutionBankId(a),bb=institutionBankId(b);
+    if(ab&&bb)return ab===bb;
+    const ap=institutionProviderId(a),bp=institutionProviderId(b);
+    if(ap&&bp)return ap===bp;
+    return false;
+  }
+  function mergeDuplicateInstrument(state,fromInstrumentId,toInstrumentId){
+    if(!state||fromInstrumentId===toInstrumentId)return {ok:false,reason:'invalid-merge'};
+    const instruments=arr(state.paymentInstruments),accounts=arr(state.accounts),institutions=arr(state.institutions);
+    const from=instruments.find(i=>i&&i.id===fromInstrumentId&&!i.archived)||null;
+    const to=instruments.find(i=>i&&i.id===toInstrumentId&&!i.archived)||null;
+    if(!from||!to)return {ok:false,reason:'instrument-not-found'};
+    if(from.type!==to.type||from.country!==to.country)return {ok:false,reason:'instrument-type-country-mismatch'};
+    const fromAcc=accounts.find(a=>a&&a.id===from.accountId)||null,toAcc=accounts.find(a=>a&&a.id===to.accountId)||null;
+    if(!fromAcc||!toAcc||fromAcc.currency!==toAcc.currency)return {ok:false,reason:'account-currency-mismatch'};
+    const fromInst=institutions.find(i=>i&&i.id===(from.institutionId||fromAcc.institutionId))||null;
+    const toInst=institutions.find(i=>i&&i.id===(to.institutionId||toAcc.institutionId))||null;
+    if(fromInst&&toInst&&!sameInstitutionSource(state,fromInst,toInst))return {ok:false,reason:'institution-mismatch'};
+    const dedicated=['credit_card','prepaid_card'].includes(from.type);
+    if(dedicated){
+      const siblings=instruments.filter(i=>i&&!i.archived&&i.id!==from.id&&i.accountId===fromAcc.id);
+      if(siblings.length)return {ok:false,reason:'source-account-shared'};
+    }
+    let movedTransactions=0,movedRecurring=0;
+    for(const tx of arr(state.transactions)){
+      if(!tx)continue;
+      let touched=false;
+      if(tx.instrumentId===from.id){tx.instrumentId=to.id;touched=true;}
+      if(dedicated){
+        if(tx.accountId===fromAcc.id){tx.accountId=toAcc.id;touched=true;}
+        if(tx.fromAccountId===fromAcc.id){tx.fromAccountId=toAcc.id;tx.fromCountry=toAcc.country;tx.fromCurrency=toAcc.currency;touched=true;}
+        if(tx.toAccountId===fromAcc.id){tx.toAccountId=toAcc.id;tx.toCountry=toAcc.country;tx.toCurrency=toAcc.currency;touched=true;}
+      }
+      if(touched)movedTransactions++;
+    }
+    for(const rec of arr(state.recurring)){
+      if(!rec)continue;
+      let touched=false;
+      if(rec.instrumentId===from.id){rec.instrumentId=to.id;touched=true;}
+      if(dedicated&&rec.accountId===fromAcc.id){rec.accountId=toAcc.id;rec.currency=toAcc.currency;touched=true;}
+      if(touched)movedRecurring++;
+    }
+    if(dedicated){
+      const refs=Array.from(new Set([].concat(toAcc.bankRefs||[],fromAcc.bankRefs||[]).filter(Boolean).map(String)));
+      if(refs.length)toAcc.bankRefs=refs.slice(0,12);
+      if(toAcc.observedBalance==null&&fromAcc.observedBalance!=null){toAcc.observedBalance=fromAcc.observedBalance;toAcc.observedBalanceAt=fromAcc.observedBalanceAt||null;}
+      if(toAcc.observedAvailableCredit==null&&fromAcc.observedAvailableCredit!=null){toAcc.observedAvailableCredit=fromAcc.observedAvailableCredit;toAcc.observedAvailableCreditAt=fromAcc.observedAvailableCreditAt||null;}
+    }
+    if(!to.first4&&from.first4)to.first4=from.first4;
+    if(!to.last4&&from.last4)to.last4=from.last4;
+    if((!to.network||to.network==='other')&&from.network)to.network=from.network;
+    for(const rule of arr(state.settings&&state.settings.bankLearningRules)){
+      if(!rule)continue;
+      if(rule.instrumentId===from.id)rule.instrumentId=to.id;
+      if(dedicated&&rule.accountId===fromAcc.id)rule.accountId=toAcc.id;
+      if(dedicated&&rule.fromAccountId===fromAcc.id)rule.fromAccountId=toAcc.id;
+      if(dedicated&&rule.targetAccountId===fromAcc.id)rule.targetAccountId=toAcc.id;
+      rule.updatedAt=Date.now();
+    }
+    if(state.settings&&state.settings.defaultInstrumentByCountry){
+      for(const c of Object.keys(state.settings.defaultInstrumentByCountry)){
+        if(state.settings.defaultInstrumentByCountry[c]===from.id)state.settings.defaultInstrumentByCountry[c]=to.id;
+      }
+    }
+    state.paymentInstruments=instruments.filter(i=>i&&i.id!==from.id);
+    let removedAccount=false;
+    if(dedicated){
+      const accountStillReferenced=state.paymentInstruments.some(i=>i&&i.accountId===fromAcc.id)||
+        arr(state.transactions).some(t=>t&&(t.accountId===fromAcc.id||t.fromAccountId===fromAcc.id||t.toAccountId===fromAcc.id))||
+        arr(state.recurring).some(r=>r&&r.accountId===fromAcc.id);
+      if(!accountStillReferenced){state.accounts=accounts.filter(a=>a&&a.id!==fromAcc.id);removedAccount=true;}
+    }
+    return {ok:true,fromInstrumentId:from.id,toInstrumentId:to.id,movedTransactions,movedRecurring,removedAccount};
+  }
   function learnFromApproval(state,parsed,route,options){
     if(!state||!parsed||!route||route.status!=='routed')return null;
     if(!state.settings||typeof state.settings!=='object')state.settings={};
@@ -646,6 +723,6 @@
   }
 
   return Object.freeze({
-    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindInstrumentAccount,learnFromApproval
+    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindInstrumentAccount,mergeDuplicateInstrument,learnFromApproval
   });
 });

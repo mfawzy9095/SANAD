@@ -292,6 +292,34 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(rr.targetAccount.id,'credit');
 }
 
+// Duplicate credit cards can be merged without losing transaction history or learning rules.
+{
+  const s={institutions:[{id:'ei1',name:'Emirates Islamic',country:'UAE',bankRegistryId:'emirates-islamic'},{id:'ei2',name:'Emirates Islamic Bank',country:'UAE',bankRegistryId:'emirates-islamic'}],accounts:[
+    {id:'bad-a',institutionId:'ei1',country:'UAE',name:'Wrong 4578',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:0,archived:false,bankRefs:['4578']},
+    {id:'good-a',institutionId:'ei2',country:'UAE',name:'Credit 0308',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:0,archived:false}
+  ],paymentInstruments:[
+    {id:'bad-c',accountId:'bad-a',institutionId:'ei1',country:'UAE',type:'credit_card',first4:null,last4:'4578',network:'visa',archived:false},
+    {id:'good-c',accountId:'good-a',institutionId:'ei2',country:'UAE',type:'credit_card',first4:'4578',last4:'0308',network:'visa',archived:false}
+  ],transactions:[
+    {id:'bad-t',type:'expense',accountId:'bad-a',instrumentId:'bad-c',amount:10,walletAmount:10,currency:'AED',fxRate:1,cat:'other',note:'TEST',tags:[],date:'2026-10-01',created:1},
+    {id:'repay',type:'transfer',fromAccountId:'src',fromAmount:20,fromCurrency:'AED',fromCountry:'UAE',toAccountId:'bad-a',toAmount:20,toCurrency:'AED',toCountry:'UAE',fxRate:1,fee:0,note:'',tags:[],date:'2026-10-01',created:2}
+  ],recurring:[{id:'rr',type:'expense',accountId:'bad-a',instrumentId:'bad-c',amount:5,currency:'AED',active:true}],
+  settings:{defaultInstrumentByCountry:{UAE:'bad-c'},bankLearningRules:[{id:'lr',instrumentId:'bad-c',accountId:'bad-a',targetAccountId:'bad-a'}]}};
+  const out=I.mergeDuplicateInstrument(s,'bad-c','good-c');
+  assert.strictEqual(out.ok,true);
+  assert.strictEqual(out.removedAccount,true);
+  assert.strictEqual(s.paymentInstruments.length,1);
+  assert.strictEqual(s.accounts.some(a=>a.id==='bad-a'),false);
+  assert.strictEqual(s.transactions[0].instrumentId,'good-c');
+  assert.strictEqual(s.transactions[0].accountId,'good-a');
+  assert.strictEqual(s.transactions[1].toAccountId,'good-a');
+  assert.strictEqual(s.recurring[0].instrumentId,'good-c');
+  assert.strictEqual(s.recurring[0].accountId,'good-a');
+  assert.strictEqual(s.settings.defaultInstrumentByCountry.UAE,'good-c');
+  assert.strictEqual(s.settings.bankLearningRules[0].instrumentId,'good-c');
+  assert.strictEqual(s.settings.bankLearningRules[0].accountId,'good-a');
+}
+
 // A debit card may be relinked after history exists; only that card's own history moves.
 {
   const s={institutions:[{id:'b',name:'Bank',country:'UAE',type:'bank'}],accounts:[
