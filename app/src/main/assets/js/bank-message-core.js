@@ -122,17 +122,17 @@
   }
   function parseDuPay(input,raw){
     const x=cleanText(raw); let m;
-    m=x.match(/your\s+request\s+to\s+transfer\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+to\s+(.+?)\s+is\s+successfully\s+processed.+?\bTID\s*:\s*([A-Za-z0-9]+)/i);
+    m=x.match(/your\s+request\s+to\s+transfer\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+to\s+(.+?)\s+is\s+successfully\s+processed.+?\bTID\s*:\s*([A-Za-z0-9_-]+)/i);
     if(m)return result({providerId:'du-pay',kind:'outgoing_transfer',direction:'debit',currency:m[1],amount:amount(m[2]),beneficiaryName:m[3].trim(),transactionRef:m[4],category:'externalTransfer',confidence:0.99},input,raw);
-    m=x.match(/you(?:'|’)?ve\s+received\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+to\s+your\s+du\s*pay\s+wallet\.\s+your\s+available\s+balance\s+is\s+now\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?).+?transaction\s+id\s+is\s*:\s*([A-Za-z0-9]+)/i);
+    m=x.match(/you(?:'|’)?ve\s+received\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+to\s+your\s+du\s*pay\s+wallet\.\s+your\s+available\s+balance\s+is\s+now\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?).+?transaction\s+id\s+is\s*:\s*([A-Za-z0-9_-]+)/i);
     if(m)return result({providerId:'du-pay',kind:'deposit',direction:'credit',currency:m[1],amount:amount(m[2]),availableBalance:amount(m[4]),transactionRef:m[5],category:'other',confidence:0.99},input,raw);
-    m=x.match(/your\s+du\s*pay\s+card\s+ending\s+in\s+(\d{4})\s+has\s+been\s+used\s+for\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+at\s+(.+?)\.\s+your\s+available\s+balance\s+is\s+now\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+and\s+your\s+transaction\s+id\s+is\s+([A-Za-z0-9]+)\.?(?:\s+fee\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?),\s*vat\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?))?/i);
+    m=x.match(/your\s+du\s*pay\s+card\s+ending\s+in\s+(\d{4})\s+has\s+been\s+used\s+for\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+at\s+(.+?)\.\s+your\s+available\s+balance\s+is\s+now\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+and\s+your\s+transaction\s+id\s+is\s+([A-Za-z0-9_-]+)\.?(?:\s+fee\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?),\s*vat\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?))?/i);
     if(m){
       const merchant=m[4].trim();
       return result({providerId:'du-pay',kind:'purchase',direction:'debit',cardLast4:m[1],cardType:'wallet_card',currency:m[2],amount:amount(m[3]),merchant,category:categoryForMerchant(merchant),
         availableBalance:amount(m[6]),transactionRef:m[7],fee:amount(m[9]||0),vat:amount(m[11]||0),confidence:0.99},input,raw);
     }
-    m=x.match(/you\s+have\s+successfully\s+withdrawn\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+from\s+your\s+du\s*pay\s+wallet\..+?transaction\s+id\s*:\s*([A-Za-z0-9]+)\s+available\s+balance\s*:\s*([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)/i);
+    m=x.match(/you\s+have\s+successfully\s+withdrawn\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+from\s+your\s+du\s*pay\s+wallet\..+?transaction\s+id\s*:\s*([A-Za-z0-9_-]+)\s+available\s+balance\s*:\s*([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)/i);
     if(m)return result({providerId:'du-pay',kind:'cash_withdrawal',direction:'debit',currency:m[1],amount:amount(m[2]),transactionRef:m[3],availableBalance:amount(m[5]),category:'other',confidence:0.99},input,raw);
     return null;
   }

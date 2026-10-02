@@ -56,6 +56,8 @@ const duPurchase=P.parse({id:'du3',postedAt:3000,text:'Hello Mohamed Abd, Your d
 assert.strictEqual(duPurchase.providerId,'du-pay');assert.strictEqual(duPurchase.kind,'purchase');assert.strictEqual(duPurchase.cardLast4,'7105');assert.strictEqual(duPurchase.amount,9.75);assert.strictEqual(duPurchase.transactionRef,'DG108RVT5U');assert.strictEqual(duPurchase.category,'grocery');assert.strictEqual(duPurchase.fee,0);assert.strictEqual(duPurchase.vat,0);assert.strictEqual(duPurchase.cardType,'wallet_card');
 const duWithdrawal=P.parse({id:'du4',postedAt:4000,text:'You have successfully withdrawn AED 100.00 from your du Pay wallet. Transaction ID: DG198RKJGT Available balance: AED 10.28'});
 assert.strictEqual(duWithdrawal.kind,'cash_withdrawal');assert.strictEqual(duWithdrawal.transactionRef,'DG198RKJGT');
+const duHyphen=P.parse({id:'du-hyphen',postedAt:4100,text:'Your request to transfer AED 10.00 to Test Person is successfully processed and the amount has been credited in the beneficiary account. TID: SEQ-TRANSFER-1'});
+assert.strictEqual(duHyphen.transactionRef,'SEQ-TRANSFER-1');
 assert.strictEqual(P.parse({text:'Your transaction of AED 40.53 at Talabat on your du Pay Card ending in 7105 was declined due to insufficient Balance.'}).reason,'declined-transaction');
 assert.strictEqual(P.parse({text:'0823 is your OTP Code. Please do not share OTP with anyone.'}).reason,'security-code');
 assert.strictEqual(P.parse({text:'Your du Pay Card ending in 7105 has been suspended from Google Pay.'}).reason,'card-status');
