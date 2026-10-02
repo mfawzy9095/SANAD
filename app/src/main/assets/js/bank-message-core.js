@@ -214,7 +214,7 @@
     if(incomingTransfer)return result(Object.assign(base,{kind:'incoming_transfer',direction:'credit',merchant:incomingFrom||merchant,beneficiaryName:incomingFrom||beneficiaryName,category:'other',confidence:sourceKnown?0.92:0.78}),input,raw);
     if(/deposit|credited|ايداع|اودع/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'deposit',direction:'credit',category:'other',confidence:sourceKnown?0.88:0.75}),input,raw);
     if(/transfer.+to|sent\s+to|transferred\s+to|تحويل.+الى|تحويل.+إلى/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'outgoing_transfer',direction:'debit',category:'externalTransfer',confidence:sourceKnown?0.88:0.74}),input,raw);
-    if(/purchase|pos|شراء|merchant|paid\s+at/.test(x.toLowerCase())&&card)return result(Object.assign(base,{kind:'purchase',direction:'debit',category:categoryForMerchant(merchant),confidence:sourceKnown?0.86:0.72}),input,raw);
+    if(/purchase|pos|شراء|merchant|paid\s+at/.test(x.toLowerCase())&&(card||cardFirst4))return result(Object.assign(base,{kind:'purchase',direction:'debit',category:categoryForMerchant(merchant),confidence:sourceKnown?0.86:0.72}),input,raw);
     return null;
   }
   function parse(input){
