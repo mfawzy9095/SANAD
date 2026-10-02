@@ -402,6 +402,28 @@
     }
     return {status:'needs-review',reason:'manual-kind-unsupported',confidence:0};
   }
+  function rebindAccountInstitution(state,accountId,institutionId){
+    if(!state)return {ok:false,reason:'state-required'};
+    const accounts=arr(state.accounts),institutions=arr(state.institutions),instruments=arr(state.paymentInstruments);
+    const account=accounts.find(a=>a&&a.id===accountId&&!a.archived)||null;
+    if(!account)return {ok:false,reason:'account-not-found'};
+    let institution=null;
+    if(institutionId){
+      institution=institutions.find(i=>i&&i.id===institutionId)||null;
+      if(!institution)return {ok:false,reason:'institution-not-found'};
+      if(institution.country&&institution.country!==account.country)return {ok:false,reason:'institution-country-mismatch'};
+    }
+    const oldInstitutionId=account.institutionId||null;
+    account.institutionId=institutionId||null;
+    let updatedInstruments=0;
+    for(const instrument of instruments){
+      if(!instrument||instrument.accountId!==account.id)continue;
+      instrument.institutionId=institutionId||null;
+      instrument.country=account.country;
+      updatedInstruments++;
+    }
+    return {ok:true,changed:oldInstitutionId!==(institutionId||null),oldInstitutionId,newInstitutionId:institutionId||null,updatedInstruments};
+  }
   function rebindInstrumentAccount(state,instrumentId,targetAccountId){
     if(!state)return {ok:false,reason:'state-required'};
     const instruments=arr(state.paymentInstruments),accounts=arr(state.accounts);
@@ -789,6 +811,6 @@
   }
 
   return Object.freeze({
-    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindInstrumentAccount,mergeDuplicateAccount,mergeDuplicateInstrument,learnFromApproval
+    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,mergeDuplicateInstrument,learnFromApproval
   });
 });

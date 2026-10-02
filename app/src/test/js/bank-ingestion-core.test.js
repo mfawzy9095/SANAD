@@ -292,6 +292,29 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(rr.targetAccount.id,'credit');
 }
 
+// Rebinding an account to a different same-country institution must cascade to linked cards even with history.
+{
+  const s={institutions:[
+    {id:'old-i',name:'Old Bank',country:'UAE',type:'bank'},
+    {id:'new-i',name:'New Bank',country:'UAE',type:'bank'},
+    {id:'eg-i',name:'Egypt Bank',country:'EGY',type:'bank'}
+  ],accounts:[{id:'a',institutionId:'old-i',country:'UAE',name:'Current',type:'bank',currency:'AED',openingBalance:0,archived:false}],
+  paymentInstruments:[
+    {id:'d',accountId:'a',institutionId:'old-i',country:'UAE',type:'debit_card',last4:'1234',archived:false},
+    {id:'w',accountId:'a',institutionId:'old-i',country:'UAE',type:'wallet_card',last4:'5678',archived:false}
+  ],transactions:[{id:'t',type:'expense',accountId:'a',instrumentId:'d',amount:1,currency:'AED',created:1}],settings:{}};
+  const out=I.rebindAccountInstitution(s,'a','new-i');
+  assert.strictEqual(out.ok,true);
+  assert.strictEqual(out.updatedInstruments,2);
+  assert.strictEqual(s.accounts[0].institutionId,'new-i');
+  assert.strictEqual(s.paymentInstruments[0].institutionId,'new-i');
+  assert.strictEqual(s.paymentInstruments[1].institutionId,'new-i');
+  const bad=I.rebindAccountInstitution(s,'a','eg-i');
+  assert.strictEqual(bad.ok,false);
+  assert.strictEqual(bad.reason,'institution-country-mismatch');
+  assert.strictEqual(s.accounts[0].institutionId,'new-i');
+}
+
 // Duplicate bank accounts can be merged into the chosen canonical account without summing duplicate baselines.
 {
   const s={institutions:[{id:'enbd1',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd'},{id:'enbd2',name:'ENBD',country:'UAE',bankRegistryId:'emirates-nbd'}],accounts:[
