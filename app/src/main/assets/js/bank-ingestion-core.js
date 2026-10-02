@@ -854,6 +854,9 @@
     for(const o of arr(plan.observations)){
       const a=state.accounts.find(x=>x&&x.id===o.accountId);
       if(!a)continue;
+      const incomingAt=Number(o.at)||0;
+      const existingAt=Number(a[o.field+'At'])||0;
+      if(existingAt>0&&incomingAt>0&&incomingAt<existingAt)continue;
       a[o.field]=o.value;
       a[o.field+'At']=o.at;
     }
