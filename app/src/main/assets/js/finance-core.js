@@ -63,6 +63,36 @@
     return round2(bal);
   }
 
+  function accountBalancePresentation(state,accountId){
+    const a=getAccount(state,accountId);
+    const calculated=round2(accountBalance(state,accountId));
+    if(!a)return {calculated,observed:null,display:calculated,observedAt:0,latestActivityAt:0,observedIsCurrent:false,mismatch:false,difference:null};
+    const hasObserved=a.observedBalance!==null&&a.observedBalance!==undefined&&a.observedBalance!==''&&Number.isFinite(Number(a.observedBalance));
+    const observed=hasObserved?round2(Number(a.observedBalance)):null;
+    const observedAt=Number(a.observedBalanceAt)||0;
+    const txs=state&&Array.isArray(state.transactions)?state.transactions:[];
+    let latestActivityAt=0;
+    for(const t of txs){
+      if(!t)continue;
+      const touches=t.accountId===accountId||t.fromAccountId===accountId||t.toAccountId===accountId;
+      if(!touches)continue;
+      const at=Number(t.created)||0;
+      if(at>latestActivityAt)latestActivityAt=at;
+    }
+    const observedIsCurrent=observed!==null&&observedAt>0&&(latestActivityAt<=0||observedAt>=latestActivityAt);
+    const difference=observed===null?null:round2(observed-calculated);
+    return {
+      calculated,
+      observed,
+      display:observedIsCurrent?observed:calculated,
+      observedAt,
+      latestActivityAt,
+      observedIsCurrent,
+      mismatch:observedIsCurrent&&difference!==null&&Math.abs(difference)>0.01,
+      difference
+    };
+  }
+
   function accountDebt(state,accountId){
     const bal=accountBalance(state,accountId);
     return bal<0?-bal:0;
@@ -116,6 +146,7 @@
 
   return Object.freeze({
     accountBalance,
+    accountBalancePresentation,
     accountDebt,
     capturePrepaidBalances,
     checkPrepaidInvariant,
