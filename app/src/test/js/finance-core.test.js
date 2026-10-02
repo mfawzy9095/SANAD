@@ -66,6 +66,27 @@ function state(accounts,transactions){return {accounts,transactions};}
   assert.strictEqual(F.creditAvailable(state([],[]),'missing'),null);
 })();
 
+
+(function reportedBalancePresentation(){
+  const current=state(
+    [{id:'w',type:'ewallet',openingBalance:10,observedBalance:0,observedBalanceAt:200}],
+    [{id:'t1',type:'expense',accountId:'w',amount:1.5,created:200}]
+  );
+  const view=F.accountBalancePresentation(current,'w');
+  assert.strictEqual(view.calculated,8.5);
+  assert.strictEqual(view.observed,0);
+  assert.strictEqual(view.display,0);
+  assert.strictEqual(view.observedIsCurrent,true);
+  assert.strictEqual(view.mismatch,true);
+  assert.strictEqual(view.difference,-8.5);
+
+  current.transactions.push({id:'manual',type:'expense',accountId:'w',amount:2,created:300});
+  const stale=F.accountBalancePresentation(current,'w');
+  assert.strictEqual(stale.calculated,6.5);
+  assert.strictEqual(stale.display,6.5);
+  assert.strictEqual(stale.observedIsCurrent,false);
+})();
+
 (function rates(){
   const defaults={USD_AED:3.67,AED_USD:0.272};
   assert.strictEqual(F.suggestRate('AED','AED',{},defaults),1);
