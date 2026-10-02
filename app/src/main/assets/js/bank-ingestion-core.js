@@ -116,9 +116,11 @@
       const txAmount=round2(expected==='expense'||expected==='income'?t.amount:t.fromAmount);
       const txCurrency=String(expected==='expense'||expected==='income'?t.currency:t.fromCurrency||'').toUpperCase();
       if(txAmount!==amount||txCurrency!==currency)return false;
-      if(parsed.cardLast4){
+      if(parsed.cardLast4||parsed.cardFirst4){
         const inst=instruments.find(i=>i&&i.id===t.instrumentId);
-        if(!inst||String(inst.last4||'')!==String(parsed.cardLast4))return false;
+        if(!inst)return false;
+        if(parsed.cardLast4&&String(inst.last4||'')!==String(parsed.cardLast4))return false;
+        if(parsed.cardFirst4&&String(inst.first4||'')!==String(parsed.cardFirst4))return false;
       }
       if(parsed.accountRef){
         const accountId=t.accountId||t.fromAccountId||null;
@@ -213,7 +215,8 @@
     if(!['credit_card','debit_card','wallet_card'].includes(type))return null;
     return {
       id:uid('card'),accountId:account.id,institutionId:institutionId||account.institutionId||null,
-      country:account.country||'UAE',type,last4:String(parsed.cardLast4),
+      country:account.country||'UAE',type,first4:parsed.cardFirst4?String(parsed.cardFirst4):null,last4:String(parsed.cardLast4),
+      network:parsed.cardNetwork||'other',
       name:(type==='credit_card'?'Credit':type==='debit_card'?'Debit':'Wallet')+' ****'+parsed.cardLast4,
       icon:type==='credit_card'?'💠':type==='wallet_card'?'📱':'💳',
       color:account.color||'#00695C',archived:false,autoDiscovered:true

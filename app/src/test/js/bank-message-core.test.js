@@ -108,6 +108,16 @@ assert.strictEqual(P.countryForCurrency('MAD'),'MAR');
 assert.strictEqual(P.parse({text:'Your account 1234 was credited EGP 50.00'}).country,'EGY');
 assert.strictEqual(P.parse({text:'Purchase MAD 20.00 at TEST STORE on your credit card ending 9999'}).country,'MAR');
 
+const maskedVisa=P.parse({id:'masked-visa',postedAt:Date.UTC(2026,9,2),title:'Test Bank',text:'Purchase AED 10.00 at TEST STORE using Visa credit card 4578 XXXX XXXX 0308'});
+assert.strictEqual(maskedVisa.cardFirst4,'4578');
+assert.strictEqual(maskedVisa.cardLast4,'0308');
+assert.strictEqual(maskedVisa.cardNetwork,'visa');
+
+const startOnly=P.parse({id:'start-only',postedAt:Date.UTC(2026,9,2),title:'Test Bank',text:'Purchase AED 12.00 at TEST STORE using your Mastercard credit card starting with 457828'});
+assert.strictEqual(startOnly.cardFirst4,'4578');
+assert.strictEqual(startOnly.cardLast4,null);
+assert.strictEqual(startOnly.cardNetwork,'mastercard');
+
 const incomingPerson=P.parse({id:'incoming-person',postedAt:Date.UTC(2026,9,2),title:'Emirates NBD',text:'AED 250.00 was transferred from Ahmed Ali to your account 012XXX50XXX01. Available balance AED 1250.00'});
 assert.strictEqual(incomingPerson.kind,'incoming_transfer');
 assert.strictEqual(incomingPerson.direction,'credit');

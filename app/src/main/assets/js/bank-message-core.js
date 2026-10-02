@@ -99,7 +99,7 @@
     return Object.assign({recognized:true,ignored:false,eventId:input&&input.id?String(input.id):null,postedAt:Number(input&&input.postedAt)||Date.now(),
       bankId:base.bankId||bankIdFrom(input,raw),providerId:base.providerId||providerIdFrom(input,raw),kind:base.kind,direction:base.direction||null,amount:Number(base.amount),
       currency:resolvedCurrency,country:base.country||countryForCurrency(resolvedCurrency),merchant:base.merchant||'',category:base.category||'other',
-      cardLast4:base.cardLast4||null,accountRef:base.accountRef||null,accountSuffix:base.accountSuffix||suffix(base.accountRef),
+      cardFirst4:base.cardFirst4||null,cardLast4:base.cardLast4||null,cardNetwork:base.cardNetwork||null,accountRef:base.accountRef||null,accountSuffix:base.accountSuffix||suffix(base.accountRef),
       fromAccountRef:base.fromAccountRef||null,toAccountRef:base.toAccountRef||null,
       transactionRef:base.transactionRef||null,transactionDate:base.transactionDate||null,beneficiaryName:base.beneficiaryName||null,
       sourceHint:base.sourceHint||[input&&input.title,input&&input.sender,input&&input.packageName].filter(Boolean).join(' ').trim(),
@@ -160,7 +160,16 @@
     if(m){currency=m[1].toUpperCase();value=amount(m[2]);}
     else{m=x.match(/([\d,]+(?:\.\d+)?)\s*(AED|USD|EUR|GBP|SAR|EGP|MAD)/i);if(m){value=amount(m[1]);currency=m[2].toUpperCase();}}
     if(!value||!currency)return null;
-    const card=(x.match(/(?:card|بطاق\S*)\D{0,40}(\d{4})/i)||[])[1]||null;
+    const masked=x.match(/\b(\d{4})\s*(?:x{4}|\*{4})\s*(?:x{4}|\*{4})\s*(\d{4})\b/i);
+    const startMatch=x.match(/(?:card|بطاق\S*)[^\n]{0,70}?(?:starting\s+with|starts\s+with|beginning\s+with|تبدأ\s+ب|يبدا\s+ب|يبدأ\s+ب)\s*[:#-]?\s*(\d{4,8})/i);
+    const endMatch=x.match(/(?:card|بطاق\S*)[^\n]{0,70}?(?:ending\s+(?:in|with)|ends\s+with|last\s+4|المنته(?:ية|ي)\s+(?:بالرقم|ب)?|تنتهي\s+(?:ارقامها|أرقامها)?\s*ب?)\s*[:#-]?\s*(\d{4})/i);
+    const fallbackCard=x.match(/(?:card|بطاق\S*)\D{0,40}(\d{4})/i);
+    const cardFirst4=(masked&&masked[1])||(startMatch?String(startMatch[1]).slice(0,4):null);
+    const card=(masked&&masked[2])||(endMatch&&endMatch[1])||(!startMatch&&fallbackCard?fallbackCard[1]:null);
+    let cardNetwork=null;
+    if(/\bvisa\b/i.test(x))cardNetwork='visa';
+    else if(/\bmaster\s*card\b|\bmastercard\b/i.test(x))cardNetwork='mastercard';
+    else if(/\bdiscover\b/i.test(x))cardNetwork='discover';
     const accToken=(x.match(/(?:account|حسابك|حساب)\s*[:.]?\s*([A-Za-z0-9Xx*]{2,30})/i)||[])[1]||null;
     const acc=accToken&&/[0-9Xx*]/.test(accToken)?accToken:null;
     let cardType=null;
@@ -190,7 +199,7 @@
     if(refMatch)transactionRef=refMatch[1];
     const dateMatch=x.match(/(?:date\s*[:.-]?\s*|\bon\s+)?(\d{1,2}\/\d{1,2}\/\d{4})\b/i);
     if(dateMatch)transactionDate=isoDateFromDmy(dateMatch[1]);
-    const base={bankId,providerId,amount:value,currency,cardLast4:card,cardType,accountRef:acc?normalizeRef(acc):null,merchant,availableBalance,availableCredit,beneficiaryName,transactionRef,transactionDate};
+    const base={bankId,providerId,amount:value,currency,cardFirst4,cardLast4:card,cardNetwork,cardType,accountRef:acc?normalizeRef(acc):null,merchant,availableBalance,availableCredit,beneficiaryName,transactionRef,transactionDate};
     const ownTransfer=x.match(/(?:from\s+(?:your\s+)?account|من\s+حساب(?:ك)?)\s*[:.]?\s*([A-Za-z0-9Xx*]{2,30}).{0,100}?(?:to\s+(?:your\s+)?account|الى\s+حساب(?:ك)?|إلى\s+حساب(?:ك)?)\s*[:.]?\s*([A-Za-z0-9Xx*]{2,30})/i);
     if(ownTransfer&&/[0-9Xx*]/.test(ownTransfer[1])&&/[0-9Xx*]/.test(ownTransfer[2])){
       const fromRef=normalizeRef(ownTransfer[1]),toRef=normalizeRef(ownTransfer[2]);
@@ -236,8 +245,14 @@
     const institutionIds=new Set(institutions.filter(i=>{if(parsed.bankId&&institutionBankId(i)!==parsed.bankId)return false;if(parsed.providerId&&institutionProviderId(i)!==parsed.providerId)return false;return true;}).map(i=>i.id));
     const activeAccounts=accounts.filter(a=>{if(!a||a.archived||a.country!==country)return false;if(parsed.bankId&&!institutionIds.has(a.institutionId))return false;if(parsed.providerId&&!institutionIds.has(a.institutionId)&&accountProviderId(a,institutions)!==parsed.providerId)return false;return true;});
     let instrument=null,account=null,fromAccount=null,targetAccount=null;
-    if(parsed.cardLast4){
-      let cards=instruments.filter(i=>i&&!i.archived&&String(i.last4||'')===String(parsed.cardLast4));
+    if(parsed.cardLast4||parsed.cardFirst4){
+      let cards=instruments.filter(i=>{
+        if(!i||i.archived)return false;
+        if(parsed.cardLast4&&String(i.last4||'')!==String(parsed.cardLast4))return false;
+        if(parsed.cardFirst4&&String(i.first4||'')!==String(parsed.cardFirst4))return false;
+        if(parsed.cardNetwork&&i.network&&i.network!=='other'&&String(i.network)!==String(parsed.cardNetwork))return false;
+        return true;
+      });
       if(parsed.bankId||parsed.providerId){const filtered=cards.filter(i=>{const linked=accounts.find(a=>a.id===i.accountId)||null;if(institutionIds.has(i.institutionId)||institutionIds.has(linked&&linked.institutionId))return true;return parsed.providerId&&accountProviderId(linked,institutions)===parsed.providerId;});if(filtered.length)cards=filtered;}
       if(cards.length===1)instrument=cards[0];if(instrument)account=accounts.find(a=>a.id===instrument.accountId)||null;
     }
