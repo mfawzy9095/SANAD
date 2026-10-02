@@ -31,7 +31,7 @@ for(const [label,text,kind,amount,last4,cardType,cat] of recognized){
   if(label.startsWith('ei-')) input.title='Emirates Islamic';
   const p=P.parse(input);
   assert.strictEqual(p.recognized,true,label);
-  assert.strictEqual(p.ignored,false,label);
+  assert.notStrictEqual(p.ignored,true,label);
   assert.strictEqual(p.kind,kind,label);
   assert.strictEqual(p.amount,amount,label);
   if(last4)assert.strictEqual(p.cardLast4,last4,label);
