@@ -248,4 +248,14 @@ function process(text,input,state){
   assert.ok(html.includes('الرصيد المحسوب في SANAD'),'mismatched reported balance must be explained in the UI');
 })();
 
+
+(function merchantFieldSurvivesUiLifecycle(){
+  const html=fs.readFileSync(path.join(__dirname,'../../main/assets/index.html'),'utf8');
+  assert.ok(html.includes('id="merchantIn"'),'transaction editor must expose a merchant field');
+  assert.ok(html.includes("merchantName: t.merchantName || ''"),'transaction edit must preserve merchantName');
+  assert.ok(html.includes("merchantName: (f.merchantName || '').trim()"),'transaction save must persist merchantName');
+  assert.ok(html.includes("(t.merchantName||'').toLowerCase().includes(q)"),'transaction search must include merchantName');
+  assert.ok(html.includes("rows.push(['التاجر', t.merchantName])"),'transaction details must show merchantName');
+})();
+
 console.log('bank ingestion schema integration tests: PASS');
