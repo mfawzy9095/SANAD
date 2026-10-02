@@ -162,4 +162,40 @@ assert.strictEqual(taptapTx.transaction.fromAccountId,'bank');
 assert.strictEqual(taptapTx.transaction.instrumentId,'d3993');
 assert.ok(taptapTx.transaction.note.includes('Saloua Ouberehil'));
 
+
+const genericRemittanceCases=[
+  {
+    id:'remit-taptap-any-user',
+    merchant:'TAPT*AhmedAli',
+    channel:'Taptap Send',
+    beneficiary:'Ahmed Ali'
+  },
+  {
+    id:'remit-al-ansari-no-beneficiary',
+    merchant:'AL ANSARI EXCHANGE',
+    channel:'Al Ansari Exchange',
+    beneficiary:null
+  },
+  {
+    id:'remit-remitly-any-user',
+    merchant:'REMITLY*SaraHassan',
+    channel:'Remitly',
+    beneficiary:'Sara Hassan'
+  },
+  {
+    id:'remit-unknown-channel',
+    merchant:'NEW MONEY SERVICE',
+    channel:'NEW MONEY SERVICE',
+    beneficiary:null
+  }
+];
+for(const c of genericRemittanceCases){
+  const p=P.parse({id:c.id,postedAt:Date.UTC(2026,9,2,9,0),title:'Emirates NBD',text:'لقد تمّ تحويل مبلغ 50.00AED باستخدام بطاقة الخصم الخاصة بك والمنتهية أرقامها بـ 3993 لدى '+c.merchant+'. رصيدك الحالي هو AED 500.00.'});
+  assert.strictEqual(p.kind,'outgoing_transfer',c.id);
+  assert.strictEqual(p.category,'externalTransfer',c.id);
+  assert.strictEqual(p.cardLast4,'3993',c.id);
+  assert.strictEqual(p.transferChannel,c.channel,c.id);
+  assert.strictEqual(p.beneficiaryName,c.beneficiary,c.id);
+}
+
 console.log('bank message parser regression tests: PASS');
