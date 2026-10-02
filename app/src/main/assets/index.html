@@ -5924,8 +5924,8 @@ function openInstrumentSheet(id, presetType, preserve){
   let linkedField = '';
   if (isDebit || isWalletCard){
     linkedField = '<div class="field"><label>' + (isWalletCard ? 'المحفظة المرتبطة' : 'الحساب البنكي المرتبط') + '</label>' +
-      '<select id="cardLinked" ' + (hasTx ? 'disabled' : '') + '>' + linkedOptions + '</select>' +
-      (hasTx ? '<div class="field-hint" style="color:var(--warn)">🔒 مقفل لأن بالبطاقة معاملات.</div>' : '<div class="field-hint">' + (isWalletCard ? 'البطاقة تسحب مباشرة من رصيد المحفظة.' : 'البطاقة تسحب من هذا الحساب مباشرة.') + '</div>') + '</div>';
+      '<select id="cardLinked">' + linkedOptions + '</select>' +
+      (hasTx ? '<div class="field-hint" style="color:var(--warn)">يمكن إعادة الربط حتى مع وجود معاملات؛ SANAD ينقل معاملات هذه البطاقة فقط ويعيد الحساب تلقائيًا.</div>' : '<div class="field-hint">' + (isWalletCard ? 'البطاقة تسحب مباشرة من رصيد المحفظة.' : 'البطاقة تسحب من هذا الحساب مباشرة.') + '</div>') + '</div>';
   }
   const showCountryPicker = !(isDebit || isWalletCard);
   const showInstField = (isCredit || isPrepaid) || (isDebit && !data.accountId);
@@ -5982,6 +5982,21 @@ function openInstrumentSheet(id, presetType, preserve){
     'card'
   );
   if(isPrepaid && !isEdit) setTimeout(refreshPrepaidFundingUI,0);
+}
+function showFinancialRecalcOverlay(label){
+  let el=document.getElementById('financialRecalcOverlay');
+  if(!el){
+    el=document.createElement('div');
+    el.id='financialRecalcOverlay';
+    el.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.24);display:flex;align-items:center;justify-content:center;padding:24px';
+    document.body.appendChild(el);
+  }
+  el.innerHTML='<div style="background:var(--surface);color:var(--text);border-radius:18px;padding:18px 22px;box-shadow:var(--shadow-3);display:flex;align-items:center;gap:12px"><span style="font-size:24px">⏳</span><div><b style="display:block">'+esc(label||'جاري إعادة الحساب')+'</b><small style="color:var(--text-2)">يتم تحديث الروابط والأرصدة…</small></div></div>';
+  el.hidden=false;
+}
+function hideFinancialRecalcOverlay(){
+  const el=document.getElementById('financialRecalcOverlay');
+  if(el)el.hidden=true;
 }
 function refreshPrepaidFundingUI(){
   const mode=document.getElementById('cardPrepaidFundingMode');
@@ -6088,6 +6103,18 @@ async function saveCard(id, presetType){
     if (!repayAcc || repayAcc.archived || !isAssetAccount(repayAcc)) repayId = null;
   }
   let savedInstId = id;
+  const existingBefore = id ? Finance.getInstrument(id) : null;
+  const oldAccountId = existingBefore ? existingBefore.accountId : null;
+  const relinkRequested = !!(id && (isDebit || isWalletCard) && oldAccountId && accountId && oldAccountId !== accountId);
+  if(relinkRequested){
+    const oldAcc=Finance.getAccount(oldAccountId),newAcc=Finance.getAccount(accountId);
+    if(!oldAcc||!newAcc||oldAcc.country!==newAcc.country||oldAcc.currency!==newAcc.currency){
+      toast('إعادة الربط تتطلب حسابًا بنفس البلد والعملة');
+      return;
+    }
+    showFinancialRecalcOverlay('جاري إعادة ربط البطاقة');
+    await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,20)));
+  }
   const result = await commitCriticalMutation(async () => {
     if (isCredit && repayId && accountId && repayId === accountId) repayId = null;
     const instNameEl = document.getElementById('cardInstName');
@@ -6152,8 +6179,13 @@ async function saveCard(id, presetType){
     if (id){
       const inst = Finance.getInstrument(id);
       if (inst){
-        inst.accountId = accountId;
-        inst.institutionId = (isDebit || isWalletCard) ? (linkedAccount ? linkedAccount.institutionId : null) : institutionId;
+        if(relinkRequested){
+          const moved=BankIngestionCore.rebindInstrumentAccount(S,id,accountId);
+          if(!moved.ok)return false;
+        }else{
+          inst.accountId = accountId;
+          inst.institutionId = (isDebit || isWalletCard) ? (linkedAccount ? linkedAccount.institutionId : null) : institutionId;
+        }
         inst.name = name;
         inst.last4 = last4;
         const finalAcc = Finance.getAccount(accountId);
@@ -6190,9 +6222,10 @@ async function saveCard(id, presetType){
     Finance.ensureAllPrimaries();
     return true;
   });
+  hideFinancialRecalcOverlay();
   if (!result.ok){ render(); toast('تعذر الحفظ'); return; }
   closeSheet(); render();
-  toast(id ? 'تم التعديل' : 'تمت الإضافة');
+  toast(relinkRequested ? 'تمت إعادة ربط البطاقة وإعادة الحساب' : (id ? 'تم التعديل' : 'تمت الإضافة'));
 }
 async function archiveInstrument(id){
   if (!canWrite()){ return; }
