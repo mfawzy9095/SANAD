@@ -399,6 +399,33 @@
     }
     return {status:'needs-review',reason:'manual-kind-unsupported',confidence:0};
   }
+  function rebindInstrumentAccount(state,instrumentId,targetAccountId){
+    if(!state)return {ok:false,reason:'state-required'};
+    const instruments=arr(state.paymentInstruments),accounts=arr(state.accounts);
+    const instrument=instruments.find(i=>i&&i.id===instrumentId&&!i.archived)||null;
+    const target=accounts.find(a=>a&&a.id===targetAccountId&&!a.archived)||null;
+    if(!instrument||!target)return {ok:false,reason:'instrument-or-account-not-found'};
+    const current=accounts.find(a=>a&&a.id===instrument.accountId)||null;
+    if(!current)return {ok:false,reason:'current-account-not-found'};
+    if(current.id===target.id)return {ok:true,changed:false,movedTransactions:0,movedRecurring:0};
+    if(current.country!==target.country||current.currency!==target.currency)return {ok:false,reason:'country-or-currency-mismatch'};
+    if(instrument.type==='debit_card'&&target.type!=='bank')return {ok:false,reason:'debit-target-must-be-bank'};
+    if(instrument.type==='wallet_card'&&target.type!=='ewallet')return {ok:false,reason:'wallet-target-must-be-wallet'};
+    let movedTransactions=0,movedRecurring=0;
+    for(const tx of arr(state.transactions)){
+      if(tx&&tx.instrumentId===instrument.id&&tx.accountId===current.id){tx.accountId=target.id;movedTransactions++;}
+    }
+    for(const rec of arr(state.recurring)){
+      if(rec&&rec.instrumentId===instrument.id&&rec.accountId===current.id){rec.accountId=target.id;movedRecurring++;}
+    }
+    instrument.accountId=target.id;
+    instrument.institutionId=target.institutionId||null;
+    instrument.country=target.country;
+    for(const rule of arr(state.settings&&state.settings.bankLearningRules)){
+      if(rule&&rule.instrumentId===instrument.id&&rule.accountId===current.id){rule.accountId=target.id;rule.updatedAt=Date.now();}
+    }
+    return {ok:true,changed:true,fromAccountId:current.id,toAccountId:target.id,movedTransactions,movedRecurring};
+  }
   function learnFromApproval(state,parsed,route,options){
     if(!state||!parsed||!route||route.status!=='routed')return null;
     if(!state.settings||typeof state.settings!=='object')state.settings={};
@@ -608,6 +635,6 @@
   }
 
   return Object.freeze({
-    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,learnFromApproval
+    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindInstrumentAccount,learnFromApproval
   });
 });
