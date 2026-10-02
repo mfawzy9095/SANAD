@@ -268,6 +268,28 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(I.plan(otherSender,s,{uid}).action,'review');
 }
 
+// Learned first4-only rules must never cross-route a different card first4.
+{
+  const s={institutions:[{id:'ei',name:'Emirates Islamic',country:'UAE',bankRegistryId:'emirates-islamic'}],accounts:[
+    {id:'a4578',institutionId:'ei',country:'UAE',name:'Card 4578',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:1000,archived:false},
+    {id:'a5123',institutionId:'ei',country:'UAE',name:'Card 5123',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:1000,archived:false}
+  ],paymentInstruments:[
+    {id:'c4578',accountId:'a4578',institutionId:'ei',country:'UAE',type:'credit_card',first4:'4578',last4:'0308',network:'other',archived:false},
+    {id:'c5123',accountId:'a5123',institutionId:'ei',country:'UAE',type:'credit_card',first4:'5123',last4:'7105',network:'other',archived:false}
+  ],transactions:[],beneficiaries:[],settings:{}};
+  const first=P.parse({id:'learn-first4-1',postedAt:920000,title:'Emirates Islamic',text:'Purchase AED 20.00 at SHOP ONE on your credit card starting with 457828'});
+  assert.strictEqual(first.cardFirst4,'4578');
+  assert.strictEqual(first.cardLast4,null);
+  const learned=I.learnFromApproval(s,first,{status:'routed',account:s.accounts[0],instrument:s.paymentInstruments[0],confidence:1},{uid,now:921000});
+  assert.ok(learned);
+  assert.strictEqual(learned.cardFirst4,'4578');
+  const next=P.parse({id:'learn-first4-2',postedAt:930000,title:'Emirates Islamic',text:'Purchase AED 35.00 at SHOP TWO on your credit card starting with 512345'});
+  assert.strictEqual(next.cardFirst4,'5123');
+  assert.strictEqual(I.templateSignature(first),I.templateSignature(next));
+  const planned=I.plan(next,s,{uid});
+  assert.ok(planned.action!=='auto-save'||planned.transaction.instrumentId==='c5123');
+}
+
 // Manual correction routes are validated before they are allowed to teach the system.
 {
   const s={institutions:[{id:'m',name:'Manual Bank',country:'UAE',type:'bank'}],accounts:[
