@@ -108,4 +108,12 @@ assert.strictEqual(P.countryForCurrency('MAD'),'MAR');
 assert.strictEqual(P.parse({text:'Your account 1234 was credited EGP 50.00'}).country,'EGY');
 assert.strictEqual(P.parse({text:'Purchase MAD 20.00 at TEST STORE on your credit card ending 9999'}).country,'MAR');
 
+const eiPromo=P.parse({id:'promo-ei-4578',postedAt:Date.UTC(2026,9,2),title:'Emirates Islamic',text:"Pay abroad and receive 10% cashback, up to AED 100 cashback, on travel or online international purchases with your new Emirates Islamic Visa Credit Card starting with 457828. All you have to do is make 3 purchases or more by 11/10/2026. SMS 'ACT10' to 4451 to enroll and avail the offer. Know more, visit www.emiratesislamic.ae/eiecashback T&Cs Apply. To opt out, visit www.emiratesislamic.ae/optout"});
+assert.strictEqual(eiPromo.ignored,true);
+assert.strictEqual(eiPromo.reason,'marketing-offer');
+assert.strictEqual(eiPromo.recognized,false);
+
+const realCashback=P.parse({id:'cashback-real',postedAt:Date.UTC(2026,9,2),title:'ADCB',text:'Cashback AED 12.50 has been credited to your account 1234. Available balance AED 200.00'});
+assert.notStrictEqual(realCashback&&realCashback.reason,'marketing-offer');
+
 console.log('bank message parser regression tests: PASS');

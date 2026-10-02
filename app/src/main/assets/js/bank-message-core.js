@@ -78,6 +78,13 @@
     if(/was declined|declined due to|transaction declined|تم رفض|عملية مرفوض/.test(x))return 'declined-transaction';
     if(/نود تاكيد\s+استلام\s+دفعة.+عن\s+البطاقة\s+الائتمانية/.test(x))return 'card-payment-ack';
     if(/has been suspended|has been resumed|request to freeze|successfully reactivated|registered.+google pay|suspended from google pay|resumed to google pay|suspended from merchant|resumed to merchant|تم تسجيل بطاقتك.+google pay/.test(x))return 'card-status';
+    if(
+      /\b(?:offer|promotion|promo|enroll|enrol|register\s+to\s+avail|avail\s+the\s+offer|t&cs?\s+apply|terms\s+and\s+conditions\s+apply|to\s+opt\s+out)\b/i.test(x) ||
+      /\b(?:make|complete)\s+\d+\s+(?:purchases?|transactions?)\s+or\s+more\b/i.test(x) ||
+      /\bpay\s+abroad\s+and\s+receive\s+\d+(?:\.\d+)?%\s+cashback\b/i.test(x) ||
+      /\bsms\s+['"]?[a-z0-9]+['"]?\s+to\s+\d{3,6}\s+to\s+(?:enroll|enrol|activate)\b/i.test(x) ||
+      /(?:عرض|عرض\s+ترويجي|للاشتراك\s+في\s+العرض|للتسجيل\s+في\s+العرض|تطبق\s+الشروط\s+والاحكام|تسري\s+الشروط\s+والاحكام)/.test(x)
+    )return 'marketing-offer';
     return null;
   }
   function countryForCurrency(value){
