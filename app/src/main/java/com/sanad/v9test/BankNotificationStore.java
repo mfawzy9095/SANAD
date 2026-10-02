@@ -14,6 +14,10 @@ import java.util.Set;
 public final class BankNotificationStore {
     private static final String PREFS = "sanad_bank_notification_inbox_v1";
     private static final String KEY = "events";
+    private static final String KEY_CAPTURED_TOTAL = "captured_total";
+    private static final String KEY_LAST_CAPTURED_AT = "last_captured_at";
+    private static final String KEY_LAST_PACKAGE = "last_package";
+    private static final String KEY_LAST_TITLE = "last_title";
     private static final int MAX_EVENTS = 200;
     private static final int MAX_TEXT = 4000;
     private static final long DEDUPE_WINDOW_MS = 15L * 60L * 1000L;
@@ -60,6 +64,13 @@ public final class BankNotificationStore {
         }
         next.put(event);
         write(context, next);
+        SharedPreferences p = prefs(context);
+        p.edit()
+                .putLong(KEY_CAPTURED_TOTAL, p.getLong(KEY_CAPTURED_TOTAL, 0L) + 1L)
+                .putLong(KEY_LAST_CAPTURED_AT, ts)
+                .putString(KEY_LAST_PACKAGE, safePackage)
+                .putString(KEY_LAST_TITLE, safeTitle)
+                .apply();
         return true;
     }
 
@@ -106,9 +117,23 @@ public final class BankNotificationStore {
         write(context, next);
     }
 
+    public static synchronized String getDiagnosticsJson(Context context) {
+        JSONObject out = new JSONObject();
+        if (context == null) return out.toString();
+        try {
+            SharedPreferences p = prefs(context);
+            out.put("pendingCount", read(context).length());
+            out.put("capturedTotal", p.getLong(KEY_CAPTURED_TOTAL, 0L));
+            out.put("lastCapturedAt", p.getLong(KEY_LAST_CAPTURED_AT, 0L));
+            out.put("lastPackage", p.getString(KEY_LAST_PACKAGE, ""));
+            out.put("lastTitle", p.getString(KEY_LAST_TITLE, ""));
+        } catch (Exception ignored) {}
+        return out.toString();
+    }
+
     public static synchronized boolean clear(Context context) {
         if (context == null) return false;
-        boolean committed = prefs(context).edit().remove(KEY).commit();
+        boolean committed = prefs(context).edit().clear().commit();
         return committed && read(context).length() == 0;
     }
 

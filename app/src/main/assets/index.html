@@ -8213,10 +8213,23 @@ const SanadBankInbox = {
         typeof AndroidBridge.bankNotificationAccessEnabled === 'function' &&
         typeof AndroidBridge.openBankNotificationAccessSettings === 'function' &&
         typeof AndroidBridge.getPendingBankNotifications === 'function' &&
-        typeof AndroidBridge.acknowledgeBankNotifications === 'function');
+        typeof AndroidBridge.acknowledgeBankNotifications === 'function' &&
+        typeof AndroidBridge.rescanActiveBankNotifications === 'function' &&
+        typeof AndroidBridge.getBankNotificationDiagnostics === 'function');
     }catch(_){return false;}
   },
   accessEnabled(){try{return this.supported() && !!AndroidBridge.bankNotificationAccessEnabled();}catch(_){return false;}},
+  diagnostics(){
+    if(!this.supported())return {accessEnabled:false,listenerConnected:false,pendingCount:0,capturedTotal:0,lastCapturedAt:0};
+    try{
+      return Object.assign({accessEnabled:this.accessEnabled(),listenerConnected:false,pendingCount:0,capturedTotal:0,lastCapturedAt:0},
+        JSON.parse(AndroidBridge.getBankNotificationDiagnostics()||'{}'));
+    }catch(_){return {accessEnabled:this.accessEnabled(),listenerConnected:false,pendingCount:0,capturedTotal:0,lastCapturedAt:0};}
+  },
+  rescanActive(){
+    if(!this.supported())return -1;
+    try{return Number(AndroidBridge.rescanActiveBankNotifications());}catch(_){return -1;}
+  },
   autoEnabled(){return !S.settings || S.settings.bankAutoImportEnabled !== false;},
   ack(ids){if(!ids||!ids.length||!this.supported())return;try{AndroidBridge.acknowledgeBankNotifications(JSON.stringify(Array.from(new Set(ids.map(String)))));}catch(_){}},
   readNative(){
@@ -8316,9 +8329,17 @@ const SanadBankInbox = {
     if(this.syncing)return this.lastSummary;
     if(!this.supported()){this.items=[];return this.lastSummary;}
     this.syncing=true;
-    const summary={added:0,duplicates:0,ignored:0,review:0,discovered:0,reconcileWarnings:0,at:Date.now()};
+    const summary={added:0,duplicates:0,ignored:0,review:0,discovered:0,reconcileWarnings:0,activeRescanAdded:0,at:Date.now()};
     const ackIds=[],reviews=[];
     try{
+      if(opts.userInitiated){
+        let rescanned=this.rescanActive();
+        if(rescanned<0){
+          await new Promise(resolve=>setTimeout(resolve,500));
+          rescanned=this.rescanActive();
+        }
+        summary.activeRescanAdded=Math.max(0,Number(rescanned)||0);
+      }
       const native=this.readNative();
       const allowAuto=canWrite()&&(opts.force===true||this.autoEnabled());
       for(const n of native){
@@ -8350,12 +8371,22 @@ const SanadBankInbox = {
       this.items=reviews;
       this.lastSummary=summary;
       if(opts.userInitiated){
-        let msg='المزامنة تمت';
-        if(summary.added)msg+=' · أضيف '+summary.added;
-        if(summary.discovered)msg+=' · اكتُشف '+summary.discovered+' مصدر جديد';
-        if(summary.review)msg+=' · مراجعة '+summary.review;
-        if(summary.reconcileWarnings)msg+=' · تنبيه رصيد '+summary.reconcileWarnings;
-        toast(msg,3200);
+        const diag=this.diagnostics();
+        let msg='';
+        if(summary.added||summary.review||summary.duplicates||summary.ignored){
+          msg='المزامنة تمت';
+          if(summary.added)msg+=' · أضيف '+summary.added;
+          if(summary.discovered)msg+=' · اكتُشف '+summary.discovered+' مصدر جديد';
+          if(summary.review)msg+=' · مراجعة '+summary.review;
+          if(summary.reconcileWarnings)msg+=' · تنبيه رصيد '+summary.reconcileWarnings;
+        }else if(!diag.accessEnabled){
+          msg='فعّل الوصول لإشعارات البنوك والمحافظ أولًا';
+        }else if(!diag.listenerConnected){
+          msg='الوصول مفعّل لكن خدمة الالتقاط غير متصلة بعد · أعد فتح SANAD بعد لحظات';
+        }else{
+          msg='لا توجد إشعارات مالية جديدة · سجل SMS القديم لا يُقرأ من هذا الزر';
+        }
+        toast(msg,4200);
       }
       return summary;
     }finally{this.syncing=false;}
@@ -8363,12 +8394,17 @@ const SanadBankInbox = {
   async refresh(options){return this.sync(options||{});},
   pendingCount(){return this.items.length;},
   settingsHtml(){
-    const supported=this.supported(),enabled=this.accessEnabled(),auto=this.autoEnabled(),count=this.pendingCount(),last=this.lastSummary||{};
-    const syncDesc=last.at?(last.added+' مضافة · '+last.review+' مراجعة'):'لم تتم مزامنة بعد';
+    const supported=this.supported(),enabled=this.accessEnabled(),auto=this.autoEnabled(),count=this.pendingCount(),last=this.lastSummary||{},diag=this.diagnostics();
+    const syncDesc=last.at?((last.added||last.review)?(last.added+' مضافة · '+last.review+' مراجعة'):'لا توجد إشعارات مالية جديدة'):'لم تتم مزامنة بعد';
+    const captureDesc=!supported?'غير متاح على هذه النسخة':(!enabled?'غير مفعّل · اضغط للتفعيل':(diag.listenerConnected?'مفعّل · خدمة الالتقاط متصلة':'مفعّل · خدمة الالتقاط تنتظر الاتصال'));
+    const lastCapture=diag.lastCapturedAt?new Date(Number(diag.lastCapturedAt)).toLocaleString('ar-AE'):'لم يتم التقاط عملية بعد';
     return '<div class="sec"><h2>المزامنة البنكية التلقائية</h2></div><div class="list">' +
       '<div class="list-item" data-sanad-act="bank-access"><div class="li-ico">🏦</div><div class="li-body"><b>الوصول لإشعارات البنوك والمحافظ</b><span>' +
-        (!supported?'غير متاح على هذه النسخة':(enabled?'مفعّل · المعالجة محلية على الجهاز':'غير مفعّل · اضغط للتفعيل')) +
+        captureDesc +
       '</span></div><div class="li-arrow">›</div></div>' +
+      '<div class="list-item"><div class="li-ico">📡</div><div class="li-body"><b>حالة الالتقاط</b><span>' +
+        esc(String(diag.capturedTotal||0))+' إشعار مالي ملتقط · '+esc(lastCapture) +
+      '</span></div></div>' +
       '<div class="list-item" data-sanad-act="bank-auto-toggle"><div class="li-ico">'+(auto?'⚡':'⏸️')+'</div><div class="li-body"><b>الإضافة التلقائية</b><span>' +
         (auto?'مفعّلة · العمليات عالية الثقة تُسجل تلقائيًا':'متوقفة · ستبقى العمليات للمراجعة') +
       '</span></div><div class="switch '+(auto?'on':'')+'"></div></div>' +

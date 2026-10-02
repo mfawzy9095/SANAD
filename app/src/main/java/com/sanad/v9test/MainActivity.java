@@ -5,6 +5,7 @@ import android.app.KeyguardManager;
 import android.app.NotificationManager;
 import android.Manifest;
 import android.content.pm.PackageManager;
+import org.json.JSONObject;
 import android.os.Build;
 import android.os.CancellationSignal;
 import android.hardware.biometrics.BiometricPrompt;
@@ -416,6 +417,25 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public String getPendingBankNotifications() {
             return BankNotificationStore.getAllJson(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public int rescanActiveBankNotifications() {
+            int added = BankNotificationListener.rescanActiveNow();
+            if (added < 0) BankNotificationListener.requestReconnect(MainActivity.this);
+            return added;
+        }
+
+        @JavascriptInterface
+        public String getBankNotificationDiagnostics() {
+            try {
+                JSONObject out = new JSONObject(BankNotificationStore.getDiagnosticsJson(MainActivity.this));
+                out.put("accessEnabled", bankNotificationAccessEnabled());
+                out.put("listenerConnected", BankNotificationListener.isConnected());
+                return out.toString();
+            } catch (Exception ignored) {
+                return "{}";
+            }
         }
 
         @JavascriptInterface
