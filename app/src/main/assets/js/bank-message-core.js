@@ -180,6 +180,11 @@
     let bm=x.match(/(?:transfer(?:red)?|sent)(?:\s+(?:amount\s+of\s+)?)?(?:[A-Za-z]{3}\s*[\d,.]+\s+)?to\s+(.+?)(?=\s+(?:is\s+successfully|was\s+successful|reference|ref\b|tid\b|transaction\s+id|available\s+balance)|[.;]|$)/i);
     if(!bm)bm=x.match(/(?:تحويل|حول)(?:\s+مبلغ)?(?:\s+[\d,.]+\s*[A-Za-z]{3})?\s+(?:الى|إلى)\s+(.+?)(?=\s+(?:بنجاح|الرقم\s+المرجعي|مرجع|الرصيد)|[.;]|$)/i);
     if(bm)beneficiaryName=bm[1].replace(/\s+/g,' ').trim();
+    let incomingFrom='';
+    let im=x.match(/\b(?:received|credited|transferred)\b[\s\S]{0,80}?\bfrom\s+(.+?)(?=\s+(?:(?:to|into)\s+(?:your\s+)?(?:account|wallet)|reference|ref\b|transaction\s+id|available\s+balance|balance\b)|[.;]|$)/i);
+    if(!im)im=x.match(/\bfrom\s+(.+?)\s+(?:to|into)\s+(?:your\s+)?(?:account|wallet)\b/i);
+    if(!im)im=x.match(/(?:تم\s+)?(?:تحويل|ايداع|إيداع)[\s\S]{0,80}?\sمن\s+(.+?)(?=\s+(?:الى|إلى)\s+(?:حسابك|محفظتك)|\s+(?:الرصيد|مرجع|الرقم\s+المرجعي)|[.;]|$)/i);
+    if(im)incomingFrom=im[1].replace(/\s+/g,' ').trim();
     let transactionRef=null,transactionDate=null;
     const refMatch=x.match(/\b(?:transaction\s*(?:id|reference)|reference(?:\s+number)?|ref|tid)\b\s*[:#-]?\s*([A-Za-z0-9-]{4,40})/i);
     if(refMatch)transactionRef=refMatch[1];
@@ -196,6 +201,8 @@
     if(/recharge|mobile\s+top.?up|airtime|شحن\s+رصيد/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'mobile_recharge',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);
     if(/bill\s+payment|paid\s+bill|فاتور\S*|سداد\s+فاتور/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'bill_payment',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);
     if(/cash\s+withdraw|withdrawn|atm|سحب\s+نقد/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'cash_withdrawal',direction:'debit',category:'other',confidence:sourceKnown?0.90:0.75}),input,raw);
+    const incomingTransfer=!!incomingFrom||/\breceived\b[\s\S]{0,120}\bfrom\b|\bfrom\b[\s\S]{0,120}\b(?:to|into)\s+(?:your\s+)?(?:account|wallet)\b|(?:تم\s+)?تحويل[\s\S]{0,120}\sمن\s+.+(?:الى|إلى)\s+(?:حسابك|محفظتك)/i.test(x);
+    if(incomingTransfer)return result(Object.assign(base,{kind:'incoming_transfer',direction:'credit',merchant:incomingFrom||merchant,beneficiaryName:incomingFrom||beneficiaryName,category:'other',confidence:sourceKnown?0.92:0.78}),input,raw);
     if(/deposit|credited|ايداع|اودع/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'deposit',direction:'credit',category:'other',confidence:sourceKnown?0.88:0.75}),input,raw);
     if(/transfer.+to|sent\s+to|transferred\s+to|تحويل.+الى|تحويل.+إلى/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'outgoing_transfer',direction:'debit',category:'externalTransfer',confidence:sourceKnown?0.88:0.74}),input,raw);
     if(/purchase|pos|شراء|merchant|paid\s+at/.test(x.toLowerCase())&&card)return result(Object.assign(base,{kind:'purchase',direction:'debit',category:categoryForMerchant(merchant),confidence:sourceKnown?0.86:0.72}),input,raw);
@@ -281,7 +288,7 @@
     if(['purchase','bill_payment','mobile_recharge','deposit','salary','refund','incoming_transfer'].includes(parsed.kind)){
       const account=route.account;if(!account)return {ok:false,reason:'account-required'};if(account.currency!==parsed.currency)return {ok:false,reason:'fx-review-required'};
       const type=['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)?'expense':'income';
-      return {ok:true,transaction:{id,type,amount:parsed.amount,currency:parsed.currency,accountId:account.id,instrumentId:route.instrument?route.instrument.id:null,walletAmount:parsed.amount,fxRate:1,cat:type==='income'?(parsed.kind==='salary'?'salary':'other'):(parsed.category||'other'),note:parsed.merchant||'',tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,bankTransactionRef:parsed.transactionRef||null}};
+      return {ok:true,transaction:{id,type,amount:parsed.amount,currency:parsed.currency,accountId:account.id,instrumentId:route.instrument?route.instrument.id:null,walletAmount:parsed.amount,fxRate:1,cat:type==='income'?(parsed.kind==='salary'?'salary':'other'):(parsed.category||'other'),note:parsed.merchant||parsed.beneficiaryName||'',tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,bankTransactionRef:parsed.transactionRef||null}};
     }
     if(parsed.kind==='internal_transfer'){
       const from=route.fromAccount,to=route.targetAccount;if(!from||!to)return {ok:false,reason:'internal-transfer-route-required'};if(from.currency!==parsed.currency||to.currency!==parsed.currency)return {ok:false,reason:'fx-review-required'};

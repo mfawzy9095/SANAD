@@ -108,6 +108,19 @@ assert.strictEqual(P.countryForCurrency('MAD'),'MAR');
 assert.strictEqual(P.parse({text:'Your account 1234 was credited EGP 50.00'}).country,'EGY');
 assert.strictEqual(P.parse({text:'Purchase MAD 20.00 at TEST STORE on your credit card ending 9999'}).country,'MAR');
 
+const incomingPerson=P.parse({id:'incoming-person',postedAt:Date.UTC(2026,9,2),title:'Emirates NBD',text:'AED 250.00 was transferred from Ahmed Ali to your account 012XXX50XXX01. Available balance AED 1250.00'});
+assert.strictEqual(incomingPerson.kind,'incoming_transfer');
+assert.strictEqual(incomingPerson.direction,'credit');
+assert.strictEqual(incomingPerson.merchant,'Ahmed Ali');
+
+const incomingArabic=P.parse({id:'incoming-ar',postedAt:Date.UTC(2026,9,2),title:'Emirates NBD',text:'تم تحويل AED 300.00 من أحمد علي إلى حسابك 012XXX50XXX01 الرصيد المتوفر AED 1550.00'});
+assert.strictEqual(incomingArabic.kind,'incoming_transfer');
+assert.strictEqual(incomingArabic.direction,'credit');
+
+const outgoingPerson=P.parse({id:'outgoing-person',postedAt:Date.UTC(2026,9,2),title:'Emirates NBD',text:'Transferred AED 100.00 to Ahmed Ali. Available balance AED 900.00'});
+assert.strictEqual(outgoingPerson.kind,'outgoing_transfer');
+assert.strictEqual(outgoingPerson.direction,'debit');
+
 const eiPromo=P.parse({id:'promo-ei-4578',postedAt:Date.UTC(2026,9,2),title:'Emirates Islamic',text:"Pay abroad and receive 10% cashback, up to AED 100 cashback, on travel or online international purchases with your new Emirates Islamic Visa Credit Card starting with 457828. All you have to do is make 3 purchases or more by 11/10/2026. SMS 'ACT10' to 4451 to enroll and avail the offer. Know more, visit www.emiratesislamic.ae/eiecashback T&Cs Apply. To opt out, visit www.emiratesislamic.ae/optout"});
 assert.strictEqual(eiPromo.ignored,true);
 assert.strictEqual(eiPromo.reason,'marketing-offer');
