@@ -6194,7 +6194,7 @@ function openInstrumentSheet(id, presetType, preserve){
       (showCountryPicker ? '<div class="field"><label>البلد</label><div class="country-picker">' + countryOpts + '</div>' +
         '<input type="hidden" id="cardCountry" value="' + data.country + '"></div>' : '') +
       (showInstField ? '<div class="field" id="cardBankRegistryWrap"' + (data.country === 'UAE' ? '' : ' hidden') + '><label>البنك في الإمارات</label>' +
-        bankRegistryPickerHtml(selectedBankRegistryId,'cardBankRegistry') +
+        bankRegistryPickerHtml(cardSelectedBankRegistryId,'cardBankRegistry') +
         '<div class="field-hint">القائمة الرسمية للبنوك المرخصة؛ تستخدم أيضًا لتوجيه رسائل البنك.</div></div>' +
         '<div class="field"><label>مؤسسة مخصصة (اختياري)</label><select id="cardInst">' + instOptions + '</select>' +
         '<input type="text" id="cardInstName" placeholder="جهة أخرى غير موجودة بالقائمة" maxlength="40" style="margin-top:8px"></div>' : '') +
