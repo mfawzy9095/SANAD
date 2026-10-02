@@ -301,7 +301,6 @@
       [parsed.fromAccountRef,'<fromaccount>'],
       [parsed.toAccountRef,'<toaccount>'],
       [parsed.accountRef,'<account>'],
-      [parsed.cardFirst4,'<cardfirst>'],
       [parsed.cardLast4,'<card>']
     ].map(([value,token])=>[normalizeSource(value||''),token])
       .filter(([value])=>value&&value.length>=2)
