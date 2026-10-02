@@ -622,9 +622,25 @@
     {id:'revolut',name:'Revolut',nameAr:'ريفولوت',short:'Revolut',aliases:['Revolut','Revolut Stored Value Services'],type:'digital_wallet',country:'UAE',legalName:'Revolut Stored Value Services L.L.C',logoDomain:'revolut.com',popular:true},
     {id:'beyon-money',name:'Beyon Money',nameAr:'بيون موني',short:'Beyon Money',aliases:['Beyon Money','BeyonMoney','Beyon Money Financial Services'],type:'digital_wallet',country:'UAE',legalName:'Beyon Money Financial Services L.L.C',logoDomain:'beyonmoney.ae',popular:false},
     {id:'kamelpay',name:'KamelPay',nameAr:'كامل باي',short:'KamelPay',aliases:['KamelPay','Kamel Pay','H A Q Kamel Pay Services'],type:'digital_wallet',country:'UAE',legalName:'H A Q Kamel Pay Services L.L.C',logoDomain:'kamelpay.com',popular:false},
+    {id:'network-international',name:'Network International',nameAr:'نتورك إنترناشيونال',short:'Network',aliases:['Network International','Network International LLC','Network International L.L.C'],type:'stored_value_provider',country:'UAE',legalName:'Network International LLC',logoDomain:'network.ae',popular:false},
+    {id:'tabby',name:'Tabby',nameAr:'تابي',short:'Tabby',aliases:['Tabby','Tabby Payments','Tabby Payments LLC'],type:'stored_value_provider',country:'UAE',legalName:'Tabby Payments L.L.C',logoDomain:'tabby.ai',popular:true},
+    {id:'ddsc',name:'DDSC',nameAr:'دي دي إس سي',short:'DDSC',aliases:['DDSC','AEDC Stable Coin','AEDC Stable Coin Network And Distribution'],type:'stored_value_provider',country:'UAE',legalName:'AEDC Stable Coin Network And Distribution - L.L.C',logoDomain:'ddsc.ai',popular:false},
+    {id:'crypto-com',name:'Crypto.com',nameAr:'كريبتو دوت كوم',short:'Crypto.com',aliases:['Crypto.com','Foris DAX','Foris DAX Middle East','Foris DAX Middle East FZE'],type:'stored_value_provider',country:'UAE',legalName:'Foris DAX Middle East FZE',logoDomain:'crypto.com',popular:true},
+    {id:'taptap-send',name:'Taptap Send',nameAr:'تاب تاب سيند',short:'Taptap Send',aliases:['Taptap Send','T T S Financial Services','T T S Financial Services Middle East'],type:'digital_wallet',country:'UAE',legalName:'T T S Financial Services Middle East L.L.C.',logoDomain:'taptapsend.com',popular:true},
+    {id:'remitly',name:'Remitly',nameAr:'ريمتلي',short:'Remitly',aliases:['Remitly','Remitly Fintech Services'],type:'digital_wallet',country:'UAE',legalName:'Remitly Fintech Services - L.L.C- S.P.C',logoDomain:'remitly.com',popular:true},
+    {id:'aiae-services',name:'AIAE Services for Payments',nameAr:'AIAE لخدمات المدفوعات',short:'AIAE',aliases:['AIAE','AIAE Services for Payments'],type:'stored_value_provider',country:'UAE',legalName:'AIAE Services for Payments -L.L.C-S.P.C',logoDomain:null,popular:false},
     {id:'payit-fab',name:'Payit',nameAr:'باييت',short:'Payit',aliases:['Payit','Payit Wallet','FAB Payit','باييت'],type:'bank_wallet',country:'UAE',legalName:'First Abu Dhabi Bank P.J.S.C',bankId:'fab',logoDomain:'payit.ae',popular:true},
     {id:'noon-digital-pay',name:'Noon Digital Pay',nameAr:'نون ديجيتال باي',short:'Noon Pay',aliases:['Noon Digital Pay','Noon Pay'],type:'stored_value_provider',country:'UAE',legalName:'Noon Digital Pay L.L.C',logoDomain:null,popular:false}
   ].map(x=>Object.freeze(x)));
+  const CBUAE_SVF_LICENSEES=Object.freeze([
+    'Digital Financial Services L.L.C.','Noon Digital Pay L.L.C','Botim Money Technology L.L.C','Noqodi LLC',
+    'MyZoi Financial Inclusion Technologies L.L.C.','Whizpay Technology L.L.C.','EITC Financial Services L.L.C',
+    'Ziina Payments L.L.C','Comera Pay L.L.C','Network International LLC','Pay Ten Payment Services Provider L.L.C.',
+    'Beyon Money Financial Services L.L.C','Huru Payment Services Provider L.L.C','Al Ansari Digital Pay L.L.C',
+    'Wise Fintech Network L.L.C','Tabby Payments L.L.C','AEDC Stable Coin Network And Distribution - L.L.C',
+    'Foris DAX Middle East FZE','Revolut Stored Value Services L.L.C','T T S Financial Services Middle East L.L.C.',
+    'Remitly Fintech Services - L.L.C- S.P.C','H A Q Kamel Pay Services L.L.C','AIAE Services for Payments -L.L.C-S.P.C'
+  ]);
   const LOGO_DOMAINS=Object.freeze({
     'hsbc-middle-east':'hsbc.ae',
     'standard-chartered':'sc.com',
@@ -741,5 +757,5 @@
     }
     return best;
   }
-  return Object.freeze({SOURCE,BANKS,BANK_LOCALIZATION,PAYMENT_PROVIDERS,LOGO_DOMAINS,list,listProviders,search,searchProviders,get,getProvider,detect,detectProvider,normalize,logoDomain,initials,bankDisplayName,bankShortName,providerDisplayName,providerShortName});
+  return Object.freeze({SOURCE,BANKS,BANK_LOCALIZATION,PAYMENT_PROVIDERS,CBUAE_SVF_LICENSEES,LOGO_DOMAINS,list,listProviders,search,searchProviders,get,getProvider,detect,detectProvider,normalize,logoDomain,initials,bankDisplayName,bankShortName,providerDisplayName,providerShortName});
 });

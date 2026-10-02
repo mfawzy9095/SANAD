@@ -21,7 +21,14 @@ assert.strictEqual(R.detectProvider('FAB Payit Wallet').provider.id,'payit-fab')
 assert.strictEqual(R.searchProviders('الأنصاري').some(p=>p.id==='al-ansari-wallet'),true);
 assert.strictEqual(R.providerDisplayName('ziina','ar'),'زينة');
 assert.strictEqual(R.logoDomain('du-pay'),'dupay.ae');
-assert.ok(R.PAYMENT_PROVIDERS.length>=17);
+assert.strictEqual(R.CBUAE_SVF_LICENSEES.length,23);
+assert.strictEqual(R.CBUAE_SVF_LICENSEES.every(name=>R.PAYMENT_PROVIDERS.some(p=>p.legalName===name)),true);
+assert.strictEqual(R.PAYMENT_PROVIDERS.length,24); // 23 current CBUAE SVF licensees + FAB Payit bank wallet
+assert.strictEqual(R.detectProvider('Foris DAX Middle East FZE payment').provider.id,'crypto-com');
+assert.strictEqual(R.detectProvider('Taptap Send UAE wallet').provider.id,'taptap-send');
+assert.strictEqual(R.detectProvider('Remitly Fintech Services').provider.id,'remitly');
+assert.strictEqual(R.detectProvider('Tabby Payments').provider.id,'tabby');
+assert.strictEqual(R.logoDomain('ddsc'),'ddsc.ai');
 assert.strictEqual(R.search('emirates').some(b=>b.id==='emirates-nbd'),true);
 assert.strictEqual(R.search('ابوظبي').some(b=>b.id==='adcb'||b.id==='adib'||b.id==='fab'),true);
 assert.strictEqual(R.logoDomain('emirates-nbd'),'emiratesnbd.com');
