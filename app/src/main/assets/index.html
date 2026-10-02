@@ -2182,7 +2182,7 @@ function txRowHtml(t, withSwipe){
   const sign = t.type === 'income' ? '+' : '−';
   const cls = t.type === 'income' ? 'pos' : '';
   const tags = (t.tags||[]).map(tag => '<span class="tag">#' + esc(tag) + '</span>').join('');
-  const noteText = t.note ? esc(t.note) : esc(c.n);
+  const noteText = t.merchantName ? esc(t.merchantName) : (t.note ? esc(t.note) : esc(c.n));
   const sourceTxt = inst ? (inst.name + (inst.last4 ? ' ••' + inst.last4 : '')) : (acc ? acc.name : '');
   const origCur = t.currency || (acc ? acc.currency : 'EGP');
   const walletCur = acc ? acc.currency : 'EGP';
@@ -2232,6 +2232,7 @@ function filteredTx(){
       const inst = t.instrumentId ? Finance.getInstrument(t.instrumentId) : null;
       const bene = t.beneficiaryId ? Finance.getBeneficiary(t.beneficiaryId) : null;
       return (t.note||'').toLowerCase().includes(q) ||
+        (t.merchantName||'').toLowerCase().includes(q) ||
         (c.n||'').toLowerCase().includes(q) ||
         (acc ? acc.name.toLowerCase().includes(q) : false) ||
         (inst ? inst.name.toLowerCase().includes(q) : false) ||
@@ -3117,6 +3118,7 @@ function openNewTx(kind, opts){
     amount: '', currency: acc ? acc.currency : 'EGP',
     cat: opts.catId || (isIncome ? 'salary' : 'food'),
     source: defaultSource,
+    merchantName: opts.merchantName || '',
     note: '', tags: [], date: isoToday(),
     recurring: false,
     recFreq: 'monthly', recDay: 1, recMonth: new Date().getMonth(), recRem: 3,
@@ -3158,6 +3160,7 @@ function openEditTx(id){
     country: accCountry, sourceMode,
     amount: String(t.amount), currency: t.currency || (acc ? acc.currency : 'EGP'),
     cat: t.cat, source,
+    merchantName: t.merchantName || '',
     note: t.note || '', tags: (t.tags||[]).slice(),
     date: t.date, recurring: false,
     fxRate: savedFxRate,
@@ -3380,6 +3383,7 @@ function renderTxSheet(){
         '<summary>تفاصيل إضافية</summary>' +
         '<div class="adv-body">' +
           '<div class="field" style="margin-bottom:10px"><label>العملة</label><div class="chip-row" style="padding-bottom:0">' + curOpts + '</div></div>' +
+          (!isIncome ? '<div class="field"><label>التاجر / المتجر</label><input type="text" id="merchantIn" placeholder="مثال: Carrefour أو noon" maxlength="100" value="' + esc(f.merchantName || '') + '"><div class="field-hint">اسم التاجر مستقل عن الفئة والملاحظة، ويظهر في البحث وتفاصيل المعاملة.</div></div>' : '') +
           '<div class="field"><label>ملاحظة</label><input type="text" id="noteIn" placeholder="اختياري" maxlength="80" value="' + esc(f.note) + '"></div>' +
           '<div class="field"><label>وسوم</label><input type="text" id="tagIn" placeholder="اكتب واضغط Enter" maxlength="20">' + tagsLine + tagSuggest + '</div>' +
           (f.id ? '' :
@@ -3524,6 +3528,7 @@ async function saveTx(){
       accountId: f.source.accountId,
       instrumentId: f.source.type === 'instrument' ? f.source.id : null,
       walletAmount, fxRate, cat: f.cat,
+      merchantName: (f.merchantName || '').trim(),
       note: (f.note || '').trim(),
       tags: (f.tags || []).slice(),
       date: f.date,
@@ -4515,6 +4520,7 @@ function openTxDetails(id){
     rows.push(['الحساب', acc ? acc.name : '—']);
     if (acc) rows.push(['البلد', countryInfo(acc.country).flag + ' ' + countryInfo(acc.country).name]);
     if (inst) rows.push(['البطاقة', inst.name + (inst.last4 ? ' ••' + inst.last4 : '')]);
+    if (t.merchantName) rows.push(['التاجر', t.merchantName]);
     rows.push(['التاريخ', t.date]);
     if (t.rec) rows.push(['متكرر','🔁']);
     if (t.note) rows.push(['ملاحظة', t.note]);
@@ -7647,7 +7653,8 @@ document.addEventListener('input', e => {
         }
       }
     }
-  } else if (e.target.id === 'noteIn'){ if (S.form) S.form.note = e.target.value; }
+  } else if (e.target.id === 'merchantIn'){ if (S.form) S.form.merchantName = e.target.value; }
+  else if (e.target.id === 'noteIn'){ if (S.form) S.form.note = e.target.value; }
   else if (e.target.id === 'fxRateIn'){
     if (S.form && S.form.source){
       S.form.fxRate = parseFloat(e.target.value) || 0;
