@@ -239,4 +239,13 @@ function process(text,input,state){
   );
 })();
 
+
+(function accountTilesPreferCurrentReportedBalance(){
+  const html=fs.readFileSync(path.join(__dirname,'../../main/assets/index.html'),'utf8');
+  assert.ok(html.includes('accountBalancePresentation(accountId){ return FinanceCore.accountBalancePresentation(S, accountId); }'),'finance facade must expose reported balance presentation');
+  assert.ok(html.includes('const balanceView = !isLiab ? Finance.accountBalancePresentation(a.id) : null;'),'account tiles must consume reported balance presentation');
+  assert.ok(html.includes('const balanceView = !isCredit ? Finance.accountBalancePresentation(acc.id) : null;'),'card tiles must consume linked account reported balance presentation');
+  assert.ok(html.includes('الرصيد المحسوب في SANAD'),'mismatched reported balance must be explained in the UI');
+})();
+
 console.log('bank ingestion schema integration tests: PASS');
