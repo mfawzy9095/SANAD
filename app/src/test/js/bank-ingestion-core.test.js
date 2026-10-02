@@ -449,6 +449,26 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(s.accounts.some(a=>a.id==='dup-a'),false);
 }
 
+// Dedicated credit and prepaid cards must never use shared-account rebind.
+{
+  for(const type of ['credit_card','prepaid_card']){
+    const accountType=type==='credit_card'?'credit':'prepaid';
+    const s={institutions:[{id:'b',name:'Bank',country:'UAE',type:'bank'}],accounts:[
+      {id:'dedicated',institutionId:'b',country:'UAE',name:'Dedicated',type:accountType,currency:'AED',openingBalance:0,openingDebt:type==='credit_card'?100:0,creditLimit:type==='credit_card'?1000:0,archived:false},
+      {id:'other',institutionId:'b',country:'UAE',name:'Other',type:'bank',currency:'AED',openingBalance:500,openingDebt:0,creditLimit:0,archived:false}
+    ],paymentInstruments:[
+      {id:'card',accountId:'dedicated',institutionId:'b',country:'UAE',type,first4:'4578',last4:'0308',network:'visa',archived:false}
+    ],transactions:[
+      {id:'t',type:'expense',accountId:'dedicated',instrumentId:'card',amount:10,walletAmount:10,currency:'AED',fxRate:1,cat:'other',note:'',tags:[],date:'2026-10-01',created:1}
+    ],recurring:[],settings:{}};
+    const out=I.rebindInstrumentAccount(s,'card','other');
+    assert.strictEqual(out.ok,false);
+    assert.strictEqual(out.reason,'instrument-rebind-unsupported');
+    assert.strictEqual(s.paymentInstruments[0].accountId,'dedicated');
+    assert.strictEqual(s.transactions[0].accountId,'dedicated');
+  }
+}
+
 // A debit card may be relinked after history exists; only that card's own history moves.
 {
   const s={institutions:[{id:'b',name:'Bank',country:'UAE',type:'bank'}],accounts:[
