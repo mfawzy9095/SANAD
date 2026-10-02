@@ -243,6 +243,30 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(I.plan(otherSender,s,{uid}).action,'review');
 }
 
+// Manual correction routes are validated before they are allowed to teach the system.
+{
+  const s={institutions:[{id:'m',name:'Manual Bank',country:'UAE',type:'bank'}],accounts:[
+    {id:'bank',institutionId:'m',country:'UAE',name:'Current',type:'bank',currency:'AED',openingBalance:500,openingDebt:0,creditLimit:0,archived:false},
+    {id:'credit',institutionId:'m',country:'UAE',name:'Credit',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:1000,archived:false},
+    {id:'cash',institutionId:null,country:'UAE',name:'Cash',type:'cash',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:0,archived:false}
+  ],paymentInstruments:[{id:'cc',accountId:'credit',institutionId:'m',country:'UAE',type:'credit_card',last4:'4321',archived:false}],transactions:[],settings:{}};
+  const purchase=P.parse({id:'manual-p',postedAt:920000,title:'Manual Bank',text:'Purchase AED 20.00 at TEST on your credit card ending 4321'});
+  const pr=I.routeFromManualChoice(purchase,s,{sourceType:'instrument',sourceId:'cc'});
+  assert.strictEqual(pr.status,'routed');
+  assert.strictEqual(pr.account.id,'credit');
+  assert.strictEqual(I.routeFromManualChoice(purchase,s,{sourceType:'account',sourceId:'bank'}).reason,'manual-card-required');
+
+  const withdrawal=Object.assign({},purchase,{kind:'cash_withdrawal',cardLast4:null});
+  const wr=I.routeFromManualChoice(withdrawal,s,{sourceType:'account',sourceId:'bank',targetAccountId:'cash'});
+  assert.strictEqual(wr.status,'routed');
+  assert.strictEqual(wr.targetAccount.id,'cash');
+
+  const repayment=Object.assign({},purchase,{kind:'card_repayment',cardLast4:'4321'});
+  const rr=I.routeFromManualChoice(repayment,s,{sourceType:'account',sourceId:'bank',targetAccountId:'credit'});
+  assert.strictEqual(rr.status,'routed');
+  assert.strictEqual(rr.targetAccount.id,'credit');
+}
+
 // User category choices become a local merchant rule for later auto-imports.
 {
   const p=P.parse({id:'learn1',postedAt:8100,text:'تمت عملية شراء في AED 12.00 MY SPECIAL SHOP على البطاقة 4021 الائتمان المتوفر AED4,000.00'});

@@ -8386,7 +8386,14 @@ const SanadBankInbox = {
       'fx-review-required':'العملة تحتاج مراجعة',
       'existing-source-required':'يحتاج حسابًا موجودًا قبل الحفظ',
       'existing-instrument-conflict':'الكارت موجود بالفعل ويحتاج تأكيد الربط بدل إنشاء نسخة ثانية',
-      'ambiguous-existing-instruments':'يوجد أكثر من كارت مطابق ويجب اختيار الصحيح'
+      'ambiguous-existing-instruments':'يوجد أكثر من كارت مطابق ويجب اختيار الصحيح',
+      'manual-source-invalid':'اختر حسابًا أو كارتًا بنفس البلد والعملة',
+      'manual-card-required':'هذه رسالة كارت — اختر الكارت نفسه وليس الحساب فقط',
+      'manual-card-mismatch':'آخر 4 أرقام لا تطابق الكارت المختار',
+      'manual-transfer-invalid':'حدد حساب المصدر والوجهة بشكل صحيح',
+      'manual-repayment-invalid':'حدد حساب السداد وبطاقة الائتمان الصحيحة',
+      'manual-cash-route-invalid':'حدد حساب المصدر وحساب الكاش',
+      'manual-kind-unsupported':'نوع العملية غير مدعوم في التصحيح'
     }[reason]||String(reason||'يحتاج مراجعة');
   },
   routeLabel(item){
@@ -8723,6 +8730,117 @@ const SanadBankInbox = {
     if(!r||r.status!=='routed')return false;
     return !!BankMessageCore.buildTransaction(item.parsed,r,{uid:()=> 'probe'}).ok;
   },
+  correctionSourceOptions(parsed,selected){
+    const country=parsed.country||'UAE',currency=parsed.currency||'AED';
+    const rows=[];
+    for(const inst of S.paymentInstruments.filter(i=>i&&!i.archived&&i.country===country)){
+      const acc=Finance.getAccount(inst.accountId);
+      if(!acc||acc.archived||acc.currency!==currency)continue;
+      rows.push({value:'instrument:'+inst.id,label:(inst.icon||'💳')+' '+inst.name+' · '+acc.name});
+    }
+    for(const acc of S.accounts.filter(a=>a&&!a.archived&&a.country===country&&a.currency===currency)){
+      rows.push({value:'account:'+acc.id,label:(acc.icon||'🏦')+' '+acc.name});
+    }
+    return '<option value="">— اختر الحساب / الكارت —</option>'+rows.map(r=>'<option value="'+esc(r.value)+'"'+(selected===r.value?' selected':'')+'>'+esc(r.label)+'</option>').join('');
+  },
+  correctionTargetOptions(parsed,selected){
+    const country=parsed.country||'UAE',currency=parsed.currency||'AED';
+    return '<option value="">— بدون / غير مطلوب —</option>'+S.accounts.filter(a=>a&&!a.archived&&a.country===country&&a.currency===currency).map(a=>
+      '<option value="'+esc(a.id)+'"'+(selected===a.id?' selected':'')+'>'+esc((a.icon||'🏦')+' '+a.name)+'</option>'
+    ).join('');
+  },
+  openCorrection(id){
+    const item=this.items.find(x=>String(x.native.id)===String(id));
+    if(!item||!item.parsed||!item.parsed.recognized){toast('الصيغة غير معروفة بعد — تحتاج parser/template قبل التعلم');return;}
+    const p=item.parsed,r=BankMessageCore.resolveRoute(p,S);
+    let source='';
+    if(r&&r.instrument)source='instrument:'+r.instrument.id;
+    else if(r&&r.account)source='account:'+r.account.id;
+    else if(r&&r.fromAccount)source='account:'+r.fromAccount.id;
+    else if(p.cardLast4){
+      const cards=S.paymentInstruments.filter(i=>i&&!i.archived&&String(i.last4||'')===String(p.cardLast4)&&i.country===p.country);
+      if(cards.length===1)source='instrument:'+cards[0].id;
+    }
+    const target=r&&r.targetAccount?r.targetAccount.id:'';
+    const kinds=['purchase','outgoing_transfer','incoming_transfer','internal_transfer','salary','deposit','refund','cash_withdrawal','mobile_recharge','bill_payment','card_repayment'];
+    const kindOpts=kinds.map(k=>'<option value="'+k+'"'+(p.kind===k?' selected':'')+'>'+esc(this.kindLabel(k))+'</option>').join('');
+    const cats=Finance.allCats('expense');
+    const catOpts=cats.map(c=>'<option value="'+esc(c.id)+'"'+((p.category||'other')===c.id?' selected':'')+'>'+esc(c.i+' '+c.n)+'</option>').join('');
+    const curOpts=Object.values(CURRENCIES).map(c=>'<option value="'+c.code+'"'+(p.currency===c.code?' selected':'')+'>'+esc(c.flag+' '+c.name+' ('+c.code+')')+'</option>').join('');
+    const counterparty=p.merchant||p.beneficiaryName||'';
+    openSheet(
+      '<div class="sheet-head"><button type="button" class="close" data-sanad-act="bank-inbox"><span>‹</span></button><h2>تعديل وربط العملية</h2><div style="width:36px"></div></div>'+
+      '<div class="sheet-body">'+
+        '<div class="help-box"><span class="hi">🧠</span><div class="ht"><b>صححها مرة</b>SANAD سيحفظ ربطًا محليًا لنفس مصدر وشكل الرسالة، بدون إرسال SMS لأي خادم.</div></div>'+
+        '<div class="field"><label>نوع العملية</label><select id="bankFixKind">'+kindOpts+'</select></div>'+
+        '<div class="field"><label>المبلغ</label><input id="bankFixAmount" type="number" inputmode="decimal" step="0.01" value="'+esc(String(p.amount||''))+'"></div>'+
+        '<div class="field"><label>العملة</label><select id="bankFixCurrency">'+curOpts+'</select></div>'+
+        '<div class="field"><label>الحساب / الكارت المصدر</label><select id="bankFixSource">'+this.correctionSourceOptions(p,source)+'</select>'+
+          (p.cardLast4?'<div class="field-hint">الرسالة تشير إلى كارت ****'+esc(p.cardLast4)+'؛ اختر نفس الكارت حتى يتعلم الربط بدقة.</div>':'')+'</div>'+
+        '<div class="field"><label>حساب الوجهة (للتحويل بين حساباتك / سداد بطاقة / سحب كاش)</label><select id="bankFixTarget">'+this.correctionTargetOptions(p,target)+'</select></div>'+
+        '<div class="field"><label>التاجر / الشخص / الوصف</label><input id="bankFixParty" type="text" maxlength="100" value="'+esc(counterparty)+'"></div>'+
+        '<div class="field"><label>الفئة للمصروف</label><select id="bankFixCategory">'+catOpts+'</select></div>'+
+        '<button type="button" class="btn primary" data-sanad-act="bank-fix-save" data-id="'+esc(id)+'">حفظ العملية وتعلّم هذا النمط</button>'+
+      '</div>','bank-review-fix'
+    );
+  },
+  learnSourceAlias(item,route){
+    if(!item||!item.parsed||item.parsed.bankId||item.parsed.providerId)return;
+    const account=(route&&route.account)||(route&&route.fromAccount)||null;
+    const inst=account&&account.institutionId?Finance.getInstitution(account.institutionId):null;
+    if(!inst)return;
+    const aliases=[item.native&&item.native.title,item.parsed.sourceHint].map(v=>String(v||'').trim()).filter(v=>v.length>=3&&v.length<=180);
+    if(!aliases.length)return;
+    if(!Array.isArray(inst.notificationAliases))inst.notificationAliases=[];
+    for(const alias of aliases){
+      const key=alias.toLowerCase().replace(/\s+/g,' ').trim();
+      if(!inst.notificationAliases.some(x=>String(x||'').toLowerCase().replace(/\s+/g,' ').trim()===key))inst.notificationAliases.push(alias);
+    }
+    if(inst.notificationAliases.length>12)inst.notificationAliases=inst.notificationAliases.slice(-12);
+  },
+  async saveCorrection(id){
+    const item=this.items.find(x=>String(x.native.id)===String(id));
+    if(!item||!item.parsed||!item.parsed.recognized){toast('تعذر العثور على العملية');return;}
+    const kind=((document.getElementById('bankFixKind')||{}).value||item.parsed.kind);
+    const amount=Number((document.getElementById('bankFixAmount')||{}).value);
+    const currency=((document.getElementById('bankFixCurrency')||{}).value||item.parsed.currency);
+    const sourceRaw=((document.getElementById('bankFixSource')||{}).value||'');
+    const targetId=((document.getElementById('bankFixTarget')||{}).value||'')||null;
+    const party=((document.getElementById('bankFixParty')||{}).value||'').trim();
+    const category=((document.getElementById('bankFixCategory')||{}).value||item.parsed.category||'other');
+    if(!Number.isFinite(amount)||amount<=0){toast('أدخل مبلغًا صحيحًا');return;}
+    if(!sourceRaw){toast('اختر الحساب أو الكارت الصحيح');return;}
+    const parts=sourceRaw.split(':'),sourceType=parts.shift(),sourceId=parts.join(':');
+    const country=BankMessageCore.countryForCurrency(currency)||item.parsed.country||'UAE';
+    const corrected=Object.assign({},item.parsed,{kind,amount,currency,country,confidence:1});
+    if(['purchase','bill_payment','mobile_recharge'].includes(kind)){
+      corrected.direction='debit';corrected.merchant=party;corrected.category=category;
+    }else if(['deposit','salary','refund','incoming_transfer'].includes(kind)){
+      corrected.direction='credit';corrected.merchant=party;corrected.category=kind==='salary'?'salary':'other';
+    }else if(kind==='outgoing_transfer'){
+      corrected.direction='debit';corrected.beneficiaryName=party;corrected.category='externalTransfer';
+    }else{
+      corrected.direction='transfer';
+    }
+    const route=BankIngestionCore.routeFromManualChoice(corrected,S,{sourceType,sourceId,targetAccountId:targetId});
+    if(!route||route.status!=='routed'){toast(this.reasonLabel((route&&route.reason)||'manual-route-invalid'));return;}
+    const built=BankMessageCore.buildTransaction(corrected,route,{uid});
+    if(!built.ok){toast('الربط غير صالح لهذه العملية');return;}
+    if(BankIngestionCore.duplicateOf(corrected,S)){this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
+    const result=await commitCriticalMutation(async()=>{
+      S.transactions.push(built.transaction);
+      BankIngestionCore.learnFromApproval(S,corrected,route,{uid,kind});
+      this.learnSourceAlias(item,route);
+      this.applyReconciliation(corrected,{transaction:built.transaction});
+      return true;
+    });
+    if(!result.ok){render();toast('تعذر حفظ التصحيح');return;}
+    this.ack([item.native.id]);
+    await this.sync({force:false});
+    render();
+    await this.open();
+    toast('تمت الإضافة · SANAD تعلّم الربط');
+  },
   async open(){
     await this.sync({force:false});
     const enabled=this.accessEnabled();
@@ -8740,9 +8858,10 @@ const SanadBankInbox = {
         '<b class="amt-val">' + amount + '</b></div>' + merchant +
         '<div style="font-size:12px;margin-top:8px;color:'+(canApprove?'var(--success)':'var(--warn)')+'">' + source + '</div>' +
         '<div style="font-size:11px;color:var(--text-3);margin-top:8px;direction:auto;white-space:normal">' + esc(String(n.text||'').slice(0,260)) + '</div>' +
-        '<div style="display:flex;gap:8px;margin-top:12px">' +
-          (canApprove?'<button type="button" class="btn primary" data-sanad-act="bank-approve" data-id="'+esc(n.id)+'" style="margin:0;flex:1">اعتماد وإضافة</button>':'') +
-          '<button type="button" class="btn" data-sanad-act="bank-dismiss" data-id="'+esc(n.id)+'" style="margin:0;flex:1">تجاهل</button>' +
+        '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">' +
+          (canApprove?'<button type="button" class="btn primary" data-sanad-act="bank-approve" data-id="'+esc(n.id)+'" style="margin:0;flex:1;min-width:110px">اعتماد وإضافة</button>':'') +
+          (p.recognized?'<button type="button" class="btn" data-sanad-act="bank-fix" data-id="'+esc(n.id)+'" style="margin:0;flex:1;min-width:110px">✏️ تعديل وربط</button>':'') +
+          '<button type="button" class="btn" data-sanad-act="bank-dismiss" data-id="'+esc(n.id)+'" style="margin:0;flex:1;min-width:90px">تجاهل</button>' +
         '</div></div>';
     }).join('');
     const last=this.lastSummary||{};
@@ -8803,7 +8922,7 @@ const SanadV9 = {
   settingsHtml(){const lang=S.settings.language==='en'?'en':'ar',mode=SanadTheme.mode(),sec=SanadSecurity.cfg.enabled?'مفعّل':'غير مفعّل',langDesc=lang==='en'?'Arabic / English':'العربية / الإنجليزية',enLabel=lang==='en'?'English':'الإنجليزية';return '<div class="sec"><h2>اللغة والمظهر</h2></div><div class="card feature-card"><div class="feature-row"><div><b>🌐 اللغة</b><span>'+langDesc+'</span></div><div class="seg"><button type="button" class="'+(lang==='ar'?'on':'')+'" data-sanad-act="lang" data-value="ar">العربية</button><button type="button" class="'+(lang==='en'?'on':'')+'" data-sanad-act="lang" data-value="en">'+enLabel+'</button></div></div><div class="feature-row"><div><b>🎨 المظهر</b><span>فاتح، داكن أو حسب الجهاز</span></div><div class="seg"><button type="button" class="'+(mode==='light'?'on':'')+'" data-sanad-act="theme" data-value="light">☀️</button><button type="button" class="'+(mode==='dark'?'on':'')+'" data-sanad-act="theme" data-value="dark">🌙</button><button type="button" class="'+(mode==='system'?'on':'')+'" data-sanad-act="theme" data-value="system">◐</button></div></div></div>'+'<div class="sec"><h2>الأمان والخصوصية</h2></div><div class="list"><div class="list-item" data-sanad-act="toggle-security"><div class="li-ico">🔐</div><div class="li-body"><b>قفل بالبصمة / الجهاز</b><span>'+sec+(SanadSecurity.supported()?'':' · يحتاج HTTPS')+'</span></div><div class="li-arrow">›</div></div></div>'+SanadBankInbox.settingsHtml()+'<div class="sec"><h2>السحابة والعائلة</h2></div><div class="list"><div class="list-item" aria-disabled="true"><div class="li-ico">☁️</div><div class="li-body"><b>مؤجل إلى V9.1</b><span>معطّل في النسخة المحلية المستقرة</span></div></div></div>'+'<div class="sec"><h2>نسخة احتياطية كاملة</h2></div><button type="button" class="btn" data-sanad-act="full-export">📦 تصدير كامل مع الفواتير</button><button type="button" class="btn" data-sanad-act="full-import">📥 استيراد نسخة كاملة</button>';},
   async setLanguage(lang){if(!I18nCore.isValidLanguage(lang)||!canWrite())return;const prev=S.settings.language;S.settings.language=lang;const ok=await persist();if(!ok){S.settings.language=prev;return;}render();requestAnimationFrame(()=>SanadI18n.apply(document));},
   async afterStart(fromUnlock=false){SanadTheme.apply();SanadI18n.apply();if(SanadExtStorage.mode==='error')toast('تنبيه: تخزين المرفقات غير متاح مؤقتاً');const validIds=new Set(S.transactions.map(t=>t.id));await SanadExtStorage.pruneReceiptOrphans(validIds);await SanadFamily.pruneMissingTransactions();if(SecurityCrypto.shouldShowLockOverlay({enabled:SanadSecurity.cfg.enabled,unlocked:SanadSecurity.unlocked})){SanadSecurity.show();return;}await SanadBankInbox.refresh();hideSanadBootSplash();},
-  async click(el){const a=el.dataset.sanadAct,v=el.dataset.value;if(a==='lang')return this.setLanguage(v);if(a==='theme')return SanadTheme.set(v);if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable();if(a==='unlock')return SanadSecurity.unlock();if(a==='recovery-unlock')return SanadSecurity.recovery();if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;}if(a==='remove-receipt')return SanadReceipts.removeCurrent();if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);if(a==='firebase-config')return SanadCloud.openConfig();if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||'');if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle();if(a==='sync-now')return SanadCloud.syncNow();if(a==='verify-phone')return SanadCloud.verifyPhoneSheet();if(a==='send-phone-code')return SanadCloud.sendPhoneCode();if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();if(a==='open-family')return SanadFamily.open();if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||'');if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||'');if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();if(a==='bank-access')return SanadBankInbox.openAccess();if(a==='bank-auto-toggle')return SanadBankInbox.toggleAuto();if(a==='bank-sync')return SanadBankInbox.syncNow();if(a==='bank-sms-history')return SanadBankInbox.historicalImporting?SanadBankInbox.cancelHistoricalImport('user'):SanadBankInbox.openHistoricalImportPicker();if(a==='bank-sms-range'){closeSheet();return SanadBankInbox.importHistoricalSms(Number(el.dataset.days)||0);}if(a==='bank-sms-date')return SanadBankInbox.importHistoricalFromDate();if(a==='bank-inbox')return SanadBankInbox.open();if(a==='bank-refresh')return SanadBankInbox.open();if(a==='bank-approve')return SanadBankInbox.approve(el.dataset.id);if(a==='bank-dismiss')return SanadBankInbox.dismiss(el.dataset.id);if(a==='full-export')return SanadFullBackup.export();if(a==='full-import')return SanadFullBackup.importPicker();}
+  async click(el){const a=el.dataset.sanadAct,v=el.dataset.value;if(a==='lang')return this.setLanguage(v);if(a==='theme')return SanadTheme.set(v);if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable();if(a==='unlock')return SanadSecurity.unlock();if(a==='recovery-unlock')return SanadSecurity.recovery();if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;}if(a==='remove-receipt')return SanadReceipts.removeCurrent();if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);if(a==='firebase-config')return SanadCloud.openConfig();if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||'');if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle();if(a==='sync-now')return SanadCloud.syncNow();if(a==='verify-phone')return SanadCloud.verifyPhoneSheet();if(a==='send-phone-code')return SanadCloud.sendPhoneCode();if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();if(a==='open-family')return SanadFamily.open();if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||'');if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||'');if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();if(a==='bank-access')return SanadBankInbox.openAccess();if(a==='bank-auto-toggle')return SanadBankInbox.toggleAuto();if(a==='bank-sync')return SanadBankInbox.syncNow();if(a==='bank-sms-history')return SanadBankInbox.historicalImporting?SanadBankInbox.cancelHistoricalImport('user'):SanadBankInbox.openHistoricalImportPicker();if(a==='bank-sms-range'){closeSheet();return SanadBankInbox.importHistoricalSms(Number(el.dataset.days)||0);}if(a==='bank-sms-date')return SanadBankInbox.importHistoricalFromDate();if(a==='bank-inbox')return SanadBankInbox.open();if(a==='bank-refresh')return SanadBankInbox.open();if(a==='bank-approve')return SanadBankInbox.approve(el.dataset.id);if(a==='bank-fix')return SanadBankInbox.openCorrection(el.dataset.id);if(a==='bank-fix-save')return SanadBankInbox.saveCorrection(el.dataset.id);if(a==='bank-dismiss')return SanadBankInbox.dismiss(el.dataset.id);if(a==='full-export')return SanadFullBackup.export();if(a==='full-import')return SanadFullBackup.importPicker();}
 };
 
 /* ===== non-destructive wrappers around the stable V8.9.1 core ===== */
