@@ -119,4 +119,28 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.existingTransactionId,'old');
 }
 
+// Multiple same-bank asset accounts without an exact account/card match must never auto-create/link a new debit card.
+{
+  const p=P.parse({id:'amb1',postedAt:8000,text:'تمت عملية شراء بقيمة AED 5.10 لدى TEST SHOP باستخدام بطاقة خصم تنتهي أرقامها بـ 5555. الرصيد المتوفر هو AED 100.00.'});
+  const s={institutions:[{id:'nbd',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd'}],accounts:[
+    {id:'a1',institutionId:'nbd',country:'UAE',name:'A1',type:'bank',currency:'AED',openingBalance:100,openingDebt:0,creditLimit:0,archived:false},
+    {id:'a2',institutionId:'nbd',country:'UAE',name:'A2',type:'bank',currency:'AED',openingBalance:200,openingDebt:0,creditLimit:0,archived:false}
+  ],paymentInstruments:[],transactions:[]};
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'review');
+  assert.strictEqual(plan.reason,'ambiguous-existing-accounts');
+}
+
+// User category choices become a local merchant rule for later auto-imports.
+{
+  const p=P.parse({id:'learn1',postedAt:8100,text:'تمت عملية شراء في AED 12.00 MY SPECIAL SHOP على البطاقة 4021 الائتمان المتوفر AED4,000.00'});
+  const s={institutions:[{id:'i1',name:'Emirates NBD',country:'UAE',bankRegistryId:'emirates-nbd'}],accounts:[
+    {id:'credit',institutionId:'i1',country:'UAE',name:'Credit',type:'credit',currency:'AED',openingBalance:0,openingDebt:0,creditLimit:5000,archived:false}
+  ],paymentInstruments:[{id:'c4021',accountId:'credit',institutionId:'i1',country:'UAE',type:'credit_card',last4:'4021',archived:false}],
+  transactions:[{id:'oldcat',type:'expense',accountId:'credit',instrumentId:'c4021',amount:5,walletAmount:5,currency:'AED',fxRate:1,cat:'shopping',note:'MY SPECIAL SHOP',tags:[],date:'2026-09-01',created:1}]};
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.transaction.cat,'shopping');
+}
+
 console.log('bank ingestion core regression tests: PASS');

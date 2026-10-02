@@ -150,6 +150,24 @@
     }
     return updates;
   }
+  function normalizedMerchant(value){
+    return String(value||'').toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g,' ').replace(/\s+/g,' ').trim();
+  }
+  function learnedMerchantCategory(parsed,state){
+    if(!parsed||!parsed.merchant)return null;
+    const key=normalizedMerchant(parsed.merchant);
+    if(!key)return null;
+    const txs=arr(state&&state.transactions).slice().reverse();
+    const hit=txs.find(t=>t&&t.type==='expense'&&t.cat&&t.cat!=='other'&&normalizedMerchant(t.note)===key);
+    return hit?hit.cat:null;
+  }
+  function applyLearnedCategory(parsed,state,built){
+    if(!built||!built.ok||!built.transaction||built.transaction.type!=='expense')return built;
+    if(built.transaction.cat&&built.transaction.cat!=='other')return built;
+    const learned=learnedMerchantCategory(parsed,state);
+    if(learned)built.transaction.cat=learned;
+    return built;
+  }
   function autoEligible(parsed,route){
     if(!parsed||!parsed.recognized)return {ok:false,reason:'unrecognized'};
     if(parsed.ignored)return {ok:false,reason:parsed.reason||'ignored'};
@@ -180,7 +198,7 @@
     const initialRoute=route;
     const direct=autoEligible(parsed,route);
     if(direct.ok){
-      const built=MessageCore.buildTransaction(parsed,route,{uid});
+      const built=applyLearnedCategory(parsed,state,MessageCore.buildTransaction(parsed,route,{uid}));
       if(!built.ok)return {action:'review',reason:built.reason||'build-failed',confidence:0};
       return {action:'auto-save',reason:'exact-route',confidence:Math.min(1,Number(parsed.confidence||0)),transaction:built.transaction,create:{institutions:[],accounts:[],instruments:[]},observations:updateObservation(parsed,route)};
     }
@@ -206,6 +224,11 @@
       }else if(parsed.cardType==='debit_card'||parsed.cardType==='wallet_card'){
         const expectedType=parsed.cardType==='wallet_card'?'ewallet':'bank';
         let acc=initialRoute&&initialRoute.account&&initialRoute.account.type===expectedType?draft.accounts.find(a=>a.id===initialRoute.account.id):null;
+        const sameSourceAccounts=draft.accounts.filter(a=>a&&!a.archived&&a.type===expectedType&&a.institutionId===institution.id);
+        if(!acc&&sameSourceAccounts.length===1)acc=sameSourceAccounts[0];
+        if(!acc&&sameSourceAccounts.length>1){
+          return {action:'review',reason:'ambiguous-existing-accounts',confidence:0,create};
+        }
         if(!acc){
           acc=makeAssetAccount(parsed,institution.id,uid,'purchase');
           if(!acc)return {action:'review',reason:'observed-balance-required',confidence:0};
@@ -228,7 +251,7 @@
     route=MessageCore.resolveRoute(parsed,draft);
     const eligible=autoEligible(parsed,route);
     if(!eligible.ok)return {action:'review',reason:eligible.reason,confidence:0,create};
-    const built=MessageCore.buildTransaction(parsed,route,{uid});
+    const built=applyLearnedCategory(parsed,state,MessageCore.buildTransaction(parsed,route,{uid}));
     if(!built.ok)return {action:'review',reason:built.reason||'build-failed',confidence:0,create};
     return {
       action:'auto-save',reason:'safe-auto-discovery',confidence:Math.min(0.99,Number(parsed.confidence||0)),
@@ -264,6 +287,6 @@
   }
 
   return Object.freeze({
-    autoEligible,duplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay
+    autoEligible,duplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory
   });
 });

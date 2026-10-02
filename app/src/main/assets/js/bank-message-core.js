@@ -14,15 +14,39 @@
     const m=String(x||'').match(/الرصيد\s+المتوفر\s+هو\s+([A-Za-z]{3})\s*(-?[\d,]+(?:\.\d+)?)/i);
     return m?amount(m[2]):null;
   }
+  function identifierMatch(packageName,entity){
+    const pkg=String(packageName||'').toLowerCase();
+    if(!pkg||!entity)return false;
+    const segments=pkg.split(/[^a-z0-9]+/).filter(Boolean);
+    const compactPkg=segments.join('');
+    const aliases=[entity.name].concat(entity.aliases||[]);
+    return aliases.some(alias=>{
+      const a=Banks.normalize(alias).replace(/\s+/g,'');
+      if(a.length>=5&&compactPkg.includes(a))return true;
+      return a.length>=3&&segments.includes(a);
+    });
+  }
   function bankIdFrom(input,raw){
     if(input&&input.bankId&&Banks.get(input.bankId))return input.bankId;
     const hit=Banks.detect(((input&&input.title)||'')+' '+((input&&input.sender)||'')+' '+raw);
-    return hit?hit.bank.id:null;
+    if(hit)return hit.bank.id;
+    const pkg=input&&input.packageName;
+    if(pkg&&Array.isArray(Banks.BANKS)){
+      const byPkg=Banks.BANKS.find(b=>identifierMatch(pkg,b));
+      if(byPkg)return byPkg.id;
+    }
+    return null;
   }
   function providerIdFrom(input,raw){
     if(input&&input.providerId&&Banks.getProvider&&Banks.getProvider(input.providerId))return input.providerId;
     const hit=Banks.detectProvider?Banks.detectProvider(((input&&input.title)||'')+' '+((input&&input.sender)||'')+' '+raw):null;
-    return hit?hit.provider.id:null;
+    if(hit)return hit.provider.id;
+    const pkg=input&&input.packageName;
+    if(pkg&&Array.isArray(Banks.PAYMENT_PROVIDERS)){
+      const byPkg=Banks.PAYMENT_PROVIDERS.find(p=>identifierMatch(pkg,p));
+      if(byPkg)return byPkg.id;
+    }
+    return null;
   }
   function isoDateFromDmy(value){
     const m=latinDigits(value).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);

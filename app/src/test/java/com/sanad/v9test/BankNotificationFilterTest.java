@@ -60,5 +60,15 @@ public class BankNotificationFilterTest {
                 "نود تأكيد استلام دفعة AED 433.00 عن البطاقة الائتمانية التي تبدأ بالرقم 457828."));
         assertFalse(BankNotificationFilter.looksLikeCandidate(
                 "Your du Pay Card ending in 7105 has been suspended from Google Pay."));
+    }    @Test
+    public void acceptsRechargeBillAndRefundFamilies() {
+        assertTrue(BankNotificationFilter.looksLikeCandidate(
+                "Mobile recharge AED 50.00 successfully processed."));
+        assertTrue(BankNotificationFilter.looksLikeCandidate(
+                "Bill payment AED 120.00 successfully processed."));
+        assertTrue(BankNotificationFilter.looksLikeCandidate(
+                "Refund AED 25.00 credited to your card."));
     }
+
+
 }

@@ -39,7 +39,10 @@ public final class BankNotificationFilter {
                 "debited", "debit", "credited", "credit", "salary", "payroll",
                 "deposit", "transfer", "payment", "عملية دفع", "عمليه دفع",
                 "has been used for", "you've received", "you’ve received", "received aed",
-                "successfully withdrawn", "withdrawn");
+                "successfully withdrawn", "withdrawn",
+                "recharge", "top up", "top-up", "airtime", "شحن رصيد",
+                "bill payment", "paid bill", "دفع فاتورة", "سداد فاتورة",
+                "refund", "refunded", "reversal", "reversed", "استرداد");
     }
 
     private static boolean containsAny(String x, String... terms) {

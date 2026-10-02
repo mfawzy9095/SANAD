@@ -77,4 +77,9 @@ assert.strictEqual(genericKnown.merchant,'FRESH CRAFT MINI MART');
 assert.strictEqual(genericKnown.category,'grocery');
 assert.strictEqual(genericKnown.confidence,0.72);
 
+const pkgBank=P.parse({id:'pkg1',postedAt:9000,packageName:'com.emiratesnbd.android',text:'Purchase AED 10.00 with card 4021 at TEST MERCHANT'});
+assert.strictEqual(pkgBank.bankId,'emirates-nbd');
+const pkgWallet=P.parse({id:'pkg2',postedAt:9001,packageName:'ae.dupay.app',text:'Your du Pay Card ending in 7105 has been used for AED 2.00 at TEST. Your available balance is now AED 8.00 and your transaction ID is PKGTEST1.'});
+assert.strictEqual(pkgWallet.providerId,'du-pay');
+
 console.log('bank message parser regression tests: PASS');
