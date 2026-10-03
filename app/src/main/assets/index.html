@@ -8269,6 +8269,7 @@ const SanadReceipts = {
   },
   async removeCurrent(){return withExclusiveDataOperation(()=>this.removeCurrentImpl());},
   async removeCurrentImpl(){
+    if(!canWrite())return false;
     if(this.pending){this.pending=null;this.refreshControls();return true;}
     if(S.form&&S.form.id){
       const ok=await this.domain().remove(S.form.id);
@@ -8553,8 +8554,8 @@ const SanadFullBackup = {
     for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);
     return new Blob([a],{type:mime});
   },
-  async export(){
-    if(_dataReplacementInFlight||_criticalMutationInFlight||_financialFlowInFlight){toast('انتظر انتهاء الحفظ ثم أعد التصدير');return;}
+  async export(){return withExclusiveDataOperation(()=>this.exportImpl());},
+  async exportImpl(){
     if(SanadExtStorage.mode==='error'){
       toast('تعذر إنشاء نسخة كاملة — تخزين المرفقات غير متاح');
       return false;

@@ -59,7 +59,7 @@ const record=(name)=>{results.push({name,status:'PASS'});console.log('PASS:',nam
   await page.locator('#sheet [data-src-id="'+bankId+'"]').click();
   await page.locator('#amountIn').fill(String(amount));
   await page.locator('#sheet [data-act="save-tx"]').click();
-  await page.waitForFunction(n=>S.transactions.length===n+1&&!_criticalMutationInFlight,before);
+  await page.waitForFunction(n=>S.transactions.length===n+1&&!_financialFlowInFlight,before);
  }
  await addManual('expense',25);await addManual('income',50);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),9126.66);record('DOM expense/income entry and exact account balance');
@@ -87,7 +87,7 @@ const record=(name)=>{results.push({name,status:'PASS'});console.log('PASS:',nam
  const saved=JSON.parse(fs.readFileSync(backupPath));assert.equal(saved.format,'SANAD_FULL_BACKUP');
  await page.evaluate(()=>go('home'));await addManual('expense',5);
  await page.evaluate(()=>go('settings'));await page.locator('[data-sanad-act="full-import"]').click();
- await page.locator('#sanadFullImport').setInputFiles(backupPath);await page.locator('#dlgOk').click();
+ await page.locator('#sanadFullImport').setInputFiles(backupPath);await page.locator('.dialog-backdrop.on #dlgOk').click();
  await page.waitForFunction(expected=>stateFingerprint(snapshotState())===expected,fp);
  assert(await page.evaluate(async id=>!!(await SanadExtStorage.getReceipt(id)),expenseId));record('Full backup export/restore with receipt and fingerprint equality');
  // Add a second account and transfer through the actual forms.

@@ -27,6 +27,9 @@ shown separately. Available credit alone does not establish card debt.
 - Android: `gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleForensicQa`.
 - Browser integration: `npm ci --prefix tools/e2e`, install its Chromium, serve
   `app/src/main/assets` on 127.0.0.1:8765, then run `node tools/e2e/browser-smoke.js`.
+- Android emulator integration: `node tools/e2e/android-smoke.js` after installing
+  the isolated APK on an API 35 emulator with adb available. The workflow handles
+  the emulator, native SMS permission, synthetic provider messages and bridge callbacks.
 - GitHub Actions verifies these gates and packaged assets. Browser tests use
   synthetic data and a simulated Android bridge; no private SMS/backup/key is uploaded.
 
