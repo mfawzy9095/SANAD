@@ -1345,7 +1345,7 @@ const Finance = {
     const out = {};
     this.getCountryAccounts(country).forEach(a => {
       if (!isAssetAccount(a)) return;
-      const bal = this.accountBalance(a.id);
+      const bal = this.accountBalancePresentation(a.id).display;
       out[a.currency] = (out[a.currency] || 0) + bal;
     });
     return out;
@@ -2306,6 +2306,9 @@ function accountTileHtml(a, size){
   } else {
     const displayBal=balanceView?balanceView.display:bal;
     amountHtml = amtText(displayBal) + ' <small>' + Finance.curSymbol(a.currency) + '</small>';
+    if(balanceView&&balanceView.projected!==null&&!balanceView.observedIsCurrent){
+      extraHtml='<div class="tile-foot">تقدير بعد آخر رصيد مسجل · '+amtText(balanceView.observed)+'</div>';
+    }
     if(balanceView&&balanceView.mismatch){
       extraHtml = '<div class="tile-row"><span>الرصيد المحسوب في SANAD</span><span class="amt-val">' + amtText(balanceView.calculated) + '</span></div>' +
         '<div class="tile-foot" style="color:var(--warn)">آخر رصيد مؤكد من البنك/المحفظة · فرق ' + amtText(balanceView.difference) + '</div>';
@@ -4080,7 +4083,7 @@ async function saveTransfer(){
         id: newId, type: 'external_transfer',
         fromAccountId: fromAcc.id, fromAmount: fromAmt, fromCurrency: fromCur,
         fromCountry: fromAcc.country,
-        beneficiaryId: bene.id, receivedAmount: toAmount, receivedCurrency: toCur,
+        beneficiaryId: bene.id, receivedAmount: toAmount, receivedCurrency: toCur, receivedAmountKnown:true,
         fxRate, fee: feeForTransfer, instrumentId: null,
         note: (f.note || '').trim() || ('تحويل إلى ' + bene.name),
         tags: (f.tags || []).slice(), date: f.date,
@@ -4527,7 +4530,8 @@ function openTxDetails(id){
     if (b) rows.push(['البلد', countryInfo(b.country).flag + ' ' + countryInfo(b.country).name]);
     rows.push(['من', fromAcc ? fromAcc.name : '—']);
     rows.push(moneyRow('أرسلت', t.fromAmount, t.fromCurrency));
-    if (t.fromCurrency !== t.receivedCurrency){
+    if(t.receivedAmountKnown===false)rows.push(['مبلغ الوصول','غير مذكور في رسالة الخصم']);
+    else if (t.fromCurrency !== t.receivedCurrency){
       rows.push(moneyRow('وصل', t.receivedAmount, t.receivedCurrency));
       rows.push(['السعر', hide ? '•••' : ('1 ' + Finance.curSymbol(t.fromCurrency) + ' = ' + fmt(t.fxRate) + ' ' + Finance.curSymbol(t.receivedCurrency))]);
     }
@@ -5276,7 +5280,7 @@ async function saveAccount(id){
       a.bankRefs = bankRefs.slice();
       if (bankRefs.length === 1) a.bankRef = bankRefs[0]; else delete a.bankRef;
       a.icon = i; a.color = c;
-      a.openingBalance = openingBalance;
+      FinanceCore.setOpeningBalance(a,openingBalance);
       if (isLiab) a.openingDebt = openingDebt;
       if (isDebt){ a.creditor = creditor; a.dueDate = dueDate; }
     } else {
@@ -6455,7 +6459,7 @@ async function saveCard(id, presetType){
           if (acc){
             const hasTx = cardHasHistory(id);
             acc.name = name;
-            if (!hasTx){ acc.country = country; acc.currency = cardCur; acc.openingBalance = bal; }
+            if (!hasTx){ acc.country = country; acc.currency = cardCur; FinanceCore.setOpeningBalance(acc,bal); }
             const relinkInstitution=BankIngestionCore.rebindAccountInstitution(S,acc.id,institutionId);
             if(!relinkInstitution.ok)return false;
             acc.icon = icon; acc.color = color;
@@ -8537,7 +8541,8 @@ const SanadFullBackup = {
     const features={
       family:SanadFamily.state,
       syncMeta:Object.assign({},SanadCloud.meta,{dirty:true}),
-      firebaseConfig:SanadCloud.config||null
+      firebaseConfig:SanadCloud.config||null,
+      bankImportAudit:{version:1,parserVersion:'9.2-forensic-1',pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null)}
     };
     delete features.syncMeta.receiptDirty;
     const payload=BackupCore.makeFullBackup({
@@ -8725,6 +8730,8 @@ const SanadBankInbox = {
   reasonLabel(reason){
     return {
       'unrecognized':'صيغة الرسالة غير معروفة',
+      'refund-instrument-required':'استرداد يحتاج ربط البطاقة المذكورة بالرسالة',
+      'refund-balance-review':'رسالة استرداد برصيد أقل من السابق — تحتاج مراجعة التسوية',
       'balance-source-required':'رصيد مؤكد يحتاج تحديد المحفظة',
       'possible-duplicate':'عملية مشابهة تحتاج مقارنة مرجع الرسالة والرصيد قبل الحفظ',
       'low-confidence':'يحتاج تأكيد نوع العملية',
@@ -9068,6 +9075,7 @@ const SanadBankInbox = {
     }
 
     this.lastHistoricalImport={at:Date.now(),status,days:Number(days)||0,pages,total,nextAfterDate:afterDate,nextAfterId:afterId};
+    await SanadExtStorage.set('bankImportLastHistorical',this.lastHistoricalImport);
     if(S.tab==='settings')render();
 
     if(status==='cancelled')toast('تم إيقاف استيراد SMS · فُحص '+total.scanned+' رسالة',4200);

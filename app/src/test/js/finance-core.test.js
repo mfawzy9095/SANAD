@@ -83,7 +83,8 @@ function state(accounts,transactions){return {accounts,transactions};}
   current.transactions.push({id:'manual',type:'expense',accountId:'w',amount:2,created:300});
   const stale=F.accountBalancePresentation(current,'w');
   assert.strictEqual(stale.calculated,6.5);
-  assert.strictEqual(stale.display,6.5);
+  assert.strictEqual(stale.display,-2); // last explicit zero plus the later debit
+  assert.strictEqual(stale.projected,-2);
   assert.strictEqual(stale.observedIsCurrent,false);
 })();
 
@@ -145,4 +146,13 @@ console.log('finance-core regression tests: PASS');
   assert.strictEqual(F.creditAvailableCalculated(s,'c'),null);
   s.transactions.push({type:'expense',accountId:'c',amount:5,created:400});
   assert.strictEqual(F.creditAvailable(s,'c'),null); // historical observation is no longer current
+}
+
+// Explicit opening-balance edits preserve the date boundary of imported history.
+{
+  const a={id:'edited',type:'bank',openingBalance:100,bankBalanceBaseline:{at:2000,balance:100}};
+  const s=state([a],[{type:'income',accountId:'edited',amount:500,created:1000},{type:'expense',accountId:'edited',amount:10,created:3000}]);
+  F.setOpeningBalance(a,120);
+  assert.strictEqual(F.accountBalance(s,'edited'),110);
+  assert.strictEqual(a.bankBalanceBaseline.at,2000);
 }

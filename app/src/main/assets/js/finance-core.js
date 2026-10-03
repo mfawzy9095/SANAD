@@ -71,6 +71,13 @@
     return round2(bal);
   }
 
+  function setOpeningBalance(account,value){
+    const next=round2(value),previous=num(account.openingBalance);
+    if(account.bankBalanceBaseline&&Number.isFinite(Number(account.bankBalanceBaseline.balance)))
+      account.bankBalanceBaseline.balance=round2(Number(account.bankBalanceBaseline.balance)+next-previous);
+    account.openingBalance=next;
+  }
+
   function accountBalanceAt(state,accountId,at){
     if(at==null||!Number.isFinite(Number(at)))return null;
     return accountBalance(state,accountId,Number(at));
@@ -93,11 +100,13 @@
       if(at>latestActivityAt)latestActivityAt=at;
     }
     const observedIsCurrent=observed!==null&&observedAt>0&&(latestActivityAt<=0||observedAt>=latestActivityAt);
+    const projected=observed!==null&&observedAt>0&&!isLiabilityAccount(a)?accountBalance({accounts:[Object.assign({},a,{bankBalanceBaseline:{at:observedAt+1,balance:observed}})],transactions:txs},accountId):null;
     const difference=observed===null?null:round2(observed-calculated);
     return {
       calculated,
       observed,
-      display:observedIsCurrent?observed:calculated,
+      display:projected!==null?projected:calculated,
+      projected,
       observedAt,
       latestActivityAt,
       observedIsCurrent,
@@ -170,6 +179,7 @@
   return Object.freeze({
     accountBalance,
     accountBalanceAt,
+    setOpeningBalance,
     accountBalancePresentation,
     accountDebt,
     capturePrepaidBalances,

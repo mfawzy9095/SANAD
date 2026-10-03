@@ -420,7 +420,7 @@
       const note=parsed.beneficiaryName
         ? ('تحويل'+(channel?' عبر '+channel:'')+' إلى '+parsed.beneficiaryName)
         : (channel?'تحويل خارجي عبر '+channel:'تحويل بنكي');
-      return {ok:true,transaction:{id,type:'external_transfer',fromAccountId:from.id,instrumentId:route.instrument?route.instrument.id:null,fromAmount:parsed.amount,fromCurrency:from.currency,fromCountry:from.country,beneficiaryId:null,receivedAmount:parsed.amount,receivedCurrency:parsed.currency,fxRate:1,fee:0,transferChannel:channel||null,note,tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,bankTransactionRef:parsed.transactionRef||null}};
+      return {ok:true,transaction:{id,type:'external_transfer',fromAccountId:from.id,instrumentId:route.instrument?route.instrument.id:null,fromAmount:parsed.amount,fromCurrency:from.currency,fromCountry:from.country,beneficiaryId:null,receivedAmount:parsed.amount,receivedCurrency:parsed.currency,receivedAmountKnown:false,fxRate:1,fee:0,transferChannel:channel||null,note,tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,bankTransactionRef:parsed.transactionRef||null}};
     }
     if(parsed.kind==='cash_withdrawal'){
       const from=route.fromAccount,to=route.targetAccount;

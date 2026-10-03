@@ -710,3 +710,22 @@ console.log('bank ingestion core regression tests: PASS');
   assert.strictEqual(I.plan(p,s,{uid}).action,'auto-save');
   assert.strictEqual(I.plan(p,s,{uid}).transaction.accountId,'bank');
 }
+
+// A source debit gives neither the recipient's country nor the received FX amount.
+{
+  const p=P.parse({id:'recipient-unknown',title:'duPay',postedAt:9000000,text:'Your request to transfer AED 25.00 to Test Recipient is successfully processed and the amount has been credited in the beneficiary account. TID: NEWREF123'});
+  const s=empty();s.institutions.push({id:'du',providerRegistryId:'du-pay',country:'UAE',type:'wallet_provider'});
+  s.accounts.push({id:'wallet',institutionId:'du',type:'ewallet',country:'UAE',currency:'AED',openingBalance:100});
+  const plan=I.plan(p,s,{uid});assert.strictEqual(plan.action,'auto-save');
+  assert.strictEqual(plan.transaction.receivedAmountKnown,false);
+  assert.strictEqual(plan.create.beneficiaries[0].country,'OTHER');assert.strictEqual(plan.create.beneficiaries[0].defaultCurrency,null);
+}
+
+// Contradictory refund settlement evidence must be reviewed rather than adding a blind credit.
+{
+  const account={id:'bank',type:'bank',currency:'AED',observedBalance:5685.54,observedBalanceAt:1000000};
+  const route={status:'routed',account,confidence:0.99,instrument:{last4:'3993'}};
+  const p={recognized:true,kind:'refund',amount:38,currency:'AED',confidence:0.99,cardLast4:'3993',postedAt:2954432,availableBalance:5644.04};
+  assert.strictEqual(I.autoEligible(p,route).reason,'refund-balance-review');
+  assert.strictEqual(I.autoEligible({...p,availableBalance:5723.54},route).ok,true);
+}

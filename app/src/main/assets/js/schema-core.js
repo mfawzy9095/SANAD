@@ -615,6 +615,10 @@
       if (!countries.has(a.country)) push('بلد حساب غير صالح: ' + a.id);
       if (!currencies.has(a.currency)) push('عملة حساب غير صالحة: ' + a.id);
       if (!isFiniteNumberLike(a.openingBalance)) push('رصيد افتتاحي غير صالح: ' + a.id);
+      if(a.bankBalanceBaseline!=null){
+        const b=a.bankBalanceBaseline;
+        if(typeof b!=='object'||Array.isArray(b)||!isFiniteNumberLike(b.at)||Number(b.at)<=0||!isFiniteNumberLike(b.balance)||(b.phase!=null&&!['before','after'].includes(b.phase)))push('نقطة رصيد البنك غير صالحة: '+a.id);
+      }
       if (!isFiniteNumberLike(a.openingDebt) || Number(a.openingDebt) < 0) push('دين افتتاحي غير صالح: ' + a.id);
       if (!isFiniteNumberLike(a.creditLimit) || Number(a.creditLimit) < 0) push('حد ائتمان غير صالح: ' + a.id);
       if (a.type === 'prepaid' && Number(a.openingBalance) < -0.01) push('رصيد prepaid افتتاحي سالب: ' + a.id);

@@ -713,7 +713,7 @@
     let bene=arr(state&&state.beneficiaries).find(b=>b&&normalizedPerson(b.name)===key)||null;
     if(!bene){
       bene={
-        id:uid('bene'),name,country:countryForParsed(parsed),defaultCurrency:parsed.currency||'AED',
+        id:uid('bene'),name,country:parsed.beneficiaryCountry||'OTHER',defaultCurrency:parsed.receivedCurrency||null,
         note:'Auto-discovered from financial notification',type:'person',archived:false,
         created:new Date(parsed.postedAt||Date.now()).toISOString().slice(0,10),autoDiscovered:true
       };
@@ -726,6 +726,14 @@
     if(!parsed||!parsed.recognized)return {ok:false,reason:'unrecognized'};
     if(parsed.ignored)return {ok:false,reason:parsed.reason||'ignored'};
     if(parsed.feeFormula)return {ok:false,reason:'fee-review-required'};
+    if(parsed.kind==='refund'&&route&&route.account){
+      const a=route.account,credit=a.type==='credit',value=num(credit?parsed.availableCredit:parsed.availableBalance);
+      const previous=num(credit?a.observedAvailableCredit:a.observedBalance);
+      const previousAt=Number(credit?a.observedAvailableCreditAt:a.observedBalanceAt)||0;
+      const elapsed=Number(parsed.postedAt)-previousAt;
+      if(value!=null&&previous!=null&&previousAt>0&&elapsed>0&&elapsed<=86400000&&value<previous)
+        return {ok:false,reason:'refund-balance-review'};
+    }
     if(!route||route.status!=='routed')return {ok:false,reason:(route&&route.reason)||'route-required'};
     if(Number(route.confidence||0)<0.90)return {ok:false,reason:'route-confidence-low'};
     const exactInstrument=!!(route.instrument&&parsed.cardLast4&&String(route.instrument.last4||'')===String(parsed.cardLast4));
@@ -736,6 +744,7 @@
     if(Number(parsed.confidence||0)<minParsedConfidence)return {ok:false,reason:'low-confidence'};
     if(parsed.cardLast4&&parsed.cardType&&['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)&&!route.instrument)return {ok:false,reason:'instrument-missing'};
     if((num(parsed.fee)||0)+(num(parsed.vat)||0)>0)return {ok:false,reason:'fee-review-required'};
+    if(parsed.kind==='refund'&&parsed.cardLast4&&!route.instrument)return {ok:false,reason:'refund-instrument-required'};
     if(parsed.kind==='cash_withdrawal'&&!route.targetAccount)return {ok:false,reason:'cash-destination-required'};
     return {ok:true};
   }
@@ -783,6 +792,7 @@
     let route=routeFromLearnedRule(parsed,draft,learnedRule)||resolveCustomRoute(parsed,draft,MessageCore.resolveRoute(parsed,draft));
     const initialRoute=route;
     const direct=autoEligible(parsed,route);
+    if(['refund-balance-review','refund-instrument-required'].includes(direct.reason))return {action:'review',reason:direct.reason,confidence:0};
     if(direct.ok){
       const create={institutions:[],accounts:[],instruments:[],beneficiaries:[]};
       let built=applyLearnedCategory(parsed,state,MessageCore.buildTransaction(parsed,route,{uid}));

@@ -110,3 +110,12 @@ function emptyState(){
 })();
 
 console.log('schema-core regression tests: PASS');
+
+(function bankBaselineValidationAndRestore(){
+  const s=Schema.migrate(emptyState());
+  s.accounts.push({id:'timeline',type:'bank',country:'UAE',currency:'AED',openingBalance:100,openingDebt:0,creditLimit:0,bankBalanceBaseline:{at:2000,balance:100}});
+  assert.deepStrictEqual(Schema.validateStateStrict(s),[]);
+  assert.deepStrictEqual(Schema.migrate(s).accounts[0].bankBalanceBaseline,{at:2000,balance:100});
+  s.accounts[0].bankBalanceBaseline.balance=null;
+  assert.ok(Schema.validateStateStrict(s).some(x=>x.includes('نقطة رصيد البنك')));
+})();
