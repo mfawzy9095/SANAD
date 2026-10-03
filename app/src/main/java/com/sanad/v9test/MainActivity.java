@@ -630,6 +630,7 @@ public final class MainActivity extends Activity {
             long nextDate = cursorDate;
             long nextId = cursorId;
             boolean hasMore = false;
+            boolean capacityReached = false;
 
             try (Cursor cursor = getContentResolver().query(
                     Telephony.Sms.Inbox.CONTENT_URI,
@@ -652,6 +653,8 @@ public final class MainActivity extends Activity {
                         String address = addressCol >= 0 ? cursor.getString(addressCol) : "";
                         String body = bodyCol >= 0 ? cursor.getString(bodyCol) : "";
                         long at = dateCol >= 0 ? cursor.getLong(dateCol) : 0L;
+                        long previousDate = nextDate;
+                        long previousId = nextId;
                         nextDate = Math.max(0L, at);
                         nextId = Math.max(0L, smsId);
 
@@ -661,16 +664,23 @@ public final class MainActivity extends Activity {
                         if (!BankNotificationFilter.looksLikeCandidate(probe)) continue;
 
                         candidates++;
-                        if (BankNotificationStore.enqueue(
+                        int enqueueStatus = BankNotificationStore.enqueueStatus(
                                 MainActivity.this,
                                 "sms:" + safeAddress,
                                 safeAddress,
                                 body,
-                                at > 0L ? at : System.currentTimeMillis())) {
-                            added++;
+                                at > 0L ? at : System.currentTimeMillis());
+                        if (enqueueStatus == BankNotificationStore.FULL) {
+                            nextDate = previousDate;
+                            nextId = previousId;
+                            capacityReached = true;
+                            hasMore = true;
+                            break;
                         }
+                        if (enqueueStatus == BankNotificationStore.ERROR) throw new IllegalStateException("inbox-write-failed");
+                        if (enqueueStatus == BankNotificationStore.ADDED) added++;
                     }
-                    if (scanned >= safeLimit) {
+                    if (!capacityReached && scanned >= safeLimit) {
                         if (cancellationSignal != null) cancellationSignal.throwIfCanceled();
                         hasMore = cursor.moveToNext();
                     }
@@ -687,6 +697,7 @@ public final class MainActivity extends Activity {
             out.put("nextAfterDate", nextDate);
             out.put("nextAfterId", nextId);
             out.put("done", !hasMore);
+            out.put("capacityReached", capacityReached);
             return out;
         } catch (OperationCanceledException cancelled) {
             try {

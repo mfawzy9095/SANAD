@@ -3,6 +3,8 @@ package com.sanad.v9test;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 public class BankNotificationStoreTest {
     @Test
@@ -27,5 +29,11 @@ public class BankNotificationStoreTest {
                 "Card 4578 XXXX XXXX 0308 purchase AED 10.00",
                 BankNotificationStore.redactSensitiveCardNumbers(
                         "Card 4578 XXXX XXXX 0308 purchase AED 10.00"));
+    }
+    @Test
+    public void inboxCapacityStopsInsteadOfEvictingReviewEvents() {
+        assertFalse(BankNotificationStore.capacityReached(199));
+        assertTrue(BankNotificationStore.capacityReached(200));
+        assertTrue(BankNotificationStore.capacityReached(201));
     }
 }

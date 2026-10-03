@@ -22,19 +22,28 @@ public final class BankNotificationStore {
     private static final String KEY_LAST_TITLE = "last_title";
     private static final int MAX_EVENTS = 200;
     private static final int MAX_TEXT = 4000;
-    private static final long DEDUPE_WINDOW_MS = 15L * 60L * 1000L;
     private static final Pattern PAN_CANDIDATE =
             Pattern.compile("(?<!\\d)(?:\\d[ -]?){12,18}\\d(?!\\d)");
 
     private BankNotificationStore() {}
 
+    public static final int ADDED = 1;
+    public static final int DUPLICATE = 0;
+    public static final int FULL = -1;
+    public static final int ERROR = -2;
+
     public static synchronized boolean enqueue(
             Context context, String packageName, String title, String text, long postedAt) {
-        if (context == null) return false;
+        return enqueueStatus(context, packageName, title, text, postedAt) == ADDED;
+    }
+
+    public static synchronized int enqueueStatus(
+            Context context, String packageName, String title, String text, long postedAt) {
+        if (context == null) return ERROR;
         String safePackage = trim(packageName, 180);
         String safeTitle = trim(redactSensitiveCardNumbers(title), 300);
         String safeText = trim(redactSensitiveCardNumbers(text), MAX_TEXT);
-        if (safeText.isEmpty()) return false;
+        if (safeText.isEmpty()) return ERROR;
 
         long ts = postedAt > 0L ? postedAt : System.currentTimeMillis();
         String fingerprint = sha256(safePackage + "\n" + safeTitle + "\n" + safeText);
@@ -46,17 +55,13 @@ public final class BankNotificationStore {
             if (old == null) continue;
             long oldTs = old.optLong("postedAt", 0L);
             if (fingerprint.equals(old.optString("fingerprint", "")) &&
-                    Math.abs(ts - oldTs) <= DEDUPE_WINDOW_MS) return false;
-            String oldContent = old.optString("contentFingerprint", "");
-            if (oldContent.isEmpty()) {
-                oldContent = sha256(old.optString("text", "").replaceAll("\\s+", " ").trim());
-            }
-            if (contentFingerprint.equals(oldContent) &&
-                    Math.abs(ts - oldTs) <= 2L * 60L * 1000L) return false;
+                    ts == oldTs) return DUPLICATE;
+
         }
 
+        if (capacityReached(current.length())) return FULL;
         JSONArray next = new JSONArray();
-        int start = Math.max(0, current.length() - (MAX_EVENTS - 1));
+        int start = 0;
         for (int i = start; i < current.length(); i++) {
             JSONObject old = current.optJSONObject(i);
             if (old != null) next.put(old);
@@ -72,10 +77,10 @@ public final class BankNotificationStore {
             event.put("fingerprint", fingerprint);
             event.put("contentFingerprint", contentFingerprint);
         } catch (Exception e) {
-            return false;
+            return ERROR;
         }
         next.put(event);
-        write(context, next);
+        if (!write(context, next)) return ERROR;
         SharedPreferences p = prefs(context);
         p.edit()
                 .putLong(KEY_CAPTURED_TOTAL, p.getLong(KEY_CAPTURED_TOTAL, 0L) + 1L)
@@ -83,7 +88,7 @@ public final class BankNotificationStore {
                 .putString(KEY_LAST_PACKAGE, safePackage)
                 .putString(KEY_LAST_TITLE, safeTitle)
                 .apply();
-        return true;
+        return ADDED;
     }
 
     public static synchronized String getAllJson(Context context) {
@@ -177,8 +182,10 @@ public final class BankNotificationStore {
         }
     }
 
-    private static void write(Context context, JSONArray arr) {
-        prefs(context).edit().putString(KEY, arr.toString()).apply();
+    static boolean capacityReached(int count) { return count >= MAX_EVENTS; }
+
+    private static boolean write(Context context, JSONArray arr) {
+        return prefs(context).edit().putString(KEY, arr.toString()).commit();
     }
 
     private static SharedPreferences prefs(Context context) {

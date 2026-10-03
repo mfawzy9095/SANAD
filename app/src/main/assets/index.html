@@ -9051,6 +9051,7 @@ const SanadBankInbox = {
         if(S.tab==='settings'&&(pages===1||pages%8===0))render();
 
         if(page.done)break;
+        if(page.capacityReached&&Number(batch.added||0)+Number(batch.duplicates||0)+Number(batch.ignored||0)===0){status='review-capacity';break;}
         const nextDate=Number(page.nextAfterDate||0),nextId=Number(page.nextAfterId||0);
         if(nextDate===afterDate&&nextId===afterId){status='cursor-stalled';break;}
         afterDate=nextDate;afterId=nextId;
@@ -9068,6 +9069,7 @@ const SanadBankInbox = {
 
     if(status==='cancelled')toast('تم إيقاف استيراد SMS · فُحص '+total.scanned+' رسالة',4200);
     else if(status==='complete'&&total.scanned===0)toast('Android لم يُرجع أي SMS من صندوق الرسائل',5000);
+    else if(status==='review-capacity')toast('توقف الفحص لحفظ الرسائل: صندوق المراجعة ممتلئ. راجع الرسائل المعلقة ثم أعد الفحص؛ الرسائل الأصلية لم تُحذف.',8000);
     else if(status==='complete')toast('تم فحص '+total.scanned+' SMS · مالية '+total.financialCandidates+' · parsed '+total.parsed+' · أضيف '+total.added+' · مراجعة '+total.review+' · مكرر '+total.duplicates,6500);
     else if(status==='permission-restricted')toast('Android منع صلاحية قراءة SMS لهذه النسخة أو طريقة التثبيت',5000);
     else if(status==='query-failed')toast('تعذر قراءة صندوق SMS من Android',5000);
