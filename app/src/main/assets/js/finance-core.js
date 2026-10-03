@@ -111,12 +111,22 @@
     return bal<0?-bal:0;
   }
 
-  function creditAvailable(state,accountId){
+  function creditAvailableCalculated(state,accountId){
     const a=getAccount(state,accountId);
-    if(!a||a.type!=='credit')return null;
+    if(!a||a.type!=='credit'||a.baselinePartial===true)return null;
     const limit=num(a.creditLimit);
     if(limit<=0)return null;
     return Math.max(0,round2(limit-accountDebt(state,accountId)));
+  }
+
+  function creditAvailable(state,accountId){
+    const a=getAccount(state,accountId);
+    if(!a||a.type!=='credit')return null;
+    const value=a.observedAvailableCredit,at=Number(a.observedAvailableCreditAt)||0;
+    const known=value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value));
+    const later=(state&&Array.isArray(state.transactions)?state.transactions:[]).some(t=>t&&(t.accountId===accountId||t.fromAccountId===accountId||t.toAccountId===accountId)&&Number(t.created)>at);
+    if(known&&at>0&&!later)return round2(value);
+    return creditAvailableCalculated(state,accountId);
   }
 
   function capturePrepaidBalances(state){
@@ -165,6 +175,7 @@
     capturePrepaidBalances,
     checkPrepaidInvariant,
     creditAvailable,
+    creditAvailableCalculated,
     getAccount,
     isLiabilityAccount,
     round2,

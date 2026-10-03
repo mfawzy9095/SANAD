@@ -137,3 +137,12 @@ console.log('finance-core regression tests: PASS');
   assert.strictEqual(F.accountBalanceAt(s,'timeline',2000),90);
   assert.strictEqual(F.accountBalanceAt(s,'timeline',1000),null);
 }
+
+// Available credit is independent of debt and can explicitly be negative.
+{
+  const s=state([{id:'c',type:'credit',openingDebt:0,creditLimit:0,baselinePartial:true,observedAvailableCredit:-608.56,observedAvailableCreditAt:300}],[]);
+  assert.strictEqual(F.creditAvailable(s,'c'),-608.56);
+  assert.strictEqual(F.creditAvailableCalculated(s,'c'),null);
+  s.transactions.push({type:'expense',accountId:'c',amount:5,created:400});
+  assert.strictEqual(F.creditAvailable(s,'c'),null); // historical observation is no longer current
+}

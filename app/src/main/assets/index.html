@@ -1878,15 +1878,16 @@ function viewHome(){
     const summary = {};
     liabAccounts.forEach(a => {
       const d = Finance.accountDebt(a.id);
-      if (d > 0) summary[a.currency] = (summary[a.currency] || 0) + d;
+      if (d > 0&&!a.baselinePartial) summary[a.currency] = (summary[a.currency] || 0) + d;
     });
     const rows = Object.entries(summary).map(([cur,total]) =>
       '<div class="ds-row"><span>عليك</span><span class="amt-val">' + amtText(total) + ' <span class="cur">' + Finance.curSymbol(cur) + '</span></span></div>'
     ).join('');
-    if (rows){
+    const partialDebt=liabAccounts.some(a=>a.baselinePartial);
+    if (rows||partialDebt){
       liabilityHtml = '<div class="debt-summary" data-act="open-liabilities">' +
         '<div class="ds-head"><b>المديونيات — ' + esc(countryInfo(country).name) + '</b><span>' + liabAccounts.length + ' ›</span></div>' +
-        '<div>' + rows + '</div></div>';
+        '<div>' + rows + (partialDebt?'<div class="ds-row">بعض المديونيات غير مؤكدة — سجل الرسائل غير مكتمل</div>':'') + '</div></div>';
     }
   }
   const upcoming = getUpcomingRecurring();
@@ -2295,7 +2296,7 @@ function accountTileHtml(a, size){
     if (a.type === 'credit'){
       const avail = Finance.creditAvailable(a.id);
       const limit = Number(a.creditLimit) || 0;
-      amountHtml = (debt > 0 ? 'عليك ' + amtText(debt) : 'لا يوجد مديونية') + ' <small>' + Finance.curSymbol(a.currency) + '</small>';
+      amountHtml = a.baselinePartial?'المديونية غير مؤكدة':((debt > 0 ? 'عليك ' + amtText(debt) : 'لا يوجد مديونية') + ' <small>' + Finance.curSymbol(a.currency) + '</small>');
       extraHtml = '<div class="tile-row"><span>المتاح</span><span class="amt-val">' + (avail !== null ? amtText(avail) : 'غير محدد') + '</span></div>' +
         (limit > 0 ? '<div class="tile-row"><span>الحد</span><span class="amt-val">' + amtText(limit) + '</span></div>' : '');
     } else {
@@ -2336,7 +2337,7 @@ function instrumentTileHtml(inst, size){
     const debt = Math.abs(bal);
     const avail = Finance.creditAvailable(acc.id);
     const limit = Number(acc.creditLimit) || 0;
-    amountHtml = (debt > 0 ? 'عليك ' + amtText(debt) : 'لا يوجد مديونية') + ' <small>' + Finance.curSymbol(acc.currency) + '</small>';
+    amountHtml = acc.baselinePartial?'المديونية غير مؤكدة':((debt > 0 ? 'عليك ' + amtText(debt) : 'لا يوجد مديونية') + ' <small>' + Finance.curSymbol(acc.currency) + '</small>');
     extraHtml = '<div class="tile-row"><span>المتاح</span><span class="amt-val">' + (avail !== null ? amtText(avail) : 'غير محدد') + '</span></div>' +
       (limit > 0 ? '<div class="tile-row"><span>الحد</span><span class="amt-val">' + amtText(limit) + '</span></div>' : '');
   } else {
@@ -8785,7 +8786,7 @@ const SanadBankInbox = {
     }
     if(account&&isFiniteNumberLike(parsed.availableCredit)){
       const observed=Math.round(Number(parsed.availableCredit)*100)/100;
-      const calculated=Finance.creditAvailable(account.id);
+      const calculated=FinanceCore.creditAvailableCalculated(S,account.id);
       const existingCreditAt=Number(account.observedAvailableCreditAt)||0;
       if(existingCreditAt<=0||ts>=existingCreditAt){
         account.observedAvailableCredit=observed;
@@ -9245,7 +9246,7 @@ const SanadBankInbox = {
     const parsed=item.parsed;
     let plan=BankIngestionCore.plan(parsed,S,{uid});
     if(plan.action==='duplicate'){this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
-    if(plan.action==='auto-save'){
+    if(['auto-save','observe'].includes(plan.action)){
       const saved=await this.commitPlan(parsed,plan);
       if(!saved.ok){render();toast('تعذر إضافة العملية — لم يتم تغيير البيانات');return;}
       this.ack([item.native.id]);await this.sync({force:false});render();await this.open();toast('تمت إضافة العملية');return;
