@@ -40,3 +40,15 @@ async function scenario(status,mode='recent',permission=true){
  assert(html.includes("if(a==='bank-sms-recent')return SanadBankInbox.refreshRecentSms();"));
  console.log('Recent SMS import: checkpoints, failures, permissions and plus entry: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});
+
+// A credit-card acknowledgement observes the repaid card, never cash credit.
+{
+ const from={id:'bank',type:'bank',openingBalance:1000},to={id:'credit',type:'credit',baselinePartial:true};
+ const state={accounts:[from,to],transactions:[]};
+ const a=html.indexOf('  applyReconciliation(parsed,plan){'),b=html.indexOf('  async commitPlan(parsed,plan){',a);
+ const ctx={S:state,Date,Number,Math,isFiniteNumberLike:v=>v!=null&&v!==''&&Number.isFinite(Number(v)),Finance:{getAccount:id=>state.accounts.find(x=>x.id===id)},FinanceCore:{accountBalanceAt:()=>1000,creditAvailableCalculated:()=>null}};
+ vm.createContext(ctx);const inbox=vm.runInContext('({'+html.slice(a,b)+'})',ctx);
+ inbox.applyReconciliation({kind:'card_repayment',postedAt:now,availableBalance:null,availableCredit:500},{transaction:{type:'transfer',fromAccountId:'bank',toAccountId:'credit'}});
+ assert.strictEqual(to.observedAvailableCredit,500);assert.strictEqual(from.observedAvailableCredit,undefined);
+ assert.strictEqual(to.creditReconciliation.status,'observed-only');
+}

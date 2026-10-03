@@ -8793,19 +8793,20 @@ const SanadBankInbox = {
         warning=difference!=null&&Math.abs(difference)>0.01;
       }
     }
-    if(account&&isFiniteNumberLike(parsed.availableCredit)){
+    const creditAccount=parsed.kind==='card_repayment'?Finance.getAccount(tx.toAccountId):account;
+    if(creditAccount&&creditAccount.type==='credit'&&isFiniteNumberLike(parsed.availableCredit)){
       const observed=Math.round(Number(parsed.availableCredit)*100)/100;
-      const calculated=FinanceCore.creditAvailableCalculated(S,account.id);
-      const existingCreditAt=Number(account.observedAvailableCreditAt)||0;
+      const calculated=FinanceCore.creditAvailableCalculated(S,creditAccount.id);
+      const existingCreditAt=Number(creditAccount.observedAvailableCreditAt)||0;
       if(existingCreditAt<=0||ts>=existingCreditAt){
-        account.observedAvailableCredit=observed;
-        account.observedAvailableCreditAt=ts;
+        creditAccount.observedAvailableCredit=observed;
+        creditAccount.observedAvailableCreditAt=ts;
         if(calculated==null){
-          account.creditReconciliation={kind:'available-credit',observed,calculated:null,difference:null,at:ts,status:'observed-only'};
+          creditAccount.creditReconciliation={kind:'available-credit',observed,calculated:null,difference:null,at:ts,status:'observed-only'};
         }else{
           const c=Math.round(Number(calculated)*100)/100;
           const difference=Math.round((observed-c)*100)/100;
-          account.creditReconciliation={kind:'available-credit',observed,calculated:c,difference,at:ts,status:Math.abs(difference)<=0.01?'matched':'mismatch'};
+          creditAccount.creditReconciliation={kind:'available-credit',observed,calculated:c,difference,at:ts,status:Math.abs(difference)<=0.01?'matched':'mismatch'};
           warning=warning||Math.abs(difference)>0.01;
         }
       }
