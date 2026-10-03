@@ -1,6 +1,7 @@
 'use strict';
 // Runs against the installed APK on an Android emulator. No mock native bridge.
-const {chromium}=require('playwright');
+// Use raw DevTools commands: WebView does not implement desktop Browser context APIs.
+
 const {execFileSync}=require('child_process');
 const fs=require('fs'),path=require('path'),assert=require('assert/strict');
 const pkg='com.sanad.v9test.forensicqa.stable',out=process.env.SANAD_QA_OUTPUT||'/tmp/sanad-android-qa';fs.mkdirSync(out,{recursive:true});
@@ -14,9 +15,16 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
   if(match){adb('forward','tcp:9222','localabstract:'+match[1]);break;}
   await new Promise(r=>setTimeout(r,1000));
  }
- browser=await chromium.connectOverCDP('http://127.0.0.1:9222');
- page=browser.contexts()[0].pages()[0];assert(page);
- page.on('pageerror',e=>errors.push(e.message));
+ const targets=await (await fetch('http://127.0.0.1:9222/json/list')).json();
+ const target=targets.find(t=>t.type==='page');assert(target);
+ const socket=new WebSocket(target.webSocketDebuggerUrl);await new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});});
+ let seq=0;const pending=new Map();
+ socket.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.id){const p=pending.get(m.id);if(p){pending.delete(m.id);clearTimeout(p.timer);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}}else if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.text);});
+ const command=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq;const timer=setTimeout(()=>{pending.delete(id);reject(Error('DevTools timeout: '+method));},60000);pending.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params}));});
+ const evaluate=async(fn,arg)=>{const r=await command('Runtime.evaluate',{expression:'('+fn.toString()+')('+JSON.stringify(arg===undefined?null:arg)+')',awaitPromise:true,returnByValue:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result.value;};
+ await command('Runtime.enable');await command('Page.enable');
+ page={evaluate,url:()=>target.url,waitForFunction:async(fn,arg)=>{for(let n=0;n<600;n++){if(await evaluate(fn,arg))return;await new Promise(r=>setTimeout(r,100));}throw Error('Android condition timed out: '+fn);},locator:selector=>({isVisible:()=>evaluate(s=>{const e=document.querySelector(s);return !!e&&!e.hidden&&e.getBoundingClientRect().height>0;},selector),click:()=>evaluate(s=>{const e=document.querySelector(s);if(!e)throw Error('missing '+s);e.click();},selector),fill:value=>evaluate(({s,v})=>{const e=document.querySelector(s);if(!e)throw Error('missing '+s);e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));},{s:selector,v:value})}),reload:async()=>{await command('Page.reload');await new Promise(r=>setTimeout(r,1500));},screenshot:async({path})=>{const r=await command('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path,Buffer.from(r.data,'base64'));}};
+ browser={close:async()=>socket.close()};
  await page.waitForFunction(()=>typeof S!=='undefined'&&S.ready&&SanadV9.initialized,{},{timeout:60000});
  assert.match(page.url(),/^https:\/\/appassets.androidplatform.net\/assets\/index.html/);
  if(await page.locator('#onboard').isVisible())await page.locator('[onclick="onboardSkip()"]').click();

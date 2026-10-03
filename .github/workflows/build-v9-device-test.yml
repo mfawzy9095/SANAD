@@ -803,8 +803,10 @@ jobs:
         with:
           name: SANAD-V9.2-FORENSIC-QA
           path: device-apk
-      - name: Install browser test driver
-        run: npm --prefix tools/e2e ci
+      - name: Set up native WebView test driver
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
