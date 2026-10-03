@@ -75,7 +75,8 @@ main{flex:1;overflow-y:auto;padding:0 16px 120px;-webkit-overflow-scrolling:touc
 .wallet-hero .amount-eye{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:rgba(255,255,255,.14);color:#fff;font-size:17px;position:relative;z-index:4}
 .wallet-hero .amount-eye:active{background:rgba(255,255,255,.24)}
 .wallet-hero .wh-sub{font-size:11.5px;opacity:.85;margin-top:4px;position:relative;z-index:1}
-.wallet-hero .wh-link{position:absolute;top:16px;inset-inline-end:16px;font-size:11.5px;opacity:.9;z-index:3;cursor:pointer;padding:4px 8px;border-radius:8px}
+.wallet-hero .wh-link{position:relative;display:block;text-align:end;margin-bottom:8px;font-size:11.5px;opacity:.9;z-index:3;cursor:pointer;padding:0 4px;border-radius:8px}
+.wallet-hero .wh-name,.wallet-hero .wh-cur{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .wallet-hero.masked .wh-bal{filter:blur(9px);user-select:none}
 .country-summary{background:var(--surface);border-radius:14px;padding:14px;box-shadow:var(--shadow-1);margin-bottom:10px}
 .country-summary .cs-hdr{font-size:12px;color:var(--text-2);font-weight:600;margin-bottom:6px}
@@ -1853,7 +1854,7 @@ function viewHome(){
     heroHtml = '<div class="wallet-hero ' + maskCls + '" data-account-open="' + defaultAcc.id + '">' +
       '<div class="wh-link" data-act="go-accounts">كل الحسابات ›</div>' +
       '<div class="wh-top"><div class="wh-ico">' + institutionLogoHtml(inst,32,defaultAcc.icon) + '</div>' +
-        '<div style="flex:1"><div class="wh-name">' + cInfo.flag + ' ' + esc(defaultAcc.name) + '</div>' +
+        '<div style="flex:1;min-width:0"><div class="wh-name">' + cInfo.flag + ' ' + esc(defaultAcc.name) + '</div>' +
           '<div class="wh-cur">' + (inst ? esc(inst.name) + ' · ' : '') + Finance.curInfo(defaultAcc.currency).name + '</div></div>' +
       '</div>' +
       '<div class="wh-balance-row"><div class="wh-bal amt-val">' + amtText(bal) + ' <span style="font-size:14px;opacity:.85">' + Finance.curSymbol(defaultAcc.currency) + '</span></div>' + quickAmountEye + '</div>' +

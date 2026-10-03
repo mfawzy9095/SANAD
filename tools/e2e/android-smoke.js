@@ -41,6 +41,7 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  await page.evaluate(()=>openNewTx('expense'));await page.locator('#amountIn').fill('25');await page.locator('[data-act="save-tx"]').click();
  await page.waitForFunction(()=>S.transactions.length===3&&!_financialFlowInFlight);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bank.id),9076.66);pass('Native WebView manual expense save and balance');
+ await page.waitForFunction(()=>Number(getComputedStyle(document.getElementById('toast')).opacity)<0.01&&Number(getComputedStyle(document.getElementById('backdrop')).opacity)<0.01&&Number(getComputedStyle(document.querySelector('#view .wallet-hero')||document.getElementById('view')).opacity)>0.99);
  await page.screenshot({path:path.join(out,'android-home.png')});assert.deepEqual(errors,[]);
  fs.writeFileSync(path.join(out,'results.json'),JSON.stringify({status:'PASS',environment:'Android emulator API 35; real APK and AndroidBridge; synthetic SMS',results,errors},null,2));
 })().catch(async e=>{console.error(e);fs.writeFileSync(path.join(out,'results.json'),JSON.stringify({status:'FAIL',results,errors,error:e.message},null,2));if(page)try{await page.screenshot({path:path.join(out,'failure.png')});}catch(_){}process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();});

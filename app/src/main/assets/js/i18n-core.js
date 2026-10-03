@@ -21,6 +21,12 @@
     return {
   lang:'ar',
   exact:{
+    'سحب الرسائل':'Refresh SMS','مراجعة الرسائل':'Review messages','إيقاف فحص الرسائل':'Stop SMS scan',
+    'انتظر انتهاء الحفظ أو فحص الرسائل ثم أعد المحاولة':'Wait for saving or message scanning to finish, then try again.',
+    'انتظر انتهاء الحفظ ثم أعد المحاولة':'Wait for saving to finish, then try again.',
+    'رصيد تقديري بعد آخر رسالة':'Estimated balance after the latest message','آخر رصيد وارد من المصدر':'Latest source-reported balance','رصيد محسوب من السجل':'Calculated ledger balance',
+    'آخر تحديث':'Last refresh','مضافة':'added','مكررة':'duplicates','للمراجعة':'for review',
+
     'الرئيسية':'Home','المعاملات':'Transactions','الحسابات':'Accounts','الالتزامات':'Recurring','التقارير':'Reports','الإعدادات':'Settings',
     'عام':'General','الوضع الفاتح':'Appearance','إخفاء المبالغ':'Hide amounts','الإشعارات':'Notifications','تعمل أثناء فتح التطبيق فقط':'Works while the app is open','تنبيهات الالتزامات حتى عند إغلاق التطبيق':'Recurring reminders even when the app is closed',
     'البلد الافتراضية':'Default country','يبدأ التطبيق بهذه البلد عند فتحه.':'The app opens with this country.','الالتزامات والاشتراكات':'Recurring & subscriptions','إدارة الالتزامات':'Manage recurring items',

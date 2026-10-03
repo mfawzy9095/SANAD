@@ -6,6 +6,7 @@ const assert=require('assert/strict'),fs=require('fs'),path=require('path');
 const output=process.env.SANAD_QA_OUTPUT||'/tmp/sanad-browser-qa';fs.mkdirSync(output,{recursive:true});
 const results=[],errors=[];let browser,page;
 const record=(name)=>{results.push({name,status:'PASS'});console.log('PASS:',name);};
+async function stableHome(){await page.waitForFunction(()=>Number(getComputedStyle(document.getElementById('toast')).opacity)<0.01&&Number(getComputedStyle(document.getElementById('backdrop')).opacity)<0.01&&Number(getComputedStyle(document.querySelector('#view .wallet-hero')||document.getElementById('view')).opacity)>0.99);}
 (async()=>{
  browser=await chromium.launch({headless:true});
  const context=await browser.newContext({viewport:{width:393,height:852},acceptDownloads:true});
@@ -109,14 +110,14 @@ const record=(name)=>{results.push({name,status:'PASS'});console.log('PASS:',nam
  // An import cannot overlap a pending critical save.
  assert(await page.evaluate(async data=>{let finish;const saving=commitCriticalMutation(()=>new Promise(r=>{finish=r;}));await Promise.resolve();const refused=await SanadFullBackup.importData(data,false);finish(false);await saving;return refused===false;},saved));
  record('Full restore blocked during an unfinished financial write');
- await page.evaluate(()=>go('home'));await page.screenshot({path:path.join(output,'mobile-ar.png')});
+ await page.evaluate(()=>go('home'));await stableHome();await page.screenshot({path:path.join(output,'mobile-ar.png')});
  for(const tab of ['tx','accounts','subs','rep','home']){await page.locator('#bottomNav [data-tab="'+tab+'"]').click();assert((await page.locator('#view').innerText()).length>0);}
  record('All primary tabs respond without blank pages');
  await page.evaluate(()=>go('settings'));await page.locator('[data-sanad-act="lang"][data-value="en"]').click();
  await page.waitForFunction(()=>document.documentElement.dir==='ltr');await page.locator('[data-sanad-act="theme"][data-value="dark"]').click();
  await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
- await page.evaluate(()=>go('home'));await page.screenshot({path:path.join(output,'mobile-en-dark.png')});record('English LTR and dark theme');
- for(const width of [360,1280]){await page.setViewportSize({width,height:852});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:path.join(output,'viewport-'+width+'.png')});}
+ await page.evaluate(()=>go('home'));await stableHome();await page.screenshot({path:path.join(output,'mobile-en-dark.png')});record('English LTR and dark theme');
+ for(const width of [360,1280]){await page.setViewportSize({width,height:852});await stableHome();assert(await page.evaluate(()=>{const a=document.querySelector('.wh-link').getBoundingClientRect(),b=document.querySelector('.wh-name').getBoundingClientRect();return a.bottom<=b.top;}),'long account name must not overlap the account link');assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:path.join(output,'viewport-'+width+'.png')});}
  record('360/393/1280 widths without page overflow');
  assert.deepEqual(errors,[]);record('No JavaScript runtime or console errors');
  fs.writeFileSync(path.join(output,'results.json'),JSON.stringify({status:'PASS',environment:'Chromium/Linux; Android bridge simulated; synthetic data only',results,errors},null,2));
