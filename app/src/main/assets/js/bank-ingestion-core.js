@@ -927,7 +927,15 @@
     return {accountId,observed:round2(observed),calculated,difference:diff,matched:Math.abs(diff)<=0.01};
   }
 
+  function recentScanStart(previous,now){
+    const end=Number(now);
+    if(!Number.isFinite(end)||end<=0)throw new Error('valid-scan-time-required');
+    const checkpoint=Number(previous&&previous.scannedThrough)||0;
+    // A one-day overlap covers late SMS delivery. Financial evidence handles repeats.
+    return Math.max(0,checkpoint>0?Math.min(checkpoint,end)-86400000:end-30*86400000);
+  }
   return Object.freeze({
+    recentScanStart,
     autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
   });
 });

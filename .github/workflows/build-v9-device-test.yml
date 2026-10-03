@@ -637,6 +637,7 @@ jobs:
           node app/src/test/js/bank-ingestion-sequence.test.js
           node app/src/test/js/bank-message-corpus.test.js
           node app/src/test/js/backup-repair-tool.test.js
+          node app/src/test/js/bank-recent-import.test.js
 
       - name: JVM regression tests
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
