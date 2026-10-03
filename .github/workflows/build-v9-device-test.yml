@@ -791,3 +791,39 @@ jobs:
             apk-permissions.txt
           if-no-files-found: error
           retention-days: 30
+
+  android-device-test:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: SANAD-V9.2-FORENSIC-QA
+          path: device-apk
+      - name: Install browser test driver
+        run: npm --prefix tools/e2e ci
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test APK on Android 35
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install device-apk/SANAD-V9.2-FORENSIC-QA.apk
+            SANAD_QA_OUTPUT="${{ runner.temp }}/sanad-android-qa" node tools/e2e/android-smoke.js
+      - name: Upload Android QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-ANDROID-QA
+          path: ${{ runner.temp }}/sanad-android-qa
+          if-no-files-found: warn
+          retention-days: 30

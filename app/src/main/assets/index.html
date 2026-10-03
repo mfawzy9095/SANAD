@@ -1316,7 +1316,13 @@ const Finance = {
   },
   ensureAllPrimaries(){
     const cs = new Set(S.accounts.map(a => a.country));
-    cs.forEach(c => this.ensurePrimary(c));
+    cs.forEach(c => {
+      this.ensurePrimary(c);
+      if(!this.getDefaultAccountId(c)){
+        const first=S.accounts.find(a=>a.country===c&&!a.archived&&isAssetAccount(a)&&!a.ownedByInstrumentId);
+        if(first)S.settings.defaultAccountByCountry[c]=first.id;
+      }
+    });
     Object.keys(S.settings.defaultAccountByCountry).forEach(c => {
       const id = S.settings.defaultAccountByCountry[c];
       const a = this.getAccount(id);

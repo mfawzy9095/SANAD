@@ -77,6 +77,7 @@ public final class MainActivity extends Activity {
         cleanupOldCameraFiles();
         NotificationScheduler.ensureChannel(this);
 
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(244, 255, 253));
         setContentView(webView);
