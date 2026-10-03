@@ -1058,6 +1058,16 @@ const S = {
   activeBudgetAlerts:[]
 };
 
+let _dataReplacementInFlight=false;
+let _financialFlowInFlight=false;
+async function withExclusiveDataOperation(operation){
+  const bankBusy=typeof SanadBankInbox!=='undefined'&&(SanadBankInbox.syncing||SanadBankInbox.historicalImporting||SanadBankInbox._recentStarting);
+  if(_dataReplacementInFlight||_criticalMutationInFlight||_financialFlowInFlight||bankBusy){
+    toast('انتظر انتهاء الحفظ أو فحص الرسائل ثم أعد المحاولة');return false;
+  }
+  _dataReplacementInFlight=true;
+  try{return await operation();}finally{_dataReplacementInFlight=false;}
+}
 function canWrite(){ return S.previewMode || S.storageStatus === 'ok'; }
 
 function snapshotState(){ return StateModel.snapshotState(S); }
@@ -1065,6 +1075,7 @@ function snapshotState(){ return StateModel.snapshotState(S); }
 function loadStateInto(state){ return StateModel.loadStateInto(S,state); }
 
 async function persist(){
+  if(_dataReplacementInFlight||_criticalMutationInFlight)return false;
   if (!canWrite()) return false;
   /* Preview: memory adapter is durable for the session — simple write. */
   if (S.previewMode){
@@ -1164,7 +1175,7 @@ async function _commitCriticalMutationImpl(mutateFn){
 
 let _criticalMutationInFlight = false;
 async function commitCriticalMutation(mutateFn){
-  if (_criticalMutationInFlight){
+  if (_criticalMutationInFlight||_dataReplacementInFlight){
     _lastMutationError = 'busy';
     return {ok:false, reason:'busy', restored:true};
   }
@@ -6633,7 +6644,8 @@ async function unarchiveInstrument(id){
   toast('تم الاسترجاع');
 }
 /* ---------- STORAGE ---------- */
-async function retryStorage(){
+async function retryStorage(){return withExclusiveDataOperation(()=>retryStorageImpl());}
+async function retryStorageImpl(){
   toast('جاري إعادة المحاولة...');
   Storage.resetConnection();
   const initResult = await Storage.init();
@@ -6719,6 +6731,7 @@ async function retryStorage(){
   toast('فشل التحقق من التخزين — لا يزال وضع الحماية');
 }
 async function exportData(){
+  if(_dataReplacementInFlight||_criticalMutationInFlight||_financialFlowInFlight){toast('انتظر انتهاء الحفظ ثم أعد التصدير');return;}
   const state = snapshotState();
   const integrityErrors = Schema.validateStateStrict(state);
   if (integrityErrors.length){
@@ -6740,7 +6753,7 @@ async function exportData(){
 }
 async function importData(file){
   const r = new FileReader();
-  r.onload = async () => {
+  r.onload = async () => withExclusiveDataOperation(async () => {
     let parsed;
     try { parsed = BackupCore.parseJsonText(r.result); }
     catch(e){ toast('الملف ليس JSON صالح'); return; }
@@ -6854,10 +6867,11 @@ async function importData(file){
     render();
     if (vres.restored) toast('فشل الاستيراد — تم استرجاع الحالة السابقة');
     else toast('فشل الاستيراد — وضع الحماية');
-  };
+  });
   r.readAsText(file);
 }
-async function clearAll(){
+async function clearAll(){return withExclusiveDataOperation(()=>clearAllImpl());}
+async function clearAllImpl(){
   if (!canWrite()){ toast('وضع القراءة فقط'); return; }
   const ok = await dialog({emoji:'♻️', title:'إعادة ضبط البيانات المالية', msg:'سيتم تصفير الحسابات والمعاملات مع الاحتفاظ بنسخة استرجاع مؤقتة.', okText:'إعادة الضبط'});
   if (!ok) return;
@@ -6907,7 +6921,8 @@ async function clearAll(){
     toast('فشل الحذف — وضع الحماية');
   }
 }
-async function secureWipeAll(){
+async function secureWipeAll(){return withExclusiveDataOperation(()=>secureWipeAllImpl());}
+async function secureWipeAllImpl(){
   const ok = await dialog({
     emoji:'⚠️',
     title:'حذف SANAD بالكامل من الجهاز',
@@ -6945,7 +6960,8 @@ async function secureWipeAll(){
   });
 }
 
-async function restoreSnapshot(name){
+async function restoreSnapshot(name){return withExclusiveDataOperation(()=>restoreSnapshotImpl(name));}
+async function restoreSnapshotImpl(name){
   if (!canWrite()){ return; }
   const snap = await Storage.readSnapshot(name);
   if (!snap){ toast('النسخة غير متوفرة'); return; }
@@ -8179,7 +8195,7 @@ const SanadTheme = {
 };
 
 const SanadReceipts = {
-  pending:null, objectUrls:new Set(), _domain:null,
+  pending:null, draftGeneration:0, processing:false, objectUrls:new Set(), _domain:null,
   domain(){
     if(!this._domain)this._domain=ReceiptCore.createReceiptService({
       storage:SanadExtStorage,
@@ -8193,6 +8209,8 @@ const SanadReceipts = {
     return input;
   },
   async handleFile(file){
+    if(_dataReplacementInFlight||_financialFlowInFlight||this.processing)return;
+    const draft=S.form,generation=this.draftGeneration;
     if(SanadExtStorage.mode==='error'){
       this.ensureInput().value='';
       toast('تخزين المرفقات غير متاح — لم يتم إرفاق الفاتورة');
@@ -8205,13 +8223,15 @@ const SanadReceipts = {
       if(check.reason==='size'){toast('الصورة كبيرة جداً');return;}
       return;
     }
+    this.processing=true;
     try{
       const blob=await this.compress(file);
+      if(S.form!==draft||this.draftGeneration!==generation||_dataReplacementInFlight)return;
       this.pending={blob,meta:ReceiptCore.makeMeta(file,blob,Date.now())};
       this.refreshControls();
       toast('فاتورة مرفقة');
     }catch(e){console.error(e);toast('تعذر معالجة صورة الفاتورة');}
-    this.ensureInput().value='';
+    finally{this.processing=false;this.ensureInput().value='';}
   },
   async compress(file){
     const bmp=await createImageBitmap(file);
@@ -8241,7 +8261,8 @@ const SanadReceipts = {
     }else state.textContent='لا توجد فاتورة';
     SanadI18n.apply(box);
   },
-  async removeCurrent(){
+  async removeCurrent(){return withExclusiveDataOperation(()=>this.removeCurrentImpl());},
+  async removeCurrentImpl(){
     if(this.pending){this.pending=null;this.refreshControls();return true;}
     if(S.form&&S.form.id){
       const ok=await this.domain().remove(S.form.id);
@@ -8527,6 +8548,7 @@ const SanadFullBackup = {
     return new Blob([a],{type:mime});
   },
   async export(){
+    if(_dataReplacementInFlight||_criticalMutationInFlight||_financialFlowInFlight){toast('انتظر انتهاء الحفظ ثم أعد التصدير');return;}
     if(SanadExtStorage.mode==='error'){
       toast('تعذر إنشاء نسخة كاملة — تخزين المرفقات غير متاح');
       return false;
@@ -8585,7 +8607,9 @@ const SanadFullBackup = {
     }
     return {migrated:prepared.migrated,receipts};
   },
-  async importData(data,ask=true){
+  async importData(data,ask=true){return withExclusiveDataOperation(()=>this.importDataImpl(data,ask));},
+  async importDataImpl(data,ask=true){
+    if(!canWrite()){toast('وضع القراءة فقط — استرجع البيانات المالية من مسار الاسترداد أولًا');return false;}
     let prepared;try{prepared=this.prepare(data);}catch(e){const code=e&&e.message||'';if(code==='fingerprint-mismatch')toast('النسخة تالفة — بصمة السلامة غير مطابقة');else if(code==='not-full-backup')toast('ليست نسخة SANAD كاملة');else if(code==='migration-failed')toast('النسخة غير متوافقة');else toast('تم رفض النسخة لحماية البيانات');return false;}
     if(ask){const ok=await dialog({emoji:'📦',title:'استيراد نسخة كاملة',msg:'سيتم استبدال البيانات المالية والمرفقات المحلية الحالية.',okText:'استيراد'});if(!ok)return false;}
     const beforeFinance=snapshotState(),beforeReceipts=await SanadExtStorage.listReceipts(),beforeFamily=deepClone(SanadFamily.state),beforeFirebase=SanadCloud.config?deepClone(SanadCloud.config):null,beforeMeta=deepClone(SanadCloud.meta);
@@ -8598,7 +8622,19 @@ const SanadFullBackup = {
       if(!await SanadExtStorage.set('family',incomingFamily))throw new Error('family restore failed');
       if(incomingFirebase){if(!await SanadExtStorage.set('firebaseConfig',incomingFirebase))throw new Error('firebase config restore failed');}else if(!await SanadExtStorage.del('firebaseConfig'))throw new Error('firebase config clear failed');
       SanadFamily.state=incomingFamily;SanadCloud.config=incomingFirebase;SanadCloud.meta=Object.assign({},beforeMeta,{dirty:true,receiptDirty:{},lastSync:null});if(!await SanadExtStorage.set('syncMeta',SanadCloud.meta))throw new Error('sync meta restore failed');syncNativeNotifications();render();toast('تم الاستيراد');return true;
-    }catch(e){console.error(e);try{await SanadCloud.safeApplyRemote(beforeFinance);}catch(_){}try{await SanadExtStorage.replaceReceipts(beforeReceipts);}catch(_){}try{await SanadExtStorage.set('family',beforeFamily);SanadFamily.state=beforeFamily;}catch(_){}try{if(beforeFirebase)await SanadExtStorage.set('firebaseConfig',beforeFirebase);else await SanadExtStorage.del('firebaseConfig');SanadCloud.config=beforeFirebase;}catch(_){}try{SanadCloud.meta=beforeMeta;await SanadExtStorage.set('syncMeta',beforeMeta);}catch(_){}try{render();}catch(_){}toast('تعذر الاستيراد');return false;}
+    }catch(e){
+      console.error(e);
+      let restored=true;
+      async function rollback(action){try{if(await action()!==true)restored=false;}catch(_){restored=false;}}
+      await rollback(()=>SanadCloud.safeApplyRemote(beforeFinance));
+      await rollback(()=>SanadExtStorage.replaceReceipts(beforeReceipts));
+      await rollback(()=>SanadExtStorage.set('family',beforeFamily));SanadFamily.state=beforeFamily;
+      await rollback(()=>beforeFirebase?SanadExtStorage.set('firebaseConfig',beforeFirebase):SanadExtStorage.del('firebaseConfig'));SanadCloud.config=beforeFirebase;
+      SanadCloud.meta=beforeMeta;await rollback(()=>SanadExtStorage.set('syncMeta',beforeMeta));
+      if(!restored)await enterRecoveryMode('full-backup rollback failed',e);
+      try{render();}catch(_){}
+      toast(restored?'تعذر الاستيراد — تم استعادة البيانات السابقة':'تعذر الاستيراد والاسترجاع الكامل — أوقفنا الكتابة لحماية البيانات');return false;
+    }
   },
   async importFile(file){if(!file)return false;let data;try{data=BackupCore.parseJsonText(await file.text());}catch(_){toast('الملف ليس JSON صالح');return false;}return this.importData(data,true);}
 };
@@ -8821,6 +8857,7 @@ const SanadBankInbox = {
       if(BankIngestionCore.duplicateOf(parsed,S))return true;
       const applied=BankIngestionCore.applyPlan(S,plan);
       if(!applied)return false;
+      Finance.ensureAllPrimaries();
       reconciliation=this.applyReconciliation(parsed,plan);
       S.settings.bankAutoImportLastAt=Date.now();
       if(plan.transaction)S.settings.bankAutoImportCount=(Number(S.settings.bankAutoImportCount)||0)+1;
@@ -8839,6 +8876,7 @@ const SanadBankInbox = {
     finally{if(this._syncPromise===task)this._syncPromise=null;}
   },
   async syncImpl(options){
+    if(_dataReplacementInFlight)return {ok:false,status:'data-replacement-busy'};
     const opts=options||{};
     if(!this.supported()){this.items=[];return this.lastSummary;}
     this.syncing=true;
@@ -9393,9 +9431,10 @@ const _sanadCoreRender=render; render=function(){_sanadCoreRender();requestAnima
 const _sanadCoreOpenSheet=openSheet; openSheet=function(html,kind){_sanadCoreOpenSheet(html,kind);requestAnimationFrame(()=>SanadI18n.apply(document.getElementById('sheet')));};
 const _sanadCoreRenderTxSheet=renderTxSheet; renderTxSheet=function(){_sanadCoreRenderTxSheet();requestAnimationFrame(()=>{SanadReceipts.injectTxControls();SanadFamily.injectTxToggle();SanadI18n.apply(document.getElementById('sheet'));});};
 const _sanadCoreRenderTransferSheet=renderTransferSheet; renderTransferSheet=function(){_sanadCoreRenderTransferSheet();requestAnimationFrame(()=>{SanadReceipts.injectTxControls();SanadI18n.apply(document.getElementById('sheet'));});};
+const _sanadCoreCloseSheet=closeSheet;closeSheet=function(){if(typeof SanadReceipts!=='undefined'){SanadReceipts.pending=null;SanadReceipts.draftGeneration++;}return _sanadCoreCloseSheet();};
 const _sanadCoreOpenTxDetails=openTxDetails; openTxDetails=function(id){_sanadCoreOpenTxDetails(id);requestAnimationFrame(()=>SanadReceipts.injectDetails(id));};
-const _sanadCoreSaveTx=saveTx; saveTx=async function(){const ids=new Set(S.transactions.map(t=>t.id));const edit=S.form&&S.form.id;const pending=SanadReceipts.pending;const shareToggle=document.querySelector('[data-family-share-toggle]');const shareWanted=shareToggle?shareToggle.classList.contains('on'):null;const saved=await _sanadCoreSaveTx();const targetId=ReceiptCore.resolveAttachmentAfterSave(saved===true,ids,edit,S.transactions);if(pending)await SanadReceipts.attachAfterSave(saved===true,ids,edit,pending);if(targetId&&shareWanted!==null)await SanadFamily.setShared(targetId,shareWanted);return saved;};
-const _sanadCoreSaveTransfer=saveTransfer; saveTransfer=async function(){const ids=new Set(S.transactions.map(t=>t.id));const edit=S.form&&S.form.id;const pending=SanadReceipts.pending;const saved=await _sanadCoreSaveTransfer();if(pending)await SanadReceipts.attachAfterSave(saved===true,ids,edit,pending);return saved;};
+const _sanadCoreSaveTx=saveTx; saveTx=async function(){if(_dataReplacementInFlight||_financialFlowInFlight||SanadReceipts.processing){toast('انتظر انتهاء الحفظ ثم أعد المحاولة');return false;}_financialFlowInFlight=true;try{const ids=new Set(S.transactions.map(t=>t.id));const edit=S.form&&S.form.id;const pending=SanadReceipts.pending;const shareToggle=document.querySelector('[data-family-share-toggle]');const shareWanted=shareToggle?shareToggle.classList.contains('on'):null;const saved=await _sanadCoreSaveTx();const targetId=ReceiptCore.resolveAttachmentAfterSave(saved===true,ids,edit,S.transactions);if(pending)await SanadReceipts.attachAfterSave(saved===true,ids,edit,pending);if(targetId&&shareWanted!==null)await SanadFamily.setShared(targetId,shareWanted);return saved;}finally{_financialFlowInFlight=false;}};
+const _sanadCoreSaveTransfer=saveTransfer; saveTransfer=async function(){if(_dataReplacementInFlight||_financialFlowInFlight||SanadReceipts.processing){toast('انتظر انتهاء الحفظ ثم أعد المحاولة');return false;}_financialFlowInFlight=true;try{const ids=new Set(S.transactions.map(t=>t.id));const edit=S.form&&S.form.id;const pending=SanadReceipts.pending;const saved=await _sanadCoreSaveTransfer();if(pending)await SanadReceipts.attachAfterSave(saved===true,ids,edit,pending);return saved;}finally{_financialFlowInFlight=false;}};
 const _sanadCoreCommit=commitCriticalMutation; commitCriticalMutation=async function(fn){const r=await _sanadCoreCommit(fn);if(r&&r.ok&&!r.noop){await SanadCloud.markDirty();syncNativeNotifications();}return r;};
 const _sanadCorePersist=persist; persist=async function(){const r=await _sanadCorePersist();if(r)await SanadCloud.markDirty();return r;};
 const _sanadCoreStartApp=startApp; startApp=function(){if(SecurityCrypto.shouldShowLockOverlay({enabled:SanadSecurity.cfg.enabled,unlocked:SanadSecurity.unlocked})){SanadSecurity.pendingStart=true;const app=document.getElementById('app'),ob=document.getElementById('onboard');if(app)app.hidden=true;if(ob)ob.hidden=true;SanadTheme.apply();SanadI18n.apply();SanadSecurity.show();return;}_sanadCoreStartApp();setTimeout(()=>SanadV9.afterStart(),0);};

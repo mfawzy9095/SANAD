@@ -638,6 +638,7 @@ jobs:
           node app/src/test/js/bank-message-corpus.test.js
           node app/src/test/js/backup-repair-tool.test.js
           node app/src/test/js/bank-recent-import.test.js
+          node app/src/test/js/backup-runtime.test.js
 
       - name: Browser integration tests
         shell: bash

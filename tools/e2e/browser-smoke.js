@@ -75,6 +75,7 @@ const record=(name)=>{results.push({name,status:'PASS'});console.log('PASS:',nam
  await page.waitForFunction(()=>!!SanadReceipts.pending);
  await page.locator('#sheet [data-act="save-tx"]').click();
  await page.waitForFunction(async id=>!!(await SanadExtStorage.getReceipt(id)),expenseId);
+ await page.waitForFunction(()=>!_financialFlowInFlight);
  const fp=await page.evaluate(()=>stateFingerprint(snapshotState()));
  await page.reload();await page.waitForFunction(()=>S.ready&&SanadV9.initialized);
  assert.equal(await page.evaluate(()=>stateFingerprint(snapshotState())),fp);
@@ -89,6 +90,25 @@ const record=(name)=>{results.push({name,status:'PASS'});console.log('PASS:',nam
  await page.locator('#sanadFullImport').setInputFiles(backupPath);await page.locator('#dlgOk').click();
  await page.waitForFunction(expected=>stateFingerprint(snapshotState())===expected,fp);
  assert(await page.evaluate(async id=>!!(await SanadExtStorage.getReceipt(id)),expenseId));record('Full backup export/restore with receipt and fingerprint equality');
+ // Add a second account and transfer through the actual forms.
+ await page.evaluate(()=>openAccountSheet(null,'bank'));
+ await page.locator('#wName').fill('QA Savings');await page.locator('#wBalance').fill('0');
+ await page.locator('[data-act="save-account"]').click();
+ await page.waitForFunction(()=>S.accounts.some(a=>a.name==='QA Savings')&&!_criticalMutationInFlight);
+ const savingsId=await page.evaluate(()=>S.accounts.find(a=>a.name==='QA Savings').id);
+ await page.evaluate(()=>openNewTransfer());await page.locator('#fromAmtIn').fill('100');
+ await page.locator('[data-act="save-transfer"]').click();
+ await page.waitForFunction(()=>S.transactions.some(t=>t.type==='transfer')&&!_financialFlowInFlight);
+ assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),9021.66);
+ assert.equal(await page.evaluate(id=>Finance.accountBalance(id),savingsId),100);record('Account creation and own transfer conserve money');
+ // Invalid input cannot save a transaction.
+ const count=await page.evaluate(()=>S.transactions.length);
+ await page.evaluate(()=>openNewTx('expense'));await page.locator('#amountIn').fill('-5');
+ await page.locator('[data-act="save-tx"]').click();await page.waitForFunction(()=>!_financialFlowInFlight);
+ assert.equal(await page.evaluate(()=>S.transactions.length),count);await page.evaluate(()=>closeSheet());record('Negative manual input rejected without a ledger change');
+ // An import cannot overlap a pending critical save.
+ assert(await page.evaluate(async data=>{let finish;const saving=commitCriticalMutation(()=>new Promise(r=>{finish=r;}));await Promise.resolve();const refused=await SanadFullBackup.importData(data,false);finish(false);await saving;return refused===false;},saved));
+ record('Full restore blocked during an unfinished financial write');
  await page.evaluate(()=>go('home'));await page.screenshot({path:path.join(output,'mobile-ar.png')});
  for(const tab of ['tx','accounts','subs','rep','home']){await page.locator('#bottomNav [data-tab="'+tab+'"]').click();assert((await page.locator('#view').innerText()).length>0);}
  record('All primary tabs respond without blank pages');
