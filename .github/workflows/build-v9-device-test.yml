@@ -719,6 +719,41 @@ jobs:
           echo "APK archive integrity passed 5x"
           sha256sum "SANAD-V9.0.10-REFACTOR-A13.apk" | tee apk-sha256.txt
 
+      - name: Build isolated forensic QA APK
+        run: gradle --no-daemon --stacktrace :app:assembleForensicQa
+
+      - name: Verify isolated QA APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/forensicQa/app-forensicQa.apk"
+          test -s "$APK"
+          cp "$APK" "SANAD-V9.2-FORENSIC-QA.apk"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging "$APK" | tee qa-apk-badging.txt
+          "$AAPT" dump permissions "$APK" | tee qa-apk-permissions.txt
+          grep -q "package: name='com.sanad.v9test.forensicqa'" qa-apk-badging.txt
+          grep -q "application-label:'SANAD QA — سند'" qa-apk-badging.txt
+          grep -q 'android.permission.READ_SMS' qa-apk-permissions.txt
+          ! grep -Eq 'android.permission.(SEND_SMS|WRITE_SMS|CAMERA|RECORD_AUDIO)' qa-apk-permissions.txt
+          for ASSET in index.html js/finance-core.js js/bank-message-core.js js/bank-ingestion-core.js js/schema-core.js js/uae-bank-registry-core.js; do
+            test "$(unzip -p "$APK" "assets/$ASSET" | sha256sum | awk '{print $1}')" = "$(sha256sum "app/src/main/assets/$ASSET" | awk '{print $1}')"
+          done
+          unzip -t "$APK" >/dev/null
+          sha256sum SANAD-V9.2-FORENSIC-QA.apk | tee qa-apk-sha256.txt
+
+      - name: Upload isolated QA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-V9.2-FORENSIC-QA
+          path: |
+            SANAD-V9.2-FORENSIC-QA.apk
+            qa-apk-sha256.txt
+            qa-apk-badging.txt
+            qa-apk-permissions.txt
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

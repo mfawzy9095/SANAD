@@ -19,6 +19,13 @@ android {
         debug {
             debuggable true
         }
+        forensicQa {
+            initWith debug
+            applicationIdSuffix '.forensicqa'
+            versionNameSuffix '-forensic-qa'
+            resValue 'string', 'app_name', 'SANAD QA — سند'
+            matchingFallbacks = ['debug']
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
