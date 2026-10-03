@@ -654,3 +654,20 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
 }
 
 console.log('bank ingestion core regression tests: PASS');
+
+// Forensic regression: missing observations are unknown, including explicit null.
+{
+  const p=P.parse({id:'unknown-observation',postedAt:2000,title:'duPay',text:'Your request to transfer AED 149.00 to Test Recipient is successfully processed and the amount has been credited in the beneficiary account. TID: TESTREF123'});
+  assert.strictEqual(p.availableBalance,null);
+  assert.strictEqual(I.openingBalanceForObserved(p),null);
+  const s=empty();
+  s.institutions.push({id:'du',name:'du Pay',country:'UAE',type:'wallet_provider',providerRegistryId:'du-pay'});
+  s.accounts.push({id:'wallet',institutionId:'du',country:'UAE',type:'ewallet',currency:'AED',openingBalance:200,observedBalance:200,observedBalanceAt:1000});
+  const plan=I.plan(p,s,{uid});
+  assert.strictEqual(plan.action,'auto-save');
+  assert.deepStrictEqual(plan.observations,[]);
+  I.applyPlan(s,plan);
+  assert.strictEqual(s.accounts[0].observedBalance,200);
+  assert.strictEqual(I.reconciliation(p,s,plan,()=>51),null);
+  assert.strictEqual(I.openingBalanceForObserved({...p,availableBalance:0}),149);
+}

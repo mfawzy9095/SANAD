@@ -8768,7 +8768,7 @@ const SanadBankInbox = {
     let accountId=tx.accountId||tx.fromAccountId||null;
     const account=accountId?Finance.getAccount(accountId):null;
     let warning=false;
-    if(account&&Number.isFinite(Number(parsed.availableBalance))){
+    if(account&&isFiniteNumberLike(parsed.availableBalance)){
       const observed=Math.round(Number(parsed.availableBalance)*100)/100;
       const calculated=Math.round(Finance.accountBalance(account.id)*100)/100;
       const difference=Math.round((observed-calculated)*100)/100;
@@ -8780,7 +8780,7 @@ const SanadBankInbox = {
         warning=Math.abs(difference)>0.01;
       }
     }
-    if(account&&Number.isFinite(Number(parsed.availableCredit))){
+    if(account&&isFiniteNumberLike(parsed.availableCredit)){
       const observed=Math.round(Number(parsed.availableCredit)*100)/100;
       const calculated=Finance.creditAvailable(account.id);
       const existingCreditAt=Number(account.observedAvailableCreditAt)||0;

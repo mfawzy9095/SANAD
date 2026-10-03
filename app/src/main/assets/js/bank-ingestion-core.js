@@ -14,7 +14,7 @@
   if(!MessageCore)throw new Error('bank-message-core-required');
   if(!Registry)throw new Error('bank-registry-required');
 
-  function num(v){const n=Number(v);return Number.isFinite(n)?n:null;}
+  function num(v){if(v==null||v==='')return null;const n=Number(v);return Number.isFinite(n)?n:null;}
   function round2(v){const n=num(v);return n==null?null:Math.round(n*100)/100;}
   function clone(v){return JSON.parse(JSON.stringify(v));}
   function arr(v){return Array.isArray(v)?v:[];}
