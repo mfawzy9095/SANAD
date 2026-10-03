@@ -6837,8 +6837,8 @@ async function importData(file){
     let migrated = null;
     try {
       migrated = BackupCore.prepareFinanceRestore(parsed,{
-        migrate:Schema.migrate,
-        validateStateStrict:Schema.validateStateStrict
+        migrate:state=>Schema.migrate(state),
+        validateStateStrict:state=>Schema.validateStateStrict(state)
       });
     } catch(e){
       if (e && e.message === 'migration-failed'){
@@ -8603,8 +8603,8 @@ const SanadFullBackup = {
   prepare(data){
     const prepared=BackupCore.prepareFullRestore(data,{
       fingerprint:stateFingerprint,
-      migrate:Schema.migrate,
-      validateStateStrict:Schema.validateStateStrict
+      migrate:state=>Schema.migrate(state),
+      validateStateStrict:state=>Schema.validateStateStrict(state)
     });
     const receipts=[];
     for(const r of prepared.receiptDescriptors){

@@ -25,8 +25,8 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  assert.equal(await page.evaluate(()=>AndroidBridge.historicalSmsPermissionGranted()),false);
  adb('shell','pm','grant',pkg,'android.permission.READ_SMS');
  assert.equal(await page.evaluate(()=>AndroidBridge.historicalSmsPermissionGranted()),true);pass('Native READ_SMS permission state changes correctly');
- adb('emu','sms','send','ENBD','Salary of AED 9,000.00 has been credited to your account 012XXX50XXX01. Available balance is AED 9,001.66');
- adb('emu','sms','send','ENBD','AED 100.00 has been credited to your account 012XXX50XXX01. Available balance is AED 9,101.66');
+ adb('emu','sms','send','15551234567','تم ايداع الراتب AED 9,000.00 في حسابك .012XXX50XXX01 الرصيد المتوفر هو AED 9,001.66');
+ adb('emu','sms','send','15551234567','تم ايداع AED 100.00 في حسابك 012XXX50XXX01 الرصيد المتوفر هو AED 9,101.66');
  // Wait for Android's SMS provider to persist both messages before requesting a page.
  for(let n=0;n<30;n++){const rows=adb('shell','content','query','--uri','content://sms/inbox','--projection','_id:body');if(rows.includes('9,000.00')&&rows.includes('100.00'))break;await new Promise(r=>setTimeout(r,1000));}
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());

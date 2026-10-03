@@ -119,3 +119,19 @@ console.log('schema-core regression tests: PASS');
   s.accounts[0].bankBalanceBaseline.balance=null;
   assert.ok(Schema.validateStateStrict(s).some(x=>x.includes('نقطة رصيد البنك')));
 })();
+
+// Runtime backup adapters must preserve Schema's receiver (migration and prepaid validation use this).
+{
+ const fs=require('fs'),path=require('path'),vm=require('vm'),Backup=require('../../main/assets/js/backup-core');
+ const html=fs.readFileSync(path.join(__dirname,'../../main/assets/index.html'),'utf8');
+ const a=html.indexOf('  prepare(data){',html.indexOf('const SanadFullBackup'));
+ const b=html.indexOf('  async importData(',a);
+ const fixture=Schema.migrate({schemaVersion:16,accounts:[],transactions:[],settings:{}});
+ const ctx={BackupCore:Backup,stateFingerprint:StateCore.stateFingerprint,Schema,Date,Object};vm.createContext(ctx);
+ const runtime=vm.runInContext('({'+html.slice(a,b)+'})',ctx);
+ const full=Backup.makeFullBackup({state:fixture,fingerprint:StateCore.stateFingerprint});
+ const restored=runtime.prepare(full).migrated;
+ assert.strictEqual(StateCore.stateFingerprint(restored),StateCore.stateFingerprint(fixture));
+ assert(!html.includes('migrate:Schema.migrate,'),'finance/full imports must preserve the receiver');
+ console.log('Runtime full-backup export/restore with real Schema migration: PASS');
+}
