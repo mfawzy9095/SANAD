@@ -24,7 +24,9 @@
     if(baselineAt&&cutoff<baselineAt)return null;
     const txs=(state&&Array.isArray(state.transactions)?state.transactions:[]).filter(t=>{
       if(!t)return false;
-      const at=Number(t.created)||0;
+      const side=t.type==='transfer'?(t.fromAccountId===accountId?'from':t.toAccountId===accountId?'to':null):null;
+      const posting=side&&t.bankPostingTimes&&Number(t.bankPostingTimes[side]);
+      const at=posting>0?posting:Number(t.created)||0;
       return (!baselineAt||at>=baselineAt)&&at<=cutoff;
     });
 
@@ -96,7 +98,9 @@
       if(!t)continue;
       const touches=t.accountId===accountId||t.fromAccountId===accountId||t.toAccountId===accountId;
       if(!touches)continue;
-      const at=Number(t.created)||0;
+      const side=t.type==='transfer'?(t.fromAccountId===accountId?'from':t.toAccountId===accountId?'to':null):null;
+      const posting=side&&t.bankPostingTimes&&Number(t.bankPostingTimes[side]);
+      const at=posting>0?posting:Number(t.created)||0;
       if(at>latestActivityAt)latestActivityAt=at;
     }
     const observedIsCurrent=observed!==null&&observedAt>0&&(latestActivityAt<=0||observedAt>=latestActivityAt);

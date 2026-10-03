@@ -729,3 +729,46 @@ console.log('bank ingestion core regression tests: PASS');
   assert.strictEqual(I.autoEligible(p,route).reason,'refund-balance-review');
   assert.strictEqual(I.autoEligible({...p,availableBalance:5723.54},route).ok,true);
 }
+
+// Two owned-account SMS legs require explicit pairing, retain both identities,
+// and affect each ledger at its own posting time rather than fabricate income.
+{
+ const F=require('../../main/assets/js/finance-core');
+ const s={institutions:[{id:'en',country:'UAE',name:'Emirates NBD',bankRegistryId:'emirates-nbd'},{id:'du',country:'UAE',name:'du Pay',providerRegistryId:'du-pay'}],accounts:[{id:'from',country:'UAE',currency:'AED',type:'ewallet',institutionId:'du',openingBalance:200},{id:'to',country:'UAE',currency:'AED',type:'bank',institutionId:'en',bankRefs:['012XXX50XXX01'],openingBalance:10}],paymentInstruments:[],transactions:[]};
+ const at=1790859000000;
+ const outgoing={kind:'outgoing_transfer',currency:'AED',country:'UAE',providerId:'du-pay',amount:100,eventId:'debit-id',postedAt:at,raw:'sent 100 AED, ref d1',transactionRef:'d1',availableBalance:100};
+ const old=P.buildTransaction(outgoing,{status:'routed',fromAccount:s.accounts[0]},{uid:()=> 'old'}).transaction;s.transactions.push(old);
+ const incoming=P.parse({id:'credit-id',title:'ENBD',postedAt:at+2000,text:'لقد تم ايداع AED 100.00 في رقم حسابك 012XXX50XXX01 OBP TR REF RECEIPT123.الرصيد المتوفر هو AED 110.00'});
+ assert.strictEqual(I.transferCounterparts(incoming,s).length,1);
+ assert.strictEqual(I.plan(incoming,s,{uid}).reason,'possible-own-transfer');
+ const choice={counterpartTransactionId:'old',fromAccountId:'from',toAccountId:'to'};
+ assert.strictEqual(I.pairOwnTransfer(incoming,s,choice,{}).reason,'fee-confirmation-required');
+ assert.strictEqual(I.pairOwnTransfer(incoming,s,{...choice,fromAccountId:'to'},{confirmedFee:0}).ok,false);
+ const paired=I.pairOwnTransfer(incoming,s,choice,{uid,confirmedFee:0});assert.strictEqual(paired.ok,true);
+ assert.strictEqual(s.transactions[0].type,'external_transfer','planner never mutates');
+ s.transactions[0]=paired.transaction;
+ assert.strictEqual(s.transactions.length,1);assert.strictEqual(s.transactions[0].type,'transfer');
+ assert.strictEqual(F.accountBalanceAt(s,'from',at),100);assert.strictEqual(F.accountBalanceAt(s,'to',at),10);
+ assert.strictEqual(F.accountBalanceAt(s,'to',at+2000),110);
+ assert.strictEqual(I.duplicateOf(outgoing,s).id,'old');assert.strictEqual(I.duplicateOf(incoming,s).id,'old');
+ assert.strictEqual(I.duplicateOf({...incoming,eventId:'new-native-id'},s).id,'old');
+ assert.strictEqual(I.duplicateOf({...incoming,eventId:'other-id',bankId:'citibank',transactionRef:'OTHER'},s),null);
+ assert.strictEqual(I.transferCounterparts({...incoming,kind:'salary'},s).length,0);
+ assert.deepStrictEqual(paired.transaction.bankPairingBeforeImage,old);
+}
+
+// Receipt-first delivery must receive the same safe pairing treatment.
+{
+ const F=require('../../main/assets/js/finance-core');
+ const s={institutions:[{id:'en',country:'UAE',name:'Emirates NBD',bankRegistryId:'emirates-nbd'},{id:'du',country:'UAE',name:'du Pay',providerRegistryId:'du-pay'}],accounts:[{id:'from',country:'UAE',currency:'AED',type:'ewallet',institutionId:'du',openingBalance:200},{id:'to',country:'UAE',currency:'AED',type:'bank',institutionId:'en',bankRefs:['012XXX50XXX01'],openingBalance:10}],paymentInstruments:[],transactions:[]};
+ const at=1790859000000;
+ const incoming=P.parse({id:'first-receipt',title:'ENBD',postedAt:at+2000,text:'لقد تم ايداع AED 100.00 في رقم حسابك 012XXX50XXX01 OBP TR REF RECEIPT456.الرصيد المتوفر هو AED 110.00'});
+ s.transactions.push(P.buildTransaction(incoming,{status:'routed',account:s.accounts[1]},{uid:()=> 'receipt'}).transaction);
+ const outgoing={recognized:true,kind:'outgoing_transfer',direction:'debit',currency:'AED',country:'UAE',providerId:'du-pay',amount:100,eventId:'second-debit',postedAt:at,raw:'sent 100 AED from wallet',availableBalance:100,confidence:0.99};
+ assert.strictEqual(I.plan(outgoing,s,{uid}).reason,'possible-own-transfer');
+ const pair=I.pairOwnTransfer(outgoing,s,{counterpartTransactionId:'receipt',fromAccountId:'from',toAccountId:'to'},{uid,confirmedFee:0});
+ assert.strictEqual(pair.ok,true);assert.strictEqual(pair.observationAccountId,'from');s.transactions[0]=pair.transaction;
+ assert.strictEqual(F.accountBalanceAt(s,'from',at),100);assert.strictEqual(F.accountBalanceAt(s,'to',at),10);
+ assert.strictEqual(F.accountBalanceAt(s,'to',at+2000),110);
+ assert.strictEqual(I.duplicateOf(outgoing,s).id,'receipt');assert.strictEqual(I.duplicateOf(incoming,s).id,'receipt');
+}

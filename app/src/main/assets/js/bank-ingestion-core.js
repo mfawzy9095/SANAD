@@ -148,6 +148,15 @@
   }
   function duplicateOf(parsed,state){
     const key=MessageCore.dedupeKey(parsed);
+    const linked=arr(state&&state.transactions).find(t=>arr(t.bankLinkedImportEvents).some(e=>{
+      if(e.bankId!==(parsed.bankId||null)||e.providerId!==(parsed.providerId||null)||e.currency!==parsed.currency||round2(e.amount)!==round2(parsed.amount))return false;
+      if(parsed.eventId&&e.eventId===parsed.eventId)return true;
+      if(key&&e.key===key)return true;
+      if(parsed.transactionRef&&e.ref===parsed.transactionRef&&e.kind===parsed.kind)return true;
+      const sameBalance=num(parsed.availableBalance)!=null&&num(parsed.availableBalance)===num(e.availableBalance);
+      return e.kind===parsed.kind&&Math.abs(Number(e.postedAt)-Number(parsed.postedAt))<=300000&&sameBalance&&normalizedText(e.text)===normalizedText(parsed.raw);
+    }));
+    if(linked)return linked;
     const exact=arr(state&&state.transactions).find(t=>
       (parsed.transactionRef&&t.bankTransactionRef===parsed.transactionRef&&
         (!parsed.bankId||t.bankId===parsed.bankId)&&(!parsed.providerId||t.providerId===parsed.providerId)&&
@@ -778,6 +787,8 @@
     if(dup)return {action:'duplicate',reason:'already-imported',existingTransactionId:dup.id,confidence:1};
     const probable=semanticDuplicateOf(parsed,state,true);
     if(probable)return {action:'review',reason:'possible-duplicate',existingTransactionId:probable.id,confidence:0};
+    const counterparts=transferCounterparts(parsed,state);
+    if(counterparts.length)return {action:'review',reason:'possible-own-transfer',counterpartTransactionIds:counterparts.map(t=>t.id),confidence:0};
 
     // Planning only appends draft entities; never clone the complete historical ledger per SMS.
     let draft=Object.assign({},state||{});
@@ -934,8 +945,52 @@
     // A one-day overlap covers late SMS delivery. Financial evidence handles repeats.
     return Math.max(0,checkpoint>0?Math.min(checkpoint,end)-86400000:end-30*86400000);
   }
+  function transferCounterparts(parsed,state){
+    if(!parsed||!['deposit','incoming_transfer','outgoing_transfer'].includes(parsed.kind))return [];
+    const outgoing=parsed.kind==='outgoing_transfer';
+    const route=MessageCore.resolveRoute(parsed,state||{}),current=route&&(outgoing?route.fromAccount:route.account);
+    if(!route||route.status!=='routed'||!current||current.type==='credit')return [];
+    const at=Number(parsed.postedAt);
+    if(!Number.isFinite(at)||at<=0)return [];
+    return arr(state&&state.transactions).filter(t=>{
+      if(!t||!t.bankImportKey)return false;
+      if(outgoing){
+        const kind=t.bankImportEvidence&&t.bankImportEvidence.kind||String(t.bankImportKey).split('|')[2];
+        if(t.type!=='income'||!['deposit','incoming_transfer'].includes(kind))return false;
+      }else if(t.type!=='external_transfer')return false;
+      const otherId=outgoing?t.accountId:t.fromAccountId;
+      if(otherId===current.id)return false;
+      const other=arr(state&&state.accounts).find(a=>a&&a.id===otherId&&!a.archived);
+      return other&&other.type!=='credit'&&other.currency===current.currency&&parsed.currency===current.currency&&
+        round2(outgoing?t.amount:t.fromAmount)===round2(parsed.amount)&&Math.abs(Number(t.created)-at)<=30*60000;
+    });
+  }
+  function pairOwnTransfer(parsed,state,choice,options){
+    const c=choice||{},opts=options||{};
+    const old=transferCounterparts(parsed,state).find(t=>t.id===c.counterpartTransactionId);
+    const outgoing=parsed.kind==='outgoing_transfer',route=MessageCore.resolveRoute(parsed,state||{});
+    const receiver=outgoing?old&&arr(state&&state.accounts).find(a=>a&&a.id===old.accountId&&!a.archived):route.account;
+    const from=outgoing?route.fromAccount:old&&arr(state&&state.accounts).find(a=>a&&a.id===old.fromAccountId&&!a.archived);
+    if(!old||!receiver||!from||c.fromAccountId!==from.id||c.toAccountId!==receiver.id)return {ok:false,reason:'pair-route-mismatch'};
+    if(opts.confirmedFee==null||opts.confirmedFee==='')return {ok:false,reason:'fee-confirmation-required'};
+    const corrected=Object.assign({},parsed,{kind:'internal_transfer'});
+    const built=MessageCore.buildTransaction(corrected,{status:'routed',fromAccount:from,targetAccount:receiver},opts);
+    if(!built.ok)return built;
+    const tx=built.transaction;
+    tx.id=old.id;tx.created=old.created;tx.date=old.date;tx.note='تحويل بين حساباتي — تم تأكيد طرفَي الرسالة';
+    tx.bankImportKey=old.bankImportKey;tx.bankImportEventId=old.bankImportEventId||null;
+    tx.bankId=old.bankId||null;tx.providerId=old.providerId||null;tx.bankTransactionRef=old.bankTransactionRef||null;
+    tx.bankImportEvidence=clone(old.bankImportEvidence||null);
+    tx.bankPostingTimes={from:Number(outgoing?parsed.postedAt:old.created),to:Number(outgoing?old.created:parsed.postedAt)};
+    tx.bankLinkedImportEvents=[
+      {key:old.bankImportKey,eventId:old.bankImportEventId||null,bankId:old.bankId||null,providerId:old.providerId||null,currency:old.currency||old.fromCurrency,amount:old.amount==null?old.fromAmount:old.amount,ref:old.bankTransactionRef||null,kind:old.bankImportEvidence&&old.bankImportEvidence.kind||(outgoing?'deposit':'outgoing_transfer'),postedAt:Number(old.created),text:old.bankImportEvidence&&old.bankImportEvidence.text||'',availableBalance:old.bankImportEvidence&&old.bankImportEvidence.availableBalance},
+      {key:MessageCore.dedupeKey(parsed),eventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,currency:parsed.currency,amount:parsed.amount,ref:parsed.transactionRef||null,kind:parsed.kind,postedAt:Number(parsed.postedAt),text:parsed.raw||'',availableBalance:parsed.availableBalance}
+    ];
+    tx.bankPairingBeforeImage=clone(old);
+    return {ok:true,transaction:tx,replacesTransactionId:old.id,before:clone(old),observationAccountId:outgoing?from.id:receiver.id};
+  }
   return Object.freeze({
-    recentScanStart,
+    recentScanStart,transferCounterparts,pairOwnTransfer,
     autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
   });
 });

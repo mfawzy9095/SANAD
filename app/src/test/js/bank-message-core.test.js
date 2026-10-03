@@ -234,7 +234,7 @@ assert.strictEqual(beforeCurrency.kind,'outgoing_transfer');assert.strictEqual(b
  assert.strictEqual(F.accountBalance({accounts:[route.fromAccount],transactions:[built.transaction]},'fee-source'),97.9);
  assert.strictEqual(P.buildTransaction(p,route,{confirmedFee:0}).transaction.fee,0);
  const purchase=P.buildTransaction({...p,kind:'purchase',merchant:'TEST'}, {status:'routed',account:route.fromAccount}, {confirmedFee:2.1});
- assert.strictEqual(purchase.transaction.amount,100);assert.strictEqual(purchase.transaction.walletAmount,102.1);
+ assert.strictEqual(purchase.transaction.bankPrincipalAmount,100);assert.strictEqual(purchase.transaction.amount,102.1);assert.strictEqual(purchase.transaction.walletAmount,102.1);
  const incoming=P.buildTransaction({...p,kind:'incoming_transfer'}, {status:'routed',account:route.fromAccount},{confirmedFee:2.1});
  assert.strictEqual(incoming.reason,'fee-direction-review-required');
 }

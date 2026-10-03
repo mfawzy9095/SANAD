@@ -670,6 +670,9 @@
       if (!SUPPORTED_TX_TYPES.includes(t.type)){ push('نوع معاملة غير صالح: ' + t.id); continue; }
       if (!isValidIsoDate(t.date)) push('تاريخ معاملة غير صالح: ' + t.id);
       if (t.created != null && !isFiniteNumberLike(t.created)) push('وقت إنشاء معاملة غير صالح: ' + t.id);
+      if(t.bankPostingTimes!=null){
+        if(t.type!=='transfer'||!isFiniteNumberLike(t.bankPostingTimes.from)||Number(t.bankPostingTimes.from)<=0||!isFiniteNumberLike(t.bankPostingTimes.to)||Number(t.bankPostingTimes.to)<=0)push('توقيت طرفي التحويل غير صالح: '+t.id);
+      }
       if (t.type === 'expense' || t.type === 'income'){
         const a = accById.get(t.accountId);
         if (!a) push('حساب المعاملة غير موجود: ' + t.id);

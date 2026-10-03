@@ -441,7 +441,10 @@
     const built=buildTransactionBase(parsed,route,options);
     if(built.ok&&built.transaction&&feeConfirmed){
       const tx=built.transaction;
-      if(tx.type==='expense')tx.walletAmount=Math.round((parsed.amount+fee)*100)/100;
+      if(tx.type==='expense'){
+        tx.bankPrincipalAmount=parsed.amount;
+        tx.amount=tx.walletAmount=Math.round((parsed.amount+fee)*100)/100;
+      }
       else if(tx.type==='transfer'||tx.type==='external_transfer')tx.fee=Math.round(fee*100)/100;
       tx.bankFeeEvidence={amount:Math.round(fee*100)/100,currency:parsed.currency,confirmed:true,source:'manual-review'};
     }

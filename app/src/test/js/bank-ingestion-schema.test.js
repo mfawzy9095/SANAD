@@ -292,3 +292,14 @@ function process(text,input,state){
 })();
 
 console.log('bank ingestion schema integration tests: PASS');
+
+(function manuallyConfirmedFeesKeepSchema16MoneyInvariant(){
+ const s=empty();
+ process('Hello Mohamed Abd, Your du Pay Card ending in 7105 has been used for AED 9.75 at FRESH CRAFT MINI MART. Your available balance is now AED 90.25 and your transaction ID is VALIDATION1. Fee AED 0.00, VAT AED 0.00.',{id:'fee-setup'},s);
+ const parsed=Message.parse({id:'fee-confirmed',title:'duPay',postedAt:Date.UTC(2026,9,1,11),text:'Hello Mohamed Abd, Your du Pay Card ending in 7105 has been used for AED 10.00 at TEST STORE. Your available balance is now AED 78.15 and your transaction ID is VALIDATION2. Fee AED 2.00, VAT AED 0.10.'});
+ const route=Ingest.routeFromManualChoice(parsed,s,{sourceType:'instrument',sourceId:s.paymentInstruments[0].id});
+ assert.strictEqual(Message.buildTransaction(parsed,route,{uid}).reason,'fee-confirmation-required');
+ const built=Message.buildTransaction(parsed,route,{uid,confirmedFee:2.1});assert.strictEqual(built.ok,true,JSON.stringify({built,parsed,route}));
+ s.transactions.push(built.transaction);strictOk(s,'gross confirmed fee follows same-currency amount invariant');
+ assert.strictEqual(Finance.accountBalance(s,s.accounts[0].id),78.15);
+})();

@@ -1840,7 +1840,7 @@ function viewHome(){
           '<div class="wh-cur">' + (inst ? esc(inst.name) + ' · ' : '') + Finance.curInfo(defaultAcc.currency).name + '</div></div>' +
       '</div>' +
       '<div class="wh-balance-row"><div class="wh-bal amt-val">' + amtText(bal) + ' <span style="font-size:14px;opacity:.85">' + Finance.curSymbol(defaultAcc.currency) + '</span></div>' + quickAmountEye + '</div>' +
-      '<div class="wh-sub">الحساب الأساسي في ' + esc(cInfo.name) + '</div>' +
+      '<div class="wh-sub">الحساب الأساسي في ' + esc(cInfo.name) + (heroBalanceView?' · '+(heroBalanceView.observedIsCurrent?'آخر رصيد وارد من المصدر':heroBalanceView.observedAt?'رصيد تقديري بعد آخر رسالة':'رصيد محسوب من السجل'):'') + '</div>' +
     '</div>';
   } else {
     heroHtml = '<div class="card" style="text-align:center;padding:20px">' +
@@ -8748,6 +8748,7 @@ const SanadBankInbox = {
       'observed-balance-required':'لا يوجد رصيد مؤكد يكفي لإنشاء الحساب بأمان',
       'instrument-missing':'الكارت غير مسجل بعد',
       'fee-review-required':'العملية تحتوي رسومًا وتحتاج مراجعة',
+      'possible-own-transfer':'قد تكون الطرف الآخر لتحويل بين حساباتك؛ أكد الربط قبل التسجيل',
       'fx-review-required':'العملة تحتاج مراجعة',
       'existing-source-required':'يحتاج حسابًا موجودًا قبل الحفظ',
       'existing-instrument-conflict':'الكارت موجود بالفعل ويحتاج تأكيد الربط بدل إنشاء نسخة ثانية',
@@ -8776,7 +8777,7 @@ const SanadBankInbox = {
     if(!plan||!plan.transaction)return {warning:false};
     const tx=plan.transaction;
     const ts=Number(parsed.postedAt)||Date.now();
-    let accountId=tx.accountId||tx.fromAccountId||null;
+    let accountId=plan.observationAccountId||tx.accountId||tx.fromAccountId||null;
     const account=accountId?Finance.getAccount(accountId):null;
     let warning=false;
     if(account&&isFiniteNumberLike(parsed.availableBalance)){
@@ -9131,6 +9132,7 @@ const SanadBankInbox = {
   },
   canManualApprove(item){
     if(!item||!item.parsed||!item.parsed.recognized)return false;
+    if(item.plan&&item.plan.reason==='possible-own-transfer')return false;
     if(item.plan&&item.plan.action==='auto-save')return true;
     const r=BankMessageCore.resolveRoute(item.parsed,S);
     if(!r||r.status!=='routed')return false;
@@ -9174,11 +9176,14 @@ const SanadBankInbox = {
     const catOpts=cats.map(c=>'<option value="'+esc(c.id)+'"'+((p.category||'other')===c.id?' selected':'')+'>'+esc(c.i+' '+c.n)+'</option>').join('');
     const curOpts=Object.values(CURRENCIES).map(c=>'<option value="'+c.code+'"'+(p.currency===c.code?' selected':'')+'>'+esc(c.flag+' '+c.name+' ('+c.code+')')+'</option>').join('');
     const counterparty=p.merchant||p.beneficiaryName||'';
+    const pairs=BankIngestionCore.transferCounterparts(p,S);
+    const pairHtml=pairs.length?'<div class="field"><label>ربط بطرف خصم محفوظ (اختياري)</label><select id="bankFixPair"><option value="">— لا تربط؛ سجلها مستقلة إذا كانت عملية أخرى —</option>'+pairs.map(t=>'<option value="'+esc(t.id)+'">'+esc((Finance.getAccount(t.fromAccountId||t.accountId)||{}).name||t.fromAccountId||t.accountId)+' · '+esc(t.date)+' · '+esc(String(t.fromAmount==null?t.amount:t.fromAmount))+' '+esc(t.fromCurrency||t.currency)+'</option>').join('')+'</select><div class="field-hint">المبلغ والتوقيت يشيران لاحتمال فقط. اربط إذا تأكدت أن الحسابين ملكك وأن الرسالتين لنفس التحويل؛ اختر نوع تحويل بين حساباتي، وحساب الخصم مصدرًا وحساب الاستلام وجهة. سيُحفظ التحويل مرة واحدة وتبقى أدلة الطرفين.</div></div>':'';
     openSheet(
       '<div class="sheet-head"><button type="button" class="close" data-sanad-act="bank-inbox"><span>‹</span></button><h2>تعديل وربط العملية</h2><div style="width:36px"></div></div>'+
       '<div class="sheet-body">'+
         '<div class="help-box"><span class="hi">🧠</span><div class="ht"><b>صححها مرة</b>SANAD سيحفظ ربطًا محليًا لنفس مصدر وشكل الرسالة، بدون إرسال SMS لأي خادم.</div></div>'+
         '<div class="field"><label>نوع العملية</label><select id="bankFixKind">'+kindOpts+'</select></div>'+
+        pairHtml+
         '<div class="field"><label>المبلغ</label><input id="bankFixAmount" type="number" inputmode="decimal" step="0.01" value="'+esc(String(p.amount||''))+'"></div>'+
         '<div class="field"><label>العملة</label><select id="bankFixCurrency">'+curOpts+'</select></div>'+
         '<div class="field"><label>رسوم إضافية تخصم من حساب المصدر، شاملة الضريبة</label><input id="bankFixFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="اتركها فارغة إذا لم تتأكد"><div class="field-hint">بنفس عملة العملية. أدخل صفرًا فقط إذا تأكدت أن العملية بلا رسوم إضافية؛ لا تستنتج الرسوم من صيغة نسبة أو فرق الرصيد.</div></div>'+
@@ -9234,14 +9239,22 @@ const SanadBankInbox = {
     const feeInput=String((document.getElementById('bankFixFee')||{}).value||'').trim();
     const buildOptions={uid};
     if(feeInput!=='')buildOptions.confirmedFee=Number(feeInput);
-    const built=BankMessageCore.buildTransaction(corrected,route,buildOptions);
+    const pairId=String((document.getElementById('bankFixPair')||{}).value||'');
+    if(pairId&&kind!=='internal_transfer'){toast('اختر تحويل بين حساباتي للربط بالطرف المحفوظ');return;}
+    const built=pairId?BankIngestionCore.pairOwnTransfer(item.parsed,S,{counterpartTransactionId:pairId,fromAccountId:route.fromAccount&&route.fromAccount.id,toAccountId:route.targetAccount&&route.targetAccount.id},buildOptions):BankMessageCore.buildTransaction(corrected,route,buildOptions);
     if(!built.ok){toast(built.reason==='fee-confirmation-required'?'أكد الرسوم الإضافية أولًا؛ صفر فقط إذا كانت بلا رسوم':built.reason==='invalid-confirmed-fee'?'أدخل رسومًا صحيحة غير سالبة':built.reason==='fee-direction-review-required'?'رسوم الاستلام تحتاج تأكيد صافي المبلغ من المصدر':'الربط غير صالح لهذه العملية');return;}
     if(BankIngestionCore.duplicateOf(corrected,S)){this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
     const result=await commitCriticalMutation(async()=>{
-      S.transactions.push(built.transaction);
-      BankIngestionCore.learnFromApproval(S,corrected,route,{uid,kind});
+      if(built.replacesTransactionId){
+        const index=S.transactions.findIndex(t=>t.id===built.replacesTransactionId);
+        if(index<0||JSON.stringify(S.transactions[index])!==JSON.stringify(built.before))throw new Error('pair-source-changed');
+        S.transactions[index]=built.transaction;
+      }else{
+        S.transactions.push(built.transaction);
+        BankIngestionCore.learnFromApproval(S,corrected,route,{uid,kind});
+      }
       this.learnSourceAlias(item,route);
-      this.applyReconciliation(corrected,{transaction:built.transaction});
+      this.applyReconciliation(corrected,{transaction:built.transaction,observationAccountId:built.observationAccountId});
       return true;
     });
     if(!result.ok){render();toast('تعذر حفظ التصحيح');return;}
@@ -9289,6 +9302,7 @@ const SanadBankInbox = {
     const parsed=item.parsed;
     let plan=BankIngestionCore.plan(parsed,S,{uid});
     if(plan.action==='duplicate'){this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
+    if(plan.reason==='possible-own-transfer'){this.openCorrection(id);return;}
     if(['auto-save','observe'].includes(plan.action)){
       const saved=await this.commitPlan(parsed,plan);
       if(!saved.ok){render();toast('تعذر إضافة العملية — لم يتم تغيير البيانات');return;}
