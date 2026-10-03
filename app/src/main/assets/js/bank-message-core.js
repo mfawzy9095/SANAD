@@ -28,7 +28,9 @@
   }
   function bankIdFrom(input,raw){
     if(input&&input.bankId&&Banks.get(input.bankId))return input.bankId;
-    const hit=Banks.detect(((input&&input.title)||'')+' '+((input&&input.sender)||'')+' '+raw);
+    const metadata=((input&&input.title)||'')+' '+((input&&input.sender)||'');
+    if(/^(?:\s*EI\s*SMS\s*)$/i.test(metadata))return 'emirates-islamic';
+    const hit=Banks.detect(metadata);
     if(hit)return hit.bank.id;
     const pkg=input&&input.packageName;
     if(pkg&&Array.isArray(Banks.BANKS)){
@@ -39,7 +41,7 @@
   }
   function providerIdFrom(input,raw){
     if(input&&input.providerId&&Banks.getProvider&&Banks.getProvider(input.providerId))return input.providerId;
-    const hit=Banks.detectProvider?Banks.detectProvider(((input&&input.title)||'')+' '+((input&&input.sender)||'')+' '+raw):null;
+    const hit=Banks.detectProvider?Banks.detectProvider(((input&&input.title)||'')+' '+((input&&input.sender)||'')):null;
     if(hit)return hit.provider.id;
     const pkg=input&&input.packageName;
     if(pkg&&Array.isArray(Banks.PAYMENT_PROVIDERS)){
@@ -75,9 +77,11 @@
     if(/\botp\b|one time password|verification code|رمز التحقق|كلمة مرور لمرة/.test(x))return 'security-code';
     if(/تم استبدال.+nol payment|rewards? redemption|تم استبدال.+بنجاح/.test(x))return 'rewards-redemption';
     if(/credit card mini statement|minimum amount due|amount to be paid to avoid charges/.test(x))return 'card-statement';
-    if(/was declined|declined due to|transaction declined|تم رفض|عملية مرفوض/.test(x))return 'declined-transaction';
+    if(/was declined|declined due to|transaction declined|has been declined|تم رفض|عملية مرفوض|رفض معاملة|تعذر اتمام/.test(x))return 'declined-transaction';
     if(/نود تاكيد\s+استلام\s+دفعة.+عن\s+البطاقة\s+الائتمانية/.test(x))return 'card-payment-ack';
     if(/has been suspended|has been resumed|request to freeze|successfully reactivated|registered.+google pay|suspended from google pay|resumed to google pay|suspended from merchant|resumed to merchant|تم تسجيل بطاقتك.+google pay/.test(x))return 'card-status';
+    if(/convert now|pay as low as.+per month|convert.+(?:purchase|transaction).+installment/i.test(x))return 'marketing-offer';
+    if(/is being processed|is processing|قيد المعالجة|طلب.+(?:قيد|بانتظار)/i.test(x))return 'processing-status';
     if(
       /\b(?:offer|promotion|promo|enroll|enrol|register\s+to\s+avail|avail\s+the\s+offer|t&cs?\s+apply|terms\s+and\s+conditions\s+apply|to\s+opt\s+out)\b/i.test(x) ||
       /\b(?:make|complete)\s+\d+\s+(?:purchases?|transactions?)\s+or\s+more\b/i.test(x) ||
@@ -131,9 +135,11 @@
   }
   function parseEnbd(input,raw){
     const x=cleanText(raw); let m;
+    m=x.match(/(?:لقد\s+)?تم\s+اعادة\s+مبلغ\s+عملية\s+شراء\s+بقيمة\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?).*?لدى\s+(.+?)\s+بواسطة\s+بطاقة\s+الخصم.*?(\d{4}).*?الرصيد\s+المتوفر\s+هو\s+([\d,]+(?:\.\d+)?)\s*([A-Za-z]{3})/i);
+    if(m)return result({bankId:'emirates-nbd',kind:'refund',direction:'credit',currency:m[1],amount:amount(m[2]),merchant:m[3].trim(),cardLast4:m[4],cardType:'debit_card',availableBalance:amount(m[5]),confidence:0.99},input,raw);
     m=x.match(/تم\s+خصم\s+مبلغ\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+من\s+حسابك\s+\.?\s*([A-Za-z0-9Xx*]+)\s+لتسديد\s+مستحقات\s+بطاقتك\s+الائتمانية\s*(\d{4})/i);
     if(m)return result({bankId:'emirates-nbd',kind:'card_repayment',direction:'transfer',currency:m[1],amount:amount(m[2]),accountRef:normalizeRef(m[3]),cardLast4:m[4],confidence:0.99},input,raw);
-    m=x.match(/تمت\s+عملية\s+شراء\s+في\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+(.+?)\s+على\s+البطاقة\s+(\d{4})\s+الائتمان\s+المتوفر\s+([A-Za-z]{3})?\s*([\d,]+(?:\.\d+)?)/i);
+    m=x.match(/تمت\s+عملية\s+شراء\s+في\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+(.+?)\s+على\s+البطاقة\s+(\d{4})\s+الائتمان\s+المتوفر\s+([A-Za-z]{3})?\s*(-?[\d,]+(?:\.\d+)?)/i);
     if(m){const merchant=m[3].replace(/\s+/g,' ').trim();return result({bankId:'emirates-nbd',kind:'purchase',direction:'debit',currency:m[1],amount:amount(m[2]),merchant,category:categoryForMerchant(merchant),cardLast4:m[4],cardType:'credit_card',availableCredit:amount(m[6]),confidence:0.99},input,raw);}
     m=x.match(/تمت\s+عملية\s+شراء\s+بقيمة\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+لدى\s+(.+?)\s+باستخدام\s+بطاقة\s+خصم\s+تنتهي\s+ارقامها\s+ب[ـ]?\s*(\d{4}).*?الرصيد\s+المتوفر\s+هو\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)/i);
     if(m){const merchant=m[3].replace(/\s+/g,' ').trim();return result({bankId:'emirates-nbd',kind:'purchase',direction:'debit',currency:m[1],amount:amount(m[2]),merchant,category:categoryForMerchant(merchant),cardLast4:m[4],cardType:'debit_card',availableBalance:amount(m[6]),confidence:0.99},input,raw);}

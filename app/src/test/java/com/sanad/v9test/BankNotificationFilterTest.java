@@ -71,4 +71,11 @@ public class BankNotificationFilterTest {
     }
 
 
+    @Test
+    public void handlesDiacriticsAndRejectsInstallmentOffers() {
+        assertTrue(BankNotificationFilter.looksLikeCandidate("لقد تمّ تحويل مبلغ 1,068.70AED باستخدام بطاقة الخصم الخاصة بك والمنتهية أرقامها بـ 3993 لدى TAPT*TestRecipient."));
+        assertTrue(BankNotificationFilter.looksLikeCandidate("لقد تم إعادة مبلغ عملية شراء بقيمة AED 38.00 إلى حساب بطاقتك."));
+        assertFalse(BankNotificationFilter.looksLikeCandidate("*Convert now* Pay as low as AED 32.31 per month for the purchase of AED 1124.50 with credit card ending 4021"));
+        assertFalse(BankNotificationFilter.looksLikeCandidate("رفض معاملة شراء لعدم وجود رصيد كاف المبلغ AED 185.66"));
+    }
 }

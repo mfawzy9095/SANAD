@@ -208,3 +208,14 @@ assert.strictEqual(merchantTx.transaction.merchantName,'Carrefour Market');
 assert.strictEqual(merchantTx.transaction.cat,'grocery');
 
 console.log('bank message parser regression tests: PASS');
+
+// Source metadata beats merchant keywords; body alone cannot identify a generic issuer.
+for(const [title,expectedBank,expectedProvider] of [['EI SMS','emirates-islamic',null],['duPay',null,'du-pay']]){
+  const p=P.parse({title,text:'Purchase AED 32.00 at CITI TAXI using card ending 0308'});
+  assert.strictEqual(p.bankId,expectedBank);
+  assert.strictEqual(p.providerId,expectedProvider);
+}
+assert.strictEqual(P.parse({text:'Purchase AED 32.00 at CITI TAXI using card ending 0308'}).bankId,null);
+assert.strictEqual(P.parse({title:'EmiratesNBD',text:'*Convert now* Pay as low as AED 32.31 per month for the purchase of AED 1124.50 at TEST STORE with credit card ending 4021 via clicking https://example.invalid'}).ignored,true);
+const arRefund=P.parse({title:'EmiratesNBD',text:'لقد تم إعادة مبلغ عملية شراء بقيمة AED 38.00 منفذ لدى TEST STORE بواسطة بطاقة الخصم المنتهية أرقامها بـ 3993 إلى حساب بطاقتك. الرصيد المتوفر هو 5685.54 AED.'});
+assert.strictEqual(arRefund.kind,'refund');assert.strictEqual(arRefund.amount,38);assert.strictEqual(arRefund.availableBalance,5685.54);
