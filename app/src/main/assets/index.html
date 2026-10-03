@@ -9144,18 +9144,18 @@ const SanadBankInbox = {
     const rows=[];
     for(const inst of S.paymentInstruments.filter(i=>i&&!i.archived&&i.country===country)){
       const acc=Finance.getAccount(inst.accountId);
-      if(!acc||acc.archived||acc.currency!==currency)continue;
-      rows.push({value:'instrument:'+inst.id,label:(inst.icon||'💳')+' '+inst.name+' · '+acc.name});
+      if(!acc||acc.archived)continue;
+      rows.push({value:'instrument:'+inst.id,label:(inst.icon||'💳')+' '+inst.name+' · '+acc.name+' ('+acc.currency+')'});
     }
-    for(const acc of S.accounts.filter(a=>a&&!a.archived&&a.country===country&&a.currency===currency)){
-      rows.push({value:'account:'+acc.id,label:(acc.icon||'🏦')+' '+acc.name});
+    for(const acc of S.accounts.filter(a=>a&&!a.archived&&a.country===country)){
+      rows.push({value:'account:'+acc.id,label:(acc.icon||'🏦')+' '+acc.name+' ('+acc.currency+')'});
     }
     return '<option value="">— اختر الحساب / الكارت —</option>'+rows.map(r=>'<option value="'+esc(r.value)+'"'+(selected===r.value?' selected':'')+'>'+esc(r.label)+'</option>').join('');
   },
   correctionTargetOptions(parsed,selected){
     const country=parsed.country||'UAE',currency=parsed.currency||'AED';
-    return '<option value="">— بدون / غير مطلوب —</option>'+S.accounts.filter(a=>a&&!a.archived&&a.country===country&&a.currency===currency).map(a=>
-      '<option value="'+esc(a.id)+'"'+(selected===a.id?' selected':'')+'>'+esc((a.icon||'🏦')+' '+a.name)+'</option>'
+    return '<option value="">— بدون / غير مطلوب —</option>'+S.accounts.filter(a=>a&&!a.archived&&a.country===country).map(a=>
+      '<option value="'+esc(a.id)+'"'+(selected===a.id?' selected':'')+'>'+esc((a.icon||'🏦')+' '+a.name+' ('+a.currency+')')+'</option>'
     ).join('');
   },
   openCorrection(id){
@@ -9186,7 +9186,7 @@ const SanadBankInbox = {
         '<div class="field"><label>نوع العملية</label><select id="bankFixKind">'+kindOpts+'</select></div>'+
         pairHtml+
         '<div class="field"><label>المبلغ</label><input id="bankFixAmount" type="number" inputmode="decimal" step="0.01" value="'+esc(String(p.amount||''))+'"></div>'+
-        '<div class="field"><label>العملة</label><select id="bankFixCurrency">'+curOpts+'</select></div>'+
+        '<div class="field"><label>عملة المبلغ المسجل في الحساب</label><select id="bankFixCurrency">'+curOpts+'</select><div class="field-hint">للشراء بعملة أجنبية: أدخل مبلغ الخصم المؤكد وعملته من كشف الحساب؛ لا تحول العملة بالاسم فقط أو تستنتج سعر الصرف من فرق الرصيد.</div></div>'+
         '<div class="field"><label>رسوم إضافية تخصم من حساب المصدر، شاملة الضريبة</label><input id="bankFixFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="اتركها فارغة إذا لم تتأكد"><div class="field-hint">بنفس عملة العملية. أدخل صفرًا فقط إذا تأكدت أن العملية بلا رسوم إضافية؛ لا تستنتج الرسوم من صيغة نسبة أو فرق الرصيد.</div></div>'+
         '<div class="field"><label>الحساب / الكارت المصدر</label><select id="bankFixSource">'+this.correctionSourceOptions(p,source)+'</select>'+
           (p.cardLast4?'<div class="field-hint">الرسالة تشير إلى كارت ****'+esc(p.cardLast4)+'؛ اختر نفس الكارت حتى يتعلم الربط بدقة.</div>':'')+'</div>'+
@@ -9243,6 +9243,10 @@ const SanadBankInbox = {
     const pairId=String((document.getElementById('bankFixPair')||{}).value||'');
     if(pairId&&kind!=='internal_transfer'){toast('اختر تحويل بين حساباتي للربط بالطرف المحفوظ');return;}
     const built=pairId?BankIngestionCore.pairOwnTransfer(item.parsed,S,{counterpartTransactionId:pairId,fromAccountId:route.fromAccount&&route.fromAccount.id,toAccountId:route.targetAccount&&route.targetAccount.id},buildOptions):BankMessageCore.buildTransaction(corrected,route,buildOptions);
+    if(built.ok&&!built.replacesTransactionId){
+      const original=item.parsed;
+      built.transaction.bankLinkedImportEvents=[{key:BankMessageCore.dedupeKey(original),eventId:original.eventId||null,bankId:original.bankId||null,providerId:original.providerId||null,currency:original.currency,amount:original.amount,ref:original.transactionRef||null,kind:original.kind,postedAt:Number(original.postedAt),text:original.raw||'',availableBalance:original.availableBalance}];
+    }
     if(!built.ok){toast(built.reason==='fee-confirmation-required'?'أكد الرسوم الإضافية أولًا؛ صفر فقط إذا كانت بلا رسوم':built.reason==='invalid-confirmed-fee'?'أدخل رسومًا صحيحة غير سالبة':built.reason==='fee-direction-review-required'?'رسوم الاستلام تحتاج تأكيد صافي المبلغ من المصدر':'الربط غير صالح لهذه العملية');return;}
     if(BankIngestionCore.duplicateOf(corrected,S)){this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
     const result=await commitCriticalMutation(async()=>{

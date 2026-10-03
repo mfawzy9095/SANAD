@@ -52,3 +52,17 @@ async function scenario(status,mode='recent',permission=true){
  assert.strictEqual(to.observedAvailableCredit,500);assert.strictEqual(from.observedAvailableCredit,undefined);
  assert.strictEqual(to.creditReconciliation.status,'observed-only');
 }
+
+// Issuer accounts stay selectable for an FX review, but saving still requires
+// an explicitly corrected settlement amount/currency and the exact card.
+{
+ const state={accounts:[{id:'egp',name:'Egypt card',country:'EGY',currency:'EGP',type:'credit'}],paymentInstruments:[{id:'card',name:'9721',accountId:'egp',country:'EGY',type:'credit_card',last4:'9721'}]};
+ const a=html.indexOf('  correctionSourceOptions(parsed,selected){'),b=html.indexOf('  openCorrection(id){',a);
+ const ctx={S:state,Finance:{getAccount:id=>state.accounts.find(x=>x.id===id)},esc:s=>String(s)};vm.createContext(ctx);
+ const ui=vm.runInContext('({'+html.slice(a,b)+'})',ctx);
+ const p={kind:'purchase',country:'EGY',currency:'MAD',amount:100,cardLast4:'9721'};
+ assert(ui.correctionSourceOptions(p,'').includes('instrument:card'));
+ assert(ui.correctionSourceOptions(p,'').includes('(EGP)'));
+ assert.strictEqual(I.routeFromManualChoice(p,state,{sourceType:'instrument',sourceId:'card'}).status,'needs-review');
+ assert.strictEqual(I.routeFromManualChoice({...p,currency:'EGP',amount:550},state,{sourceType:'instrument',sourceId:'card'}).status,'routed');
+}
