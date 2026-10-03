@@ -215,7 +215,7 @@
     return {
       id:uid('a'),institutionId:institutionId||null,country:countryForParsed(parsed),
       name:sourceDisplay(parsed)+' • Credit ****'+parsed.cardLast4,
-      type:'credit',currency:parsed.currency||'AED',
+      type:'credit',currency:parsed.availableCreditCurrency||parsed.currency||'AED',
       openingBalance:0,openingDebt:0,creditLimit:0,defaultRepaymentAccountId:null,
       icon:'💠',color:'#6A1B9A',archived:false,created:new Date(parsed.postedAt||Date.now()).toISOString().slice(0,10),
       autoDiscovered:true,autoDiscoverySource:parsed.bankId||null,baselinePartial:true,
@@ -873,7 +873,7 @@
       return {action:'review',reason:direct.reason||'existing-source-required',confidence:0};
     }
 
-    route=resolveCustomRoute(parsed,draft,MessageCore.resolveRoute(parsed,draft));
+    if(!route||!route.sameSourceUnique)route=resolveCustomRoute(parsed,draft,MessageCore.resolveRoute(parsed,draft));
     const eligible=autoEligible(parsed,route);
     if(!eligible.ok)return {action:'review',reason:eligible.reason,confidence:0,create};
     let built=applyLearnedCategory(parsed,state,MessageCore.buildTransaction(parsed,route,{uid}));

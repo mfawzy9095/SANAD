@@ -149,7 +149,9 @@
     if(m){const merchant=m[3].replace(/\s+/g,' ').trim();return result({bankId:'emirates-nbd',kind:'purchase',direction:'debit',currency:m[1],amount:amount(m[2]),merchant,category:categoryForMerchant(merchant),cardLast4:m[4],cardType:'credit_card',availableCredit:amount(m[6]),availableCreditCurrency:m[5]||m[1],confidence:0.99},input,raw);}
     m=x.match(/تمت\s+عملية\s+شراء\s+بقيمة\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+لدى\s+(.+?)\s+باستخدام\s+بطاقة\s+خصم\s+تنتهي\s+ارقامها\s+ب[ـ]?\s*(\d{4}).*?الرصيد\s+المتوفر\s+هو\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)/i);
     if(m){const merchant=m[3].replace(/\s+/g,' ').trim();return result({bankId:'emirates-nbd',kind:'purchase',direction:'debit',currency:m[1],amount:amount(m[2]),merchant,category:categoryForMerchant(merchant),cardLast4:m[4],cardType:'debit_card',availableBalance:amount(m[6]),availableBalanceCurrency:m[5],confidence:0.99},input,raw);}
-    m=x.match(/(?:لقد\s+)?تم\s+تحويل\s+مبلغ\s+([\d,]+(?:\.\d+)?)\s*([A-Za-z]{3})\s+باستخدام\s+بطاقة\s+الخصم.+?(\d{4})\s+لدى\s+(.+?)\.\s*رصيدك\s+الحالي\s+هو\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)/i);
+    // Same ENBD posting contract, with ISO currency before rather than after the amount.
+    const remittanceText=x.replace(/((?:لقد\s+)?تم\s+تحويل\s+مبلغ\s+)([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)/i,'$1$3$2');
+    m=remittanceText.match(/(?:لقد\s+)?تم\s+تحويل\s+مبلغ\s+([\d,]+(?:\.\d+)?)\s*([A-Za-z]{3})\s+باستخدام\s+بطاقة\s+الخصم.+?(\d{4})\s+لدى\s+(.+?)\.\s*رصيدك\s+الحالي\s+هو\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)/i);
     if(m){
       const merchant=m[4].replace(/\s+/g,' ').trim();
       const remittance=remittanceDetailsFromMerchant(merchant);
@@ -295,7 +297,7 @@
     if(refMatch)transactionRef=refMatch[1];
     const dateMatch=x.match(/(?:date\s*[:.-]?\s*|\bon\s+)?(\d{1,2}\/\d{1,2}\/\d{4})\b/i);
     if(dateMatch)transactionDate=isoDateFromDmy(dateMatch[1]);
-    const base={bankId,providerId,amount:value,currency,cardFirst4,cardLast4:card,cardNetwork,cardType,accountRef:acc?normalizeRef(acc):null,merchant,availableBalance,availableCredit,beneficiaryName,transactionRef,transactionDate};
+    const base={bankId,providerId,amount:value,currency,availableBalanceCurrency:(balMatch&&balMatch[1])||currency,availableCreditCurrency:(creditMatch&&creditMatch[1])||currency,cardFirst4,cardLast4:card,cardNetwork,cardType,accountRef:acc?normalizeRef(acc):null,merchant,availableBalance,availableCredit,beneficiaryName,transactionRef,transactionDate};
     const ownTransfer=x.match(/(?:from\s+(?:your\s+)?account|من\s+حساب(?:ك)?)\s*[:.]?\s*([A-Za-z0-9Xx*]{2,30}).{0,100}?(?:to\s+(?:your\s+)?account|الى\s+حساب(?:ك)?|إلى\s+حساب(?:ك)?)\s*[:.]?\s*([A-Za-z0-9Xx*]{2,30})/i);
     if(ownTransfer&&/[0-9Xx*]/.test(ownTransfer[1])&&/[0-9Xx*]/.test(ownTransfer[2])){
       const fromRef=normalizeRef(ownTransfer[1]),toRef=normalizeRef(ownTransfer[2]);

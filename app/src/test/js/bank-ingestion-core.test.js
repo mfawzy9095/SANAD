@@ -700,3 +700,13 @@ console.log('bank ingestion core regression tests: PASS');
   assert.strictEqual(I.plan(p,s,{uid}).action,'duplicate');
   assert.strictEqual(I.plan({...p,eventId:'older',postedAt:1990000,availableBalance:500},s,{uid}).action,'duplicate');
 }
+
+// A validated unique bank-account discovery route must survive final planning.
+{
+  const s=empty();s.institutions.push({id:'enbd',bankRegistryId:'emirates-nbd',country:'UAE',type:'bank'});
+  s.accounts.push({id:'bank',institutionId:'enbd',type:'bank',country:'UAE',currency:'AED',openingBalance:0});
+  s.accounts.push({id:'credit',institutionId:'enbd',type:'credit',country:'UAE',currency:'AED',openingDebt:0});
+  const p=P.parse({id:'salary-new-ref',title:'EmiratesNBD',postedAt:5000000,text:'تم ايداع الراتب AED 9,000.00 في حسابك .012XXX50XXX01 الرصيد المتوفر هو AED 9,001.66'});
+  assert.strictEqual(I.plan(p,s,{uid}).action,'auto-save');
+  assert.strictEqual(I.plan(p,s,{uid}).transaction.accountId,'bank');
+}

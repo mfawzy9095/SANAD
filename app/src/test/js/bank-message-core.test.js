@@ -219,3 +219,5 @@ assert.strictEqual(P.parse({text:'Purchase AED 32.00 at CITI TAXI using card end
 assert.strictEqual(P.parse({title:'EmiratesNBD',text:'*Convert now* Pay as low as AED 32.31 per month for the purchase of AED 1124.50 at TEST STORE with credit card ending 4021 via clicking https://example.invalid'}).ignored,true);
 const arRefund=P.parse({title:'EmiratesNBD',text:'لقد تم إعادة مبلغ عملية شراء بقيمة AED 38.00 منفذ لدى TEST STORE بواسطة بطاقة الخصم المنتهية أرقامها بـ 3993 إلى حساب بطاقتك. الرصيد المتوفر هو 5685.54 AED.'});
 assert.strictEqual(arRefund.kind,'refund');assert.strictEqual(arRefund.amount,38);assert.strictEqual(arRefund.availableBalance,5685.54);
+const beforeCurrency=P.parse({title:'EmiratesNBD',text:'لقد تمّ تحويل مبلغ AED 500.00 باستخدام بطاقة الخصم الخاصة بك والمنتهية أرقامها بـ 3993 لدى TAPT*TestRecipient. رصيدك الحالي هو AED 4135.57.'});
+assert.strictEqual(beforeCurrency.kind,'outgoing_transfer');assert.strictEqual(beforeCurrency.amount,500);assert.strictEqual(beforeCurrency.transferChannel,'Taptap Send');
