@@ -7,7 +7,7 @@ public final class BankNotificationFilter {
     private BankNotificationFilter() {}
 
     private static final Pattern MONEY = Pattern.compile(
-            "(?i)(?:AED|USD|EUR|GBP|SAR|EGP|MAD)\\s*[0-9][0-9,.]*|[0-9][0-9,.]*\\s*(?:AED|USD|EUR|GBP|SAR|EGP|MAD)"
+            "(?i)(?:AED|USD|EUR|GBP|SAR|EGP|MAD|ج\\.?\\s*م\\.?|جم|جنيه)\\s*[0-9][0-9,.]*|[0-9][0-9,.]*\\s*(?:AED|USD|EUR|GBP|SAR|EGP|MAD|ج\\.?\\s*م\\.?|جم|جنيه)"
     );
 
     public static boolean looksLikeCandidate(String raw) {
@@ -39,6 +39,8 @@ public final class BankNotificationFilter {
                 "تم تحويل مبلغ", "تحويل الأموال", "تحويل الاموال", "لتسديد مستحقات",
                 "purchase", "purchased", "card purchase", "pos", "merchant",
                 "debited", "debit", "credited", "credit", "salary", "payroll",
+                "تم استلام", "تم شحن", "تم دفع", "تم تنفيذ تحويل", "تم اضافه تحويل",
+                "الرصيد المتاح بمحفظه", "رصيد محفظتك", "saved", "gold", "added to your",
                 "deposit", "transfer", "payment", "عملية دفع", "عمليه دفع",
                 "has been used for", "you've received", "you’ve received", "received aed",
                 "successfully withdrawn", "withdrawn",
@@ -58,6 +60,8 @@ public final class BankNotificationFilter {
         String s = value.toLowerCase(Locale.ROOT)
                 .replace('٠','0').replace('١','1').replace('٢','2').replace('٣','3').replace('٤','4')
                 .replace('٥','5').replace('٦','6').replace('٧','7').replace('٨','8').replace('٩','9')
+                .replace('۰','0').replace('۱','1').replace('۲','2').replace('۳','3').replace('۴','4')
+                .replace('۵','5').replace('۶','6').replace('۷','7').replace('۸','8').replace('۹','9')
                 .replace('أ','ا').replace('إ','ا').replace('آ','ا').replace('ى','ي');
         return s.replaceAll("[\\u064b-\\u065f\\u0670]", "").replaceAll("\\s+", " ").trim();
     }

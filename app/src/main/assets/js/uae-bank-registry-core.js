@@ -606,6 +606,16 @@
     'reem-community-bank':{ar:'بنك ريم المجتمعي',short:'Reem'},
     'iraqi-islamic-bank':{ar:'المصرف العراقي الإسلامي',short:'IIB'}
   });
+  // Regional sender evidence from the user's corpus; separate from the CBUAE bank list.
+  const REGIONAL_BANKS=Object.freeze([
+    {id:'nbe-egypt',name:'National Bank of Egypt',country:'EGY',aliases:['BanK-AlAhly','Bank AlAhly','البنك الاهلي المصري']},
+    {id:'fab-misr',name:'FABMISR',country:'EGY',aliases:['FABMISR','FAB Misr']},
+    {id:'bank-audi-egypt',name:'Bank Audi Egypt',country:'EGY',aliases:['Bank Audi']},
+    {id:'bank-nxt-egypt',name:'Bank NXT',country:'EGY',aliases:['Bank NXT','BANKNXT']}
+  ].map(Object.freeze));
+  const REGIONAL_PROVIDERS=Object.freeze([
+    {id:'e-cash-egypt',name:'e& Cash Egypt',country:'EGY',aliases:['ET Cash','e& Cash','اتصالات كاش','اي اند كاش'],type:'digital_wallet',short:'e& Cash Egypt'},
+  ].map(Object.freeze));
   const PAYMENT_PROVIDERS=Object.freeze([
     {id:'e-money',name:'e& money',nameAr:'إي آند موني',short:'e& money',aliases:['e& money','eandmoney','e money','Digital Financial Services LLC','المحفظة e& money'],type:'digital_wallet',country:'UAE',legalName:'Digital Financial Services L.L.C.',logoDomain:'eandmoney.com',popular:true},
     {id:'botim-money',name:'BOTIM Money',nameAr:'بوتيم موني',short:'BOTIM Money',aliases:['BOTIM Money','Botim Money','Botim wallet','PayBy','Botim Money Technology LLC'],type:'digital_wallet',country:'UAE',legalName:'Botim Money Technology L.L.C',logoDomain:'botim.me',popular:true},
@@ -694,8 +704,8 @@
   function providerAliases(provider){
     return [provider&&provider.name,provider&&provider.nameAr,provider&&provider.short,provider&&provider.legalName].concat(provider&&provider.aliases||[]).filter(Boolean);
   }
-  function get(id){return BANKS.find(b=>b.id===id)||null;}
-  function getProvider(id){return PAYMENT_PROVIDERS.find(p=>p.id===id)||null;}
+  function get(id){return BANKS.concat(REGIONAL_BANKS).find(b=>b.id===id)||null;}
+  function getProvider(id){return PAYMENT_PROVIDERS.concat(REGIONAL_PROVIDERS).find(p=>p.id===id)||null;}
   function bankDisplayName(bankOrId,lang){
     const bank=typeof bankOrId==='string'?get(bankOrId):bankOrId;
     if(!bank)return '';
@@ -741,7 +751,7 @@
   }
   function detect(text){
     let best=null;
-    for(const bank of BANKS)for(const alias of aliasesFor(bank)){
+    for(const bank of BANKS.concat(REGIONAL_BANKS))for(const alias of aliasesFor(bank)){
       if(!containsAlias(text,alias))continue;
       const score=normalize(alias).length+(bank.popular?2:0);
       if(!best||score>best.score)best={bank,alias,score};
@@ -750,12 +760,12 @@
   }
   function detectProvider(text){
     let best=null;
-    for(const provider of PAYMENT_PROVIDERS)for(const alias of providerAliases(provider)){
+    for(const provider of PAYMENT_PROVIDERS.concat(REGIONAL_PROVIDERS))for(const alias of providerAliases(provider)){
       if(!containsAlias(text,alias))continue;
       const score=normalize(alias).length;
       if(!best||score>best.score)best={provider,alias,score};
     }
     return best;
   }
-  return Object.freeze({SOURCE,BANKS,BANK_LOCALIZATION,PAYMENT_PROVIDERS,CBUAE_SVF_LICENSEES,LOGO_DOMAINS,list,listProviders,search,searchProviders,get,getProvider,detect,detectProvider,normalize,logoDomain,initials,bankDisplayName,bankShortName,providerDisplayName,providerShortName});
+  return Object.freeze({SOURCE,BANKS,REGIONAL_BANKS,REGIONAL_PROVIDERS,BANK_LOCALIZATION,PAYMENT_PROVIDERS,CBUAE_SVF_LICENSEES,LOGO_DOMAINS,list,listProviders,search,searchProviders,get,getProvider,detect,detectProvider,normalize,logoDomain,initials,bankDisplayName,bankShortName,providerDisplayName,providerShortName});
 });

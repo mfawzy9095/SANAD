@@ -5,9 +5,9 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(Banks){
   'use strict';
   if(!Banks)throw new Error('bank-registry-required');
-  function latinDigits(value){return String(value==null?'':value).replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));}
+  function latinDigits(value){return String(value==null?'':value).replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));}
   function cleanText(value){return latinDigits(value).replace(/[\u064b-\u065f\u0670]/g,'').replace(/[إأآ]/g,'ا').replace(/\s+/g,' ').trim();}
-  function amount(value){const n=Number(String(value==null?'':value).replace(/,/g,''));return Number.isFinite(n)?Math.round(n*100)/100:null;}
+  function amount(value){const n=Number(String(value==null?'':value).replace(/[,\s]/g,''));return Number.isFinite(n)?Math.round(n*100)/100:null;}
   function suffix(ref){const m=latinDigits(ref).match(/(\d{2,4})\D*$/);return m?m[1]:null;}
   function normalizeRef(ref){return latinDigits(ref).replace(/[^A-Za-z0-9*Xx]/g,'').toUpperCase();}
   function availableBalanceFromText(x){
@@ -41,6 +41,7 @@
   }
   function providerIdFrom(input,raw){
     if(input&&input.providerId&&Banks.getProvider&&Banks.getProvider(input.providerId))return input.providerId;
+    if(/^\s*e&\s*money\s*$/i.test((input&&input.title)||'')&&/ج\.?\s*م|جنيه|ج\./.test(raw))return 'e-cash-egypt';
     const hit=Banks.detectProvider?Banks.detectProvider(((input&&input.title)||'')+' '+((input&&input.sender)||'')):null;
     if(hit)return hit.provider.id;
     const pkg=input&&input.packageName;
@@ -60,12 +61,12 @@
   function categoryForMerchant(value){
     const x=String(value||'').toLowerCase();
     if(/pharmacy|medical|med cen|hospital|clinic|nmc|parla|صيدلي|مستشف/.test(x))return 'health';
-    if(/taxi|uber|careem|metro|rta|fuel|petrol/.test(x))return 'transport';
+    if(/taxi|uber|careem|metro|rta|fuel|petrol|eppco site|enoc/.test(x))return 'transport';
     if(/cafe|cafet|cafeteria|coffee|starbucks/.test(x))return 'cafe';
-    if(/restaurant|restauran|chicken|caya|bakery|bakeires|mandi|burger|sweets|cake|noon food|talabat|deliveroo|careem food|food/.test(x))return 'food';
+    if(/restaurant|restauran|chicken|caya|bakery|bakeires|mandi|burger|sweets|cake|noon food|albaik|tanor zaman pastry|talabat|deliveroo|careem food|food/.test(x))return 'food';
     if(/grocery|union coop|carrefour|viva|mini mart|hyperma|hypermarket|noon minutes|nownow|souq al madina/.test(x))return 'grocery';
     if(/du google|etisalat|e&|telecom|internet|contabo/.test(x))return 'bills';
-    if(/adidas|temu|alibaba|xpressions|day to day|amazon|shopping|discounts cen/.test(x))return 'shopping';
+    if(/adidas|temu|alibaba|xpressions|day to day|amazon|shopping|brands for less|discounts cen/.test(x))return 'shopping';
     if(/platinumlist|cinema|entertainment/.test(x))return 'fun';
     if(/laundry/.test(x))return 'home';
     return 'other';
@@ -100,15 +101,20 @@
   }
   function result(base,input,raw){
     const resolvedCurrency=String(base.currency||'AED').toUpperCase();
+    const resolvedBank=base.bankId||bankIdFrom(input,raw),resolvedProvider=base.providerId||providerIdFrom(input,raw);
+    const institution=resolvedBank?Banks.get(resolvedBank):(resolvedProvider&&Banks.getProvider?Banks.getProvider(resolvedProvider):null);
+    const issuerCountry=base.country||(resolvedBank==='emirates-nbd'&&resolvedCurrency==='EGP'?'EGY':(institution&&(institution.country||'UAE')))||countryForCurrency(resolvedCurrency);
+
     return Object.assign({recognized:true,ignored:false,eventId:input&&input.id?String(input.id):null,postedAt:Number(input&&input.postedAt)||Date.now(),
-      bankId:base.bankId||bankIdFrom(input,raw),providerId:base.providerId||providerIdFrom(input,raw),kind:base.kind,direction:base.direction||null,amount:Number(base.amount),
-      currency:resolvedCurrency,country:base.country||countryForCurrency(resolvedCurrency),merchant:base.merchant||'',category:base.category||'other',
+      bankId:resolvedBank,providerId:resolvedProvider,kind:base.kind,direction:base.direction||null,amount:Number(base.amount),
+      currency:resolvedCurrency,country:issuerCountry,transactionCountry:null,merchant:base.merchant||'',category:base.category||'other',
       cardFirst4:base.cardFirst4||null,cardLast4:base.cardLast4||null,cardNetwork:base.cardNetwork||null,accountRef:base.accountRef||null,accountSuffix:base.accountSuffix||suffix(base.accountRef),
       fromAccountRef:base.fromAccountRef||null,toAccountRef:base.toAccountRef||null,
       transactionRef:base.transactionRef||null,transactionDate:base.transactionDate||null,beneficiaryName:base.beneficiaryName||null,
       transferChannel:base.transferChannel||null,
       sourceHint:base.sourceHint||[input&&input.title,input&&input.sender,input&&input.packageName].filter(Boolean).join(' ').trim(),
       fee:base.fee==null?0:Number(base.fee),vat:base.vat==null?0:Number(base.vat),
+      availableBalanceCurrency:base.availableBalanceCurrency||resolvedCurrency,availableCreditCurrency:base.availableCreditCurrency||resolvedCurrency,
       availableBalance:base.availableBalance==null?null:Number(base.availableBalance),availableCredit:base.availableCredit==null?null:Number(base.availableCredit),
       raw:String(raw),confidence:Number(base.confidence||0.95)},base);
   }
@@ -135,14 +141,14 @@
   }
   function parseEnbd(input,raw){
     const x=cleanText(raw); let m;
-    m=x.match(/(?:لقد\s+)?تم\s+اعادة\s+مبلغ\s+عملية\s+شراء\s+بقيمة\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?).*?لدى\s+(.+?)\s+بواسطة\s+بطاقة\s+الخصم.*?(\d{4}).*?الرصيد\s+المتوفر\s+هو\s+([\d,]+(?:\.\d+)?)\s*([A-Za-z]{3})/i);
-    if(m)return result({bankId:'emirates-nbd',kind:'refund',direction:'credit',currency:m[1],amount:amount(m[2]),merchant:m[3].trim(),cardLast4:m[4],cardType:'debit_card',availableBalance:amount(m[5]),confidence:0.99},input,raw);
+    m=x.match(/(?:لقد\s+)?تم\s+اعادة\s+مبلغ\s+عملية\s+شراء\s+بقيمة\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?).*?لدى\s+(.+?)\s+بواسطة\s+بطاقة\s+(الخصم|الائتمان).*?(\d{4}).*?(الرصيد\s+المتوفر\s+هو|الحد\s+المتوفر\s+هو)\s+(?:([A-Za-z]{3})\s*)?(-?[\d,]+(?:\.\d+)?)(?:\s*([A-Za-z]{3}))?/i);
+    if(m){const credit=m[4]==='الائتمان',base={bankId:'emirates-nbd',kind:'refund',direction:'credit',currency:m[1],amount:amount(m[2]),merchant:m[3].trim(),cardLast4:m[5],cardType:credit?'credit_card':'debit_card',confidence:0.99};base[credit?'availableCredit':'availableBalance']=amount(m[8]);base[credit?'availableCreditCurrency':'availableBalanceCurrency']=m[7]||m[9]||m[1];return result(base,input,raw);}
     m=x.match(/تم\s+خصم\s+مبلغ\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+من\s+حسابك\s+\.?\s*([A-Za-z0-9Xx*]+)\s+لتسديد\s+مستحقات\s+بطاقتك\s+الائتمانية\s*(\d{4})/i);
     if(m)return result({bankId:'emirates-nbd',kind:'card_repayment',direction:'transfer',currency:m[1],amount:amount(m[2]),accountRef:normalizeRef(m[3]),cardLast4:m[4],confidence:0.99},input,raw);
     m=x.match(/تمت\s+عملية\s+شراء\s+في\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+(.+?)\s+على\s+البطاقة\s+(\d{4})\s+الائتمان\s+المتوفر\s+([A-Za-z]{3})?\s*(-?[\d,]+(?:\.\d+)?)/i);
-    if(m){const merchant=m[3].replace(/\s+/g,' ').trim();return result({bankId:'emirates-nbd',kind:'purchase',direction:'debit',currency:m[1],amount:amount(m[2]),merchant,category:categoryForMerchant(merchant),cardLast4:m[4],cardType:'credit_card',availableCredit:amount(m[6]),confidence:0.99},input,raw);}
+    if(m){const merchant=m[3].replace(/\s+/g,' ').trim();return result({bankId:'emirates-nbd',kind:'purchase',direction:'debit',currency:m[1],amount:amount(m[2]),merchant,category:categoryForMerchant(merchant),cardLast4:m[4],cardType:'credit_card',availableCredit:amount(m[6]),availableCreditCurrency:m[5]||m[1],confidence:0.99},input,raw);}
     m=x.match(/تمت\s+عملية\s+شراء\s+بقيمة\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+لدى\s+(.+?)\s+باستخدام\s+بطاقة\s+خصم\s+تنتهي\s+ارقامها\s+ب[ـ]?\s*(\d{4}).*?الرصيد\s+المتوفر\s+هو\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)/i);
-    if(m){const merchant=m[3].replace(/\s+/g,' ').trim();return result({bankId:'emirates-nbd',kind:'purchase',direction:'debit',currency:m[1],amount:amount(m[2]),merchant,category:categoryForMerchant(merchant),cardLast4:m[4],cardType:'debit_card',availableBalance:amount(m[6]),confidence:0.99},input,raw);}
+    if(m){const merchant=m[3].replace(/\s+/g,' ').trim();return result({bankId:'emirates-nbd',kind:'purchase',direction:'debit',currency:m[1],amount:amount(m[2]),merchant,category:categoryForMerchant(merchant),cardLast4:m[4],cardType:'debit_card',availableBalance:amount(m[6]),availableBalanceCurrency:m[5],confidence:0.99},input,raw);}
     m=x.match(/(?:لقد\s+)?تم\s+تحويل\s+مبلغ\s+([\d,]+(?:\.\d+)?)\s*([A-Za-z]{3})\s+باستخدام\s+بطاقة\s+الخصم.+?(\d{4})\s+لدى\s+(.+?)\.\s*رصيدك\s+الحالي\s+هو\s+([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)/i);
     if(m){
       const merchant=m[4].replace(/\s+/g,' ').trim();
@@ -155,6 +161,11 @@
     if(m)return result({bankId:'emirates-nbd',kind:'deposit',direction:'credit',currency:m[1],amount:amount(m[2]),accountRef:normalizeRef(m[3]),availableBalance:availableBalanceFromText(x),category:'other',confidence:0.98},input,raw);
     m=x.match(/تم\s+خصم\s+(?:مبلغ\s+)?([A-Za-z]{3})\s*([\d,]+(?:\.\d+)?)\s+من\s+حسابك\s+\.?\s*([A-Za-z0-9Xx*]+)\s+لتحويل\s+الاموال/i);
     if(m)return result({bankId:'emirates-nbd',kind:'outgoing_transfer',direction:'debit',currency:m[1],amount:amount(m[2]),accountRef:normalizeRef(m[3]),category:'externalTransfer',confidence:0.97},input,raw);
+    m=x.match(/(?:لقد\s+)?تم\s+عكس\s+عملية\s+تحويل.*?([\d,]+(?:\.\d+)?)\s*(AED|EGP).*?(\d{4}).*?(?:رصيدك\s+الحالي\s+هو|الرصيد\s+المتوفر\s+هو)\s*(AED|EGP)\s*([\d,]+(?:\.\d+)?)/i);
+    if(m)return result({bankId:'emirates-nbd',kind:'refund',direction:'credit',currency:m[2],amount:amount(m[1]),cardLast4:m[3],cardType:'debit_card',availableBalance:amount(m[5]),confidence:0.98},input,raw);
+    m=x.match(/تم\s+خصم\s+مبلغ\s+(AED|EGP)\s*([\d,]+(?:\.\d+)?)\s+من\s+حسابك\s+(?:رقم\s+)?([A-Za-z0-9Xx*]+)\s+(.+?)(?:\.|$)/i);
+    if(m&&/تحويل\s+تلغرافي|لاصدارتحويل/.test(m[4]))return result({bankId:'emirates-nbd',kind:'outgoing_transfer',direction:'debit',currency:m[1],amount:amount(m[2]),accountRef:normalizeRef(m[3]),availableBalance:availableBalanceFromText(x),category:'externalTransfer',transferChannel:'Bank telegraphic transfer',confidence:0.98},input,raw);
+    if(m&&/دفع|سداد|تعبئة|فاتورة/.test(m[4]))return result({bankId:'emirates-nbd',kind:'bill_payment',direction:'debit',currency:m[1],amount:amount(m[2]),accountRef:normalizeRef(m[3]),merchant:m[4],availableBalance:availableBalanceFromText(x),category:'bills',confidence:0.98},input,raw);
     return null;
   }
   function parseArabicCreditCard(input,raw){
@@ -164,7 +175,7 @@
       const merchant=m[2].replace(/\s+/g,' ').trim();
       return result({kind:'purchase',direction:'debit',cardLast4:m[1],cardType:'credit_card',merchant,category:categoryForMerchant(merchant),
         currency:m[3],amount:amount(m[4]),transactionDate:isoDateFromDmy(m[5]),transactionTime:m[6],
-        availableCredit:amount(m[7]),confidence:0.99},input,raw);
+        availableCredit:amount(m[7]),availableCreditCurrency:m[8],confidence:0.99},input,raw);
     }
     return null;
   }
@@ -184,8 +195,61 @@
     if(m)return result({providerId:'du-pay',kind:'cash_withdrawal',direction:'debit',currency:m[1],amount:amount(m[2]),transactionRef:m[3],availableBalance:amount(m[5]),category:'other',confidence:0.99},input,raw);
     return null;
   }
+  function parseWalletFamilies(input,raw){
+    const x=cleanText(raw),providerId=providerIdFrom(input,raw);let m;
+    if(providerId==='e-money'){
+      m=x.match(/(AED)\s*([\d,]+(?:\.\d+)?)\s+added\s+to\s+your\s+e&\s*money[\s\S]*?updated\s+balance\s+is\s+AED\s*([\d,]+(?:\.\d+)?)[\s\S]*?transaction\s+id\s*:\s*([A-Za-z0-9-]+)/i);
+      if(m)return result({providerId,kind:'deposit',direction:'credit',currency:'AED',amount:amount(m[2]),availableBalance:amount(m[3]),transactionRef:m[4],confidence:0.99},input,raw);
+      m=x.match(/saved\s+AED\s*([\d,]+(?:\.\d+)?)\s+in\s+gold[\s\S]*?transaction\s+id\s+is\s+(\w+)[\s\S]*?([\d.eE+-]+)\s*gm\s+gold\s+balance/i);
+      if(m)return result({providerId,kind:'investment_purchase',direction:'debit',currency:'AED',amount:amount(m[1]),transactionRef:m[2],goldGrams:Number(m[3]),confidence:0.99},input,raw);
+      if(/just\s+sold\s+[\d.eE+-]+\s*gm\s+of\s+gold/i.test(x))return {recognized:true,ignored:false,kind:'investment_sale',amount:null,currency:'AED',country:'UAE',providerId,raw,eventId:input.id||null,postedAt:Number(input.postedAt)||Date.now(),confidence:0.99};
+      return null;
+    }
+    if(providerId!=='e-cash-egypt')return null;
+    const money='(?:ج\\.?\\s*م\\.?|جم|جنيه|جنية|EGP)';
+    const value='([\\d,]+(?:\\.\\d+)?)';
+    const balance=(x.match(new RegExp('رصيد\\s+محفظتك\\s+الحال[يى]\\s*[.:-]?\\s*'+value,'i'))||[])[1];
+    const ref=(x.match(/(?:رقم\s+العملية|الرقم\s+المرجعي)\s*:\s*([A-Za-z0-9-]+)/)||[])[1]||null;
+    const base={providerId,country:'EGY',currency:'EGP',availableBalance:balance==null?null:amount(balance),transactionRef:ref,confidence:0.99};
+    // A fee formula with exemptions is evidence for review, not a guessed fee.
+    const feeMatch=x.match(new RegExp('(?:رسوم\\s+(?:التحويل|العملية))\\s*'+value+'\\s*'+money));
+    if(feeMatch)base.fee=amount(feeMatch[1]);
+    if(/رسوم.+%|%[\d.]+.+(?:المبلغ|حد)/.test(x))base.feeFormula=x;
+    m=x.match(new RegExp('^تم\\s+ايداع\\s+مبلغ\\s*'+value+'\\s*'+money,'i'));
+    if(m)return result(Object.assign(base,{kind:'deposit',direction:'credit',amount:amount(m[1])}),input,raw);
+    m=x.match(new RegExp('^تم\\s+استلام\\s+مبلغ\\s*'+value+'\\s*'+money+'\\s+من\\s+رقم\\s*(\\d+)','i'));
+    if(m)return result(Object.assign(base,{kind:'incoming_transfer',direction:'credit',amount:amount(m[1]),beneficiaryName:m[2]}),input,raw);
+    m=x.match(new RegExp('^تم\\s+تحويل\\s+مبلغ\\s*'+value+'\\s*'+money+'\\s+(?:الى|الي)\\s+رقم\\s*(\\d+)','i'));
+    if(m)return result(Object.assign(base,{kind:'outgoing_transfer',direction:'debit',amount:amount(m[1]),beneficiaryName:m[2],transferChannel:'e& Cash Egypt'}),input,raw);
+    m=x.match(new RegExp('^تم\\s+سحب\\s+مبلغ\\s*'+value+'\\s*'+money,'i'));
+    if(m)return result(Object.assign(base,{kind:'cash_withdrawal',direction:'debit',amount:amount(m[1])}),input,raw);
+    m=x.match(new RegExp('^تم\\s+شحن\\s*'+value+'\\s*'+money+'\\s+لرقمك\\s*(\\d+)','i'));
+    if(m)return result(Object.assign(base,{kind:'mobile_recharge',direction:'debit',amount:amount(m[1]),merchant:'Mobile recharge',category:'bills'}),input,raw);
+    m=x.match(new RegExp('^تم\\s+دفع\\s*'+value+'\\s*'+money+'\\s+بنجاح\\s+ل\\s+(.+?)(?=\\s+تاريخ\\s+العملية|$)','i'));
+    if(m)return result(Object.assign(base,{kind:'purchase',direction:'debit',amount:amount(m[1]),merchant:m[2].trim(),category:categoryForMerchant(m[2])}),input,raw);
+    m=x.match(new RegExp('^(?:الرصيد\\s+المتاح\\s+بمحفظة)[\\s\\S]*?'+value+'\\s*(?:'+money+'|ج\\.)','i'));
+    if(m)return result(Object.assign(base,{kind:'balance_observation',direction:null,amount:null,availableBalance:amount(m[1])}),input,raw);
+    return null;
+  }
+  function parseEgyptBank(input,raw){
+    const bankId=bankIdFrom(input,raw),bank=Banks.get(bankId);
+    if(!bank||bank.country!=='EGY')return null;
+    const x=cleanText(raw).replace(/((?:EGP|USD|EUR|SAR|MAD|AED)\s*\d{1,3})\s+(\d{3}(?:\.\d+)?)/gi,'$1$2');let m;
+    const local='(?:جم|ج\\.?\\s*م\\.?|جنيه|EGP)';
+    const value='([\\d,]+(?:\\.\\d+)?)';
+    const base={bankId,country:'EGY',currency:'EGP',confidence:0.99};
+    m=x.match(/Your\s+Card\s*\*+\s*(\d{4})\s+was\s+debited\s+with\s+(EGP|USD|EUR|SAR|MAD|AED)\s*([\d,]+(?:\.\d+)?)\s+at\s+(.+?)\s+on\s+[\d/ :]+\.\s*Available\s+limit\s+is\s+(EGP|USD)\s*([\d,]+(?:\.\d+)?)/i);
+    if(m)return result(Object.assign(base,{kind:'purchase',direction:'debit',cardLast4:m[1],cardType:'credit_card',currency:m[2],amount:amount(m[3]),merchant:m[4].trim(),category:categoryForMerchant(m[4]),availableCredit:amount(m[6]),availableCreditCurrency:m[5]}),input,raw);
+    m=x.match(new RegExp('تم\\s+خصم\\s*(?:مبلغ\\s*)?(?:([A-Za-z]{3})\\s*)?'+value+'\\s*(?:([A-Za-z]{3})|'+local+')?\\s+من\\s+(بطاقة\\s+الائتمان|بطاقة\\s+الخصم\\s+المباشر|البطاقه|البطاقة).*?(\\d{4})\\s+عند\\s+(.+?)\\s+يوم[\\s\\S]*?المتاح\\s*'+value+'\\s*'+local,'i'));
+    if(m){const credit=m[4].includes('الائتمان'),debit=m[4].includes('المباشر');const b=Object.assign(base,{kind:/\bATM\b/i.test(m[6])?'cash_withdrawal':'purchase',direction:'debit',currency:m[1]||m[3]||'EGP',amount:amount(m[2]),cardLast4:m[5],cardType:credit?'credit_card':debit?'debit_card':null,merchant:m[6].trim(),category:categoryForMerchant(m[6])});if(credit){b.availableCredit=amount(m[7]);b.availableCreditCurrency='EGP';}else if(debit){b.availableBalance=amount(m[7]);b.availableBalanceCurrency='EGP';}return result(b,input,raw);}
+    m=x.match(new RegExp('تم\\s+(تنفيذ|اضافة)\\s+تحويل\\s+لحظي\\s+(?:من\\s+حسابكم\\s+(?:رقم|المنتهي\\s+ب)|لحسابكم\\s+(?:رقم|المنتهي\\s+ب))\\s*(\\d+)\\s+بمبلغ\\s*'+value+'\\s*'+local,'i'));
+    if(m){const ref=(x.match(/(?:رقم\s+مرجعي|الرقم\s+المرجعي)\s*([A-Za-z0-9-]+)/)||[])[1]||null;return result(Object.assign(base,{kind:m[1]==='اضافة'?'incoming_transfer':'outgoing_transfer',direction:m[1]==='اضافة'?'credit':'debit',accountRef:m[2],amount:amount(m[3]),transactionRef:ref}),input,raw);}
+    m=x.match(new RegExp('نشكركم\\s+عل[يى]\\s+سداد\\s+مبلغ\\s*'+value+'\\s*'+local+'\\s+لبطاقة\\s+رقم\\s*(\\d{4})','i'));
+    if(m)return result(Object.assign(base,{kind:'card_payment_received',direction:'credit',amount:amount(m[1]),cardLast4:m[2],cardType:'credit_card'}),input,raw);
+    return null;
+  }
   function parseGeneric(input,raw){
-    const x=cleanText(raw),bankId=bankIdFrom(input,raw),providerId=providerIdFrom(input,raw);
+    const x=cleanText(raw).replace(/((?:AED|EGP|USD|EUR|MAD|SAR|GBP)\s*\d{1,3})\s+(\d{3}(?:\.\d+)?)/gi,'$1$2'),bankId=bankIdFrom(input,raw),providerId=providerIdFrom(input,raw);
     const sourceKnown=!!(bankId||providerId);
     let m=x.match(/(AED|USD|EUR|GBP|SAR|EGP|MAD)\s*([\d,]+(?:\.\d+)?)/i);
     let currency=null,value=null;
@@ -237,6 +301,7 @@
       const fromRef=normalizeRef(ownTransfer[1]),toRef=normalizeRef(ownTransfer[2]);
       return result(Object.assign(base,{kind:'internal_transfer',direction:'transfer',accountRef:fromRef,fromAccountRef:fromRef,toAccountRef:toRef,category:'other',confidence:0.99}),input,raw);
     }
+    if(/credited\s+to\s+your\s+(?:credit\s+)?card/i.test(x))return result(Object.assign(base,{kind:'card_payment_received',direction:'credit',confidence:sourceKnown?0.95:0.75}),input,raw);
     if(/salary|payroll|راتب/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'salary',direction:'credit',category:'salary',confidence:sourceKnown?0.90:0.76}),input,raw);
     if(/refund|refunded|reversal|reversed|استرداد|مرتجع/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'refund',direction:'credit',category:'other',confidence:sourceKnown?0.90:0.75}),input,raw);
     if(/recharge|mobile\s+top.?up|airtime|شحن\s+رصيد/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'mobile_recharge',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);
@@ -245,15 +310,15 @@
     const incomingTransfer=!!incomingFrom||/\breceived\b[\s\S]{0,120}\bfrom\b|\bfrom\b[\s\S]{0,120}\b(?:to|into)\s+(?:your\s+)?(?:account|wallet)\b|(?:تم\s+)?تحويل[\s\S]{0,120}\sمن\s+.+(?:الى|إلى)\s+(?:حسابك|محفظتك)/i.test(x);
     if(incomingTransfer)return result(Object.assign(base,{kind:'incoming_transfer',direction:'credit',merchant:incomingFrom||merchant,beneficiaryName:incomingFrom||beneficiaryName,category:'other',confidence:sourceKnown?0.92:0.78}),input,raw);
     if(/deposit|credited|ايداع|اودع/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'deposit',direction:'credit',category:'other',confidence:sourceKnown?0.88:0.75}),input,raw);
-    if(/transfer.+to|sent\s+to|transferred\s+to|تحويل.+الى|تحويل.+إلى/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'outgoing_transfer',direction:'debit',category:'externalTransfer',confidence:sourceKnown?0.88:0.74}),input,raw);
-    if(/purchase|pos|شراء|merchant|paid\s+at/.test(x.toLowerCase())&&(card||cardFirst4))return result(Object.assign(base,{kind:'purchase',direction:'debit',category:categoryForMerchant(merchant),confidence:sourceKnown?0.86:0.72}),input,raw);
+    if(/transfer.+to|transfer.+debited|sent\s+to|transferred\s+to|تحويل.+الى|تحويل.+إلى/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'outgoing_transfer',direction:'debit',category:'externalTransfer',confidence:sourceKnown?0.88:0.74}),input,raw);
+    if(/purchase|pos|شراء|merchant|paid\s+at|card.+debited\s+with/.test(x.toLowerCase())&&(card||cardFirst4))return result(Object.assign(base,{kind:'purchase',direction:'debit',category:categoryForMerchant(merchant),confidence:sourceKnown?0.86:0.72}),input,raw);
     return null;
   }
   function parse(input){
     const raw=String((input&&input.text)||input||'').trim(),ignored=ignoredReason(raw);
     if(ignored)return {recognized:false,ignored:true,reason:ignored,raw};
     const obj=input&&typeof input==='object'?input:{};
-    return parseEnbd(obj,raw)||parseArabicCreditCard(obj,raw)||parseDuPay(obj,raw)||parseGeneric(obj,raw)||{recognized:false,ignored:false,reason:'unrecognized',raw};
+    return parseWalletFamilies(obj,raw)||parseEgyptBank(obj,raw)||parseEnbd(obj,raw)||parseArabicCreditCard(obj,raw)||parseDuPay(obj,raw)||parseGeneric(obj,raw)||{recognized:false,ignored:false,reason:'unrecognized',raw};
   }
   function institutionBankId(inst){if(!inst)return null;if(inst.bankRegistryId&&Banks.get(inst.bankRegistryId))return inst.bankRegistryId;const hit=Banks.detect(inst.name||'');return hit?hit.bank.id:null;}
   function institutionProviderId(inst){if(!inst)return null;if(inst.providerRegistryId&&Banks.getProvider&&Banks.getProvider(inst.providerRegistryId))return inst.providerRegistryId;const hit=Banks.detectProvider?Banks.detectProvider(inst.name||''):null;return hit?hit.provider.id:null;}
@@ -275,7 +340,7 @@
     const institutions=Array.isArray(state&&state.institutions)?state.institutions:[],accounts=Array.isArray(state&&state.accounts)?state.accounts:[],instruments=Array.isArray(state&&state.paymentInstruments)?state.paymentInstruments:[];
     const country=(parsed&&parsed.country)||countryForCurrency(parsed&&parsed.currency)||'UAE';
     const institutionIds=new Set(institutions.filter(i=>{if(parsed.bankId&&institutionBankId(i)!==parsed.bankId)return false;if(parsed.providerId&&institutionProviderId(i)!==parsed.providerId)return false;return true;}).map(i=>i.id));
-    const activeAccounts=accounts.filter(a=>{if(!a||a.archived||a.country!==country)return false;if(parsed.bankId&&!institutionIds.has(a.institutionId))return false;if(parsed.providerId&&!institutionIds.has(a.institutionId)&&accountProviderId(a,institutions)!==parsed.providerId)return false;return true;});
+    const activeAccounts=accounts.filter(a=>{if(!a||a.archived||a.country!==country||a.currency!==parsed.currency)return false;if(parsed.bankId&&!institutionIds.has(a.institutionId))return false;if(parsed.providerId&&!institutionIds.has(a.institutionId)&&accountProviderId(a,institutions)!==parsed.providerId)return false;return true;});
     let instrument=null,account=null,fromAccount=null,targetAccount=null;
     if(parsed.cardLast4||parsed.cardFirst4){
       let cards=instruments.filter(i=>{
@@ -285,7 +350,7 @@
         if(parsed.cardNetwork&&i.network&&i.network!=='other'&&String(i.network)!==String(parsed.cardNetwork))return false;
         return true;
       });
-      if(parsed.bankId||parsed.providerId){const filtered=cards.filter(i=>{const linked=accounts.find(a=>a.id===i.accountId)||null;if(institutionIds.has(i.institutionId)||institutionIds.has(linked&&linked.institutionId))return true;return parsed.providerId&&accountProviderId(linked,institutions)===parsed.providerId;});if(filtered.length)cards=filtered;}
+      if(parsed.bankId||parsed.providerId){const filtered=cards.filter(i=>{const linked=accounts.find(a=>a.id===i.accountId)||null;if(institutionIds.has(i.institutionId)||institutionIds.has(linked&&linked.institutionId))return true;return parsed.providerId&&accountProviderId(linked,institutions)===parsed.providerId;});if(filtered.length||parsed.kind!=='card_repayment')cards=filtered;}
       if(cards.length===1)instrument=cards[0];if(instrument)account=accounts.find(a=>a.id===instrument.accountId)||null;
     }
     if(parsed.accountRef||parsed.accountSuffix){

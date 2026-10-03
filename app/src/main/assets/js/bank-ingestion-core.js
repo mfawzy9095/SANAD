@@ -268,10 +268,10 @@
     const target=(route&&route.account)||(route&&route.fromAccount)||null;
     if(!target)return [];
     const updates=[];
-    if(num(parsed.availableBalance)!=null){
+    if(num(parsed.availableBalance)!=null&&(!parsed.availableBalanceCurrency||parsed.availableBalanceCurrency===target.currency)){
       updates.push({accountId:target.id,field:'observedBalance',value:round2(parsed.availableBalance),at:Number(parsed.postedAt)||Date.now()});
     }
-    if(num(parsed.availableCredit)!=null){
+    if(num(parsed.availableCredit)!=null&&(!parsed.availableCreditCurrency||parsed.availableCreditCurrency===target.currency)){
       updates.push({accountId:target.id,field:'observedAvailableCredit',value:round2(parsed.availableCredit),at:Number(parsed.postedAt)||Date.now()});
     }
     return updates;
@@ -725,6 +725,7 @@
   function autoEligible(parsed,route){
     if(!parsed||!parsed.recognized)return {ok:false,reason:'unrecognized'};
     if(parsed.ignored)return {ok:false,reason:parsed.reason||'ignored'};
+    if(parsed.feeFormula)return {ok:false,reason:'fee-review-required'};
     if(!route||route.status!=='routed')return {ok:false,reason:(route&&route.reason)||'route-required'};
     if(Number(route.confidence||0)<0.90)return {ok:false,reason:'route-confidence-low'};
     const exactInstrument=!!(route.instrument&&parsed.cardLast4&&String(route.instrument.last4||'')===String(parsed.cardLast4));
@@ -738,9 +739,28 @@
     if(parsed.kind==='cash_withdrawal'&&!route.targetAccount)return {ok:false,reason:'cash-destination-required'};
     return {ok:true};
   }
+  function planBalanceObservation(parsed,state,uid){
+    if(num(parsed.availableBalance)==null||!parsed.providerId)return {action:'review',reason:'balance-source-required',confidence:0};
+    const country=countryForParsed(parsed);
+    let institution=findInstitution(state,parsed);
+    const create={institutions:[],accounts:[],instruments:[],beneficiaries:[]};
+    if(!institution){institution=makeInstitution(parsed,uid);if(!institution)return {action:'review',reason:'source-not-identified',confidence:0};create.institutions.push(institution);}
+    const accounts=arr(state.accounts).filter(a=>a&&!a.archived&&a.institutionId===institution.id&&a.country===country&&a.currency===parsed.currency&&a.type==='ewallet');
+    if(accounts.length>1)return {action:'review',reason:'ambiguous-existing-accounts',confidence:0};
+    let account=accounts[0];
+    if(!account){
+      account=makeAssetAccount(Object.assign({},parsed,{kind:'deposit',amount:0}),institution.id,uid,'deposit',institution);
+      account.bankBalanceBaseline={at:Number(parsed.postedAt)+1,balance:num(parsed.availableBalance)};
+      create.accounts.push(account);
+    }
+    if(Number(account.observedBalanceAt)>Number(parsed.postedAt))return {action:'duplicate',reason:'older-observation',confidence:1};
+    if(!create.accounts.length&&Number(account.observedBalanceAt)===Number(parsed.postedAt)&&num(account.observedBalance)===num(parsed.availableBalance))return {action:'duplicate',reason:'observation-already-imported',confidence:1};
+    return {action:'observe',create,observations:updateObservation(parsed,{account}),reason:'reported-wallet-balance',confidence:0.99,discovered:create.accounts.length>0};
+  }
   function plan(parsed,state,options){
     const uid=idFactory(options);
     if(!parsed||!parsed.recognized)return {action:'review',reason:(parsed&&parsed.reason)||'unrecognized',confidence:0};
+    if(parsed.kind==='balance_observation')return planBalanceObservation(parsed,state||{},uid);
     const learnedRule=matchLearnedRule(parsed,state);
     if(learnedRule&&learnedRule.kind&&learnedRule.kind!==parsed.kind){
       parsed=Object.assign({},parsed,{kind:learnedRule.kind});
@@ -865,7 +885,7 @@
     };
   }
   function applyPlan(state,plan){
-    if(!state||!plan||plan.action!=='auto-save')return false;
+    if(!state||!plan||!['auto-save','observe'].includes(plan.action))return false;
     const create=plan.create||{};
     arr(create.institutions).forEach(x=>state.institutions.push(clone(x)));
     arr(create.accounts).forEach(x=>state.accounts.push(clone(x)));

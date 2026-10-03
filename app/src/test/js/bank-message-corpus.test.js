@@ -70,3 +70,24 @@ for(const [label,text,reason] of ignored){
 }
 
 console.log('bank real-message corpus tests: PASS ('+(recognized.length+ignored.length)+' cases)');
+
+// Regional and international evidence: issuer, spending currency and reported credit are separate.
+for(const [title,text,kind,amount,currency] of [
+ ['eandmoney','AED 10.00 added to your e& money using your card. Your updated balance is AED 10.35 Transaction ID: TEST349889064','deposit',10,'AED'],
+ ['ET Cash','تم إيداع مبلغ 1800.00 ج.م إلى محفظتك. رصيد محفظتك الحالى 1800.00 ج.م','deposit',1800,'EGP'],
+ ['e& money','تم شحن 200.00ج.م لرقمك 01000000000 من محفظة e& money. رصيد محفظتك الحالي 344.24ج.م','mobile_recharge',200,'EGP'],
+ ['E& Cash','تم تحويل مبلغ 2600.00 ج.م الى رقم 01000000000 بنجاح. رسوم التحويل 13.00 جنيه رصيد محفظتك الحالى 64.24','outgoing_transfer',2600,'EGP'],
+ ['BanK-AlAhly','تم خصم MAD 20 من بطاقة الائتمان رقم 4093 عند GLOVO يوم 04-28 الساعة 03:09 المتاح 19476.4 جم والمتبقي من حد الاستخدام الشهري بالعملة الأجنبية بما يعادل 23285.43 جم','purchase',20,'MAD'],
+ ['FABMISR','Your Card ** 9061 was debited with USD 15 at TEST STORE on 15/06/26 15:53. Available limit is EGP 4026 and international limit is USD 80.14.','purchase',15,'USD'],
+ ['Bank NXT','EGP3 000.00 has been credited to your card ending with **5658.','card_payment_received',3000,'EGP'],
+ ['EmiratesNBD','لقد تم إعادة مبلغ عملية شراء بقيمة USD 1.00 منفذ لدى [اسم التاجر] بواسطة بطاقة الائتمان الخاصة بك التي تنتهي أرقامها بـ 4021 إلى حساب بطاقتك. الحد المتوفر هو AED 3574.53.','refund',1,'USD']
+]){
+ const p=P.parse({title,text,postedAt:1790859037991});
+ assert.strictEqual(p.recognized,true,title);assert.strictEqual(p.kind,kind,title);assert.strictEqual(p.amount,amount,title);assert.strictEqual(p.currency,currency,title);
+ if(['BanK-AlAhly','FABMISR','Bank NXT'].includes(title))assert.strictEqual(p.country,'EGY');
+ if(title==='FABMISR'){assert.strictEqual(p.availableCredit,4026);assert.strictEqual(p.availableCreditCurrency,'EGP');assert.strictEqual(p.availableBalance,null);}
+ if(title==='EmiratesNBD'){assert.strictEqual(p.country,'UAE');assert.strictEqual(p.availableCredit,3574.53);assert.strictEqual(p.availableCreditCurrency,'AED');}
+ if(title==='E& Cash')assert.strictEqual(p.fee,13);
+}
+const gold=P.parse({title:'eandmoney',text:'Hey! You’ve just sold 0.0351 gm of gold. Your transaction ID is 81283 and you have 1.0E-4 gm balance remaining.'});
+assert.strictEqual(gold.kind,'investment_sale');assert.strictEqual(gold.amount,null);

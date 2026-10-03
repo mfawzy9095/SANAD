@@ -8724,6 +8724,7 @@ const SanadBankInbox = {
   reasonLabel(reason){
     return {
       'unrecognized':'صيغة الرسالة غير معروفة',
+      'balance-source-required':'رصيد مؤكد يحتاج تحديد المحفظة',
       'possible-duplicate':'عملية مشابهة تحتاج مقارنة مرجع الرسالة والرصيد قبل الحفظ',
       'low-confidence':'يحتاج تأكيد نوع العملية',
       'route-confidence-low':'ربط المصدر غير مؤكد',
@@ -8802,7 +8803,7 @@ const SanadBankInbox = {
     return {warning};
   },
   async commitPlan(parsed,plan){
-    if(!plan||plan.action!=='auto-save')return {ok:false,reason:(plan&&plan.reason)||'not-auto-save'};
+    if(!plan||!['auto-save','observe'].includes(plan.action))return {ok:false,reason:(plan&&plan.reason)||'not-auto-save'};
     let reconciliation={warning:false};
     const result=await commitCriticalMutation(async()=>{
       if(BankIngestionCore.duplicateOf(parsed,S))return true;
@@ -8810,7 +8811,7 @@ const SanadBankInbox = {
       if(!applied)return false;
       reconciliation=this.applyReconciliation(parsed,plan);
       S.settings.bankAutoImportLastAt=Date.now();
-      S.settings.bankAutoImportCount=(Number(S.settings.bankAutoImportCount)||0)+1;
+      if(plan.transaction)S.settings.bankAutoImportCount=(Number(S.settings.bankAutoImportCount)||0)+1;
       return true;
     });
     return {ok:!!(result&&result.ok),reason:result&&result.reason,reconciliation};
@@ -8820,7 +8821,7 @@ const SanadBankInbox = {
     if(this.syncing)return this.lastSummary;
     if(!this.supported()){this.items=[];return this.lastSummary;}
     this.syncing=true;
-    const summary={parsed:0,added:0,duplicates:0,ignored:0,review:0,discovered:0,reconcileWarnings:0,activeRescanAdded:0,at:Date.now()};
+    const summary={parsed:0,added:0,observed:0,duplicates:0,ignored:0,review:0,discovered:0,reconcileWarnings:0,activeRescanAdded:0,at:Date.now()};
     const ackIds=[],reviews=[];
     try{
       if(opts.userInitiated){
@@ -8851,10 +8852,10 @@ const SanadBankInbox = {
         if(plan.action==='duplicate'){
           ackIds.push(n.id);summary.duplicates++;continue;
         }
-        if(plan.action==='auto-save'&&allowAuto){
+        if(['auto-save','observe'].includes(plan.action)&&allowAuto){
           const saved=await this.commitPlan(parsed,plan);
           if(saved.ok){
-            ackIds.push(n.id);summary.added++;
+            ackIds.push(n.id);if(plan.transaction)summary.added++;else summary.observed++;
             if(plan.discovered)summary.discovered++;
             if(saved.reconciliation&&saved.reconciliation.warning)summary.reconcileWarnings++;
             if(opts.cooperative&&processedRows%4===0)await this.yieldUi(0);
@@ -9004,7 +9005,7 @@ const SanadBankInbox = {
     this._historicalReviewIds=new Set();
     const startTab=S.tab;
     let afterDate=0,afterId=0,pages=0;
-    const total={scanned:0,matchingRows:0,financialCandidates:0,parsed:0,added:0,review:0,duplicates:0,ignored:0,discovered:0};
+    const total={scanned:0,matchingRows:0,financialCandidates:0,parsed:0,added:0,observed:0,review:0,duplicates:0,ignored:0,discovered:0};
     let status='complete';
     this.historicalProgress=Object.assign({pages:0},total);
     if(S.tab==='settings')render();
@@ -9042,6 +9043,7 @@ const SanadBankInbox = {
         for(const id of (batch.reviewIds||[]))this._historicalReviewIds.add(String(id));
         total.parsed+=Number(batch.parsed||0);
         total.added+=Number(batch.added||0);
+        total.observed+=Number(batch.observed||0);
         total.review+=Number(batch.review||0);
         total.duplicates+=Number(batch.duplicates||0);
         total.ignored+=Number(batch.ignored||0);
@@ -9051,7 +9053,7 @@ const SanadBankInbox = {
         if(S.tab==='settings'&&(pages===1||pages%8===0))render();
 
         if(page.done)break;
-        if(page.capacityReached&&Number(batch.added||0)+Number(batch.duplicates||0)+Number(batch.ignored||0)===0){status='review-capacity';break;}
+        if(page.capacityReached&&Number(batch.added||0)+Number(batch.observed||0)+Number(batch.duplicates||0)+Number(batch.ignored||0)===0){status='review-capacity';break;}
         const nextDate=Number(page.nextAfterDate||0),nextId=Number(page.nextAfterId||0);
         if(nextDate===afterDate&&nextId===afterId){status='cursor-stalled';break;}
         afterDate=nextDate;afterId=nextId;

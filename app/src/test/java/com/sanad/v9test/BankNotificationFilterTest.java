@@ -78,4 +78,11 @@ public class BankNotificationFilterTest {
         assertFalse(BankNotificationFilter.looksLikeCandidate("*Convert now* Pay as low as AED 32.31 per month for the purchase of AED 1124.50 with credit card ending 4021"));
         assertFalse(BankNotificationFilter.looksLikeCandidate("رفض معاملة شراء لعدم وجود رصيد كاف المبلغ AED 185.66"));
     }
+    @Test
+    public void acceptsEgyptWalletUnitsAndUaeWalletFunding() {
+        assertTrue(BankNotificationFilter.looksLikeCandidate("تم إيداع مبلغ 1800.00 ج.م إلى محفظتك. رصيد محفظتك الحالى 1800.00 ج.م"));
+        assertTrue(BankNotificationFilter.looksLikeCandidate("تم شحن 25.00ج.م لرقمك من محفظة اتصالات كاش"));
+        assertTrue(BankNotificationFilter.looksLikeCandidate("AED 10.00 added to your e& money using your card. Your updated balance is AED 10.35"));
+        assertTrue(BankNotificationFilter.looksLikeCandidate("تم خصم MAD 20 من بطاقة الائتمان رقم 4093 عند GLOVO المتاح 19476.4 جم"));
+    }
 }

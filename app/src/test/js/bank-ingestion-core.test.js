@@ -610,9 +610,9 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.create.instruments[0].last4,'7777');
 }
 
-// Currency decides the country bucket: EGP routes/creates in Egypt, not UAE.
+// Egyptian issuer metadata routes an EGP account into Egypt. Currency alone does not locate a foreign purchase.
 {
-  const p=P.parse({id:'egy-generic',postedAt:8400,title:'Banque Misr',text:'Purchase EGP 25.00 at TEST STORE using debit card ending 1234. Available balance is EGP 975.00'});
+  const p=P.parse({id:'egy-generic',postedAt:8400,title:'BanK-AlAhly',text:'Purchase EGP 25.00 at TEST STORE using debit card ending 1234. Available balance is EGP 975.00'});
   const s=empty();
   const plan=I.plan(p,s,{uid});
   assert.strictEqual(p.country,'EGY');
@@ -687,4 +687,16 @@ console.log('bank ingestion core regression tests: PASS');
   const b={...first,eventId:'reference-b',transactionRef:'REF-B',postedAt:1001000};
   s.transactions=[];I.applyPlan(s,I.plan(a,s,{uid}));
   assert.strictEqual(I.plan(b,s,{uid}).action,'auto-save');
+}
+
+// Explicit wallet balance messages establish a point-in-time baseline without inventing a transaction.
+{
+  const s=empty();
+  const p=P.parse({id:'balance-only',title:'ET Cash',postedAt:2000000,text:'الرصيد المتاح بمحفظة اتصالات كاش 79.24 ج.م'});
+  assert.strictEqual(p.kind,'balance_observation');assert.strictEqual(p.amount,null);
+  const pl=I.plan(p,s,{uid});assert.strictEqual(pl.action,'observe');
+  assert.strictEqual(I.applyPlan(s,pl),true);assert.strictEqual(s.transactions.length,0);
+  assert.strictEqual(s.accounts[0].observedBalance,79.24);assert.strictEqual(s.accounts[0].country,'EGY');
+  assert.strictEqual(I.plan(p,s,{uid}).action,'duplicate');
+  assert.strictEqual(I.plan({...p,eventId:'older',postedAt:1990000,availableBalance:500},s,{uid}).action,'duplicate');
 }
