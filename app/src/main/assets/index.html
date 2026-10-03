@@ -9150,6 +9150,7 @@ const SanadBankInbox = {
         '<div class="field"><label>نوع العملية</label><select id="bankFixKind">'+kindOpts+'</select></div>'+
         '<div class="field"><label>المبلغ</label><input id="bankFixAmount" type="number" inputmode="decimal" step="0.01" value="'+esc(String(p.amount||''))+'"></div>'+
         '<div class="field"><label>العملة</label><select id="bankFixCurrency">'+curOpts+'</select></div>'+
+        '<div class="field"><label>رسوم إضافية تخصم من حساب المصدر، شاملة الضريبة</label><input id="bankFixFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="اتركها فارغة إذا لم تتأكد"><div class="field-hint">بنفس عملة العملية. أدخل صفرًا فقط إذا تأكدت أن العملية بلا رسوم إضافية؛ لا تستنتج الرسوم من صيغة نسبة أو فرق الرصيد.</div></div>'+
         '<div class="field"><label>الحساب / الكارت المصدر</label><select id="bankFixSource">'+this.correctionSourceOptions(p,source)+'</select>'+
           (p.cardLast4?'<div class="field-hint">الرسالة تشير إلى كارت ****'+esc(p.cardLast4)+'؛ اختر نفس الكارت حتى يتعلم الربط بدقة.</div>':'')+'</div>'+
         '<div class="field"><label>حساب الوجهة (للتحويل بين حساباتك / سداد بطاقة / سحب كاش)</label><select id="bankFixTarget">'+this.correctionTargetOptions(p,target)+'</select></div>'+
@@ -9186,7 +9187,7 @@ const SanadBankInbox = {
     if(!Number.isFinite(amount)||amount<=0){toast('أدخل مبلغًا صحيحًا');return;}
     if(!sourceRaw){toast('اختر الحساب أو الكارت الصحيح');return;}
     const parts=sourceRaw.split(':'),sourceType=parts.shift(),sourceId=parts.join(':');
-    const country=BankMessageCore.countryForCurrency(currency)||item.parsed.country||'UAE';
+    const country=item.parsed.country||BankMessageCore.countryForCurrency(currency)||'UAE';
     const corrected=Object.assign({},item.parsed,{kind,amount,currency,country,confidence:1});
     if(['purchase','bill_payment','mobile_recharge'].includes(kind)){
       corrected.direction='debit';corrected.merchant=party;corrected.category=category;
@@ -9199,8 +9200,11 @@ const SanadBankInbox = {
     }
     const route=BankIngestionCore.routeFromManualChoice(corrected,S,{sourceType,sourceId,targetAccountId:targetId});
     if(!route||route.status!=='routed'){toast(this.reasonLabel((route&&route.reason)||'manual-route-invalid'));return;}
-    const built=BankMessageCore.buildTransaction(corrected,route,{uid});
-    if(!built.ok){toast('الربط غير صالح لهذه العملية');return;}
+    const feeInput=String((document.getElementById('bankFixFee')||{}).value||'').trim();
+    const buildOptions={uid};
+    if(feeInput!=='')buildOptions.confirmedFee=Number(feeInput);
+    const built=BankMessageCore.buildTransaction(corrected,route,buildOptions);
+    if(!built.ok){toast(built.reason==='fee-confirmation-required'?'أكد الرسوم الإضافية أولًا؛ صفر فقط إذا كانت بلا رسوم':built.reason==='invalid-confirmed-fee'?'أدخل رسومًا صحيحة غير سالبة':built.reason==='fee-direction-review-required'?'رسوم الاستلام تحتاج تأكيد صافي المبلغ من المصدر':'الربط غير صالح لهذه العملية');return;}
     if(BankIngestionCore.duplicateOf(corrected,S)){this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
     const result=await commitCriticalMutation(async()=>{
       S.transactions.push(built.transaction);

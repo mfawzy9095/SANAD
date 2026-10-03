@@ -431,7 +431,20 @@
     return {ok:false,reason:'manual-review-required'};
   }
   function buildTransaction(parsed,route,options){
+    const opts=options||{};
+    const feeEvidence=!!parsed.feeFormula||Number(parsed.fee||0)>0||Number(parsed.vat||0)>0;
+    const feeConfirmed=opts.confirmedFee!==null&&opts.confirmedFee!==undefined&&opts.confirmedFee!=='';
+    if(feeEvidence&&!feeConfirmed)return {ok:false,reason:'fee-confirmation-required'};
+    const fee=feeConfirmed?Number(opts.confirmedFee):0;
+    if(!Number.isFinite(fee)||fee<0)return {ok:false,reason:'invalid-confirmed-fee'};
+    if(fee>0&&!['purchase','bill_payment','mobile_recharge','outgoing_transfer','internal_transfer','card_repayment','cash_withdrawal'].includes(parsed.kind))return {ok:false,reason:'fee-direction-review-required'};
     const built=buildTransactionBase(parsed,route,options);
+    if(built.ok&&built.transaction&&feeConfirmed){
+      const tx=built.transaction;
+      if(tx.type==='expense')tx.walletAmount=Math.round((parsed.amount+fee)*100)/100;
+      else if(tx.type==='transfer'||tx.type==='external_transfer')tx.fee=Math.round(fee*100)/100;
+      tx.bankFeeEvidence={amount:Math.round(fee*100)/100,currency:parsed.currency,confirmed:true,source:'manual-review'};
+    }
     if(built.ok&&built.transaction)built.transaction.bankImportEvidence={
       text:cleanText(parsed.raw||'').toLowerCase(),
       availableBalance:parsed.availableBalance==null?null:Number(parsed.availableBalance),

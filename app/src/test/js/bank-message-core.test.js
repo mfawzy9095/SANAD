@@ -221,3 +221,20 @@ const arRefund=P.parse({title:'EmiratesNBD',text:'لقد تم إعادة مبل�
 assert.strictEqual(arRefund.kind,'refund');assert.strictEqual(arRefund.amount,38);assert.strictEqual(arRefund.availableBalance,5685.54);
 const beforeCurrency=P.parse({title:'EmiratesNBD',text:'لقد تمّ تحويل مبلغ AED 500.00 باستخدام بطاقة الخصم الخاصة بك والمنتهية أرقامها بـ 3993 لدى TAPT*TestRecipient. رصيدك الحالي هو AED 4135.57.'});
 assert.strictEqual(beforeCurrency.kind,'outgoing_transfer');assert.strictEqual(beforeCurrency.amount,500);assert.strictEqual(beforeCurrency.transferChannel,'Taptap Send');
+
+// Manual approval must not erase fee evidence or evaluate exemption formulas.
+{
+ const F=require('../../main/assets/js/finance-core.js');
+ const p={recognized:true,kind:'outgoing_transfer',currency:'AED',country:'UAE',amount:100,postedAt:1790859000000,fee:2,vat:0.1,feeFormula:'1% subject to exemptions',raw:'transfer with fees'};
+ const route={status:'routed',fromAccount:{id:'fee-source',country:'UAE',currency:'AED',type:'bank',openingBalance:200}};
+ assert.strictEqual(P.buildTransaction(p,route,{}).reason,'fee-confirmation-required');
+ for(const fee of [-1,NaN,Infinity])assert.strictEqual(P.buildTransaction(p,route,{confirmedFee:fee}).ok,false);
+ const built=P.buildTransaction(p,route,{confirmedFee:2.1});
+ assert.strictEqual(built.ok,true);assert.strictEqual(built.transaction.fee,2.1);
+ assert.strictEqual(F.accountBalance({accounts:[route.fromAccount],transactions:[built.transaction]},'fee-source'),97.9);
+ assert.strictEqual(P.buildTransaction(p,route,{confirmedFee:0}).transaction.fee,0);
+ const purchase=P.buildTransaction({...p,kind:'purchase',merchant:'TEST'}, {status:'routed',account:route.fromAccount}, {confirmedFee:2.1});
+ assert.strictEqual(purchase.transaction.amount,100);assert.strictEqual(purchase.transaction.walletAmount,102.1);
+ const incoming=P.buildTransaction({...p,kind:'incoming_transfer'}, {status:'routed',account:route.fromAccount},{confirmedFee:2.1});
+ assert.strictEqual(incoming.reason,'fee-direction-review-required');
+}
