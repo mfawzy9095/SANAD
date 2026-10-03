@@ -912,8 +912,8 @@ const ACCOUNT_ICONS = ['🏦','💵','💰','🪙','🏛️','📱','💼','🏧
 const CARD_ICONS = ['💳','🪪','💠','🎴','🏦','📱','💎'];
 const DEBT_ICONS = ['📋','🧾','📉','💸','📝','🏷️'];
 
-const APP_VERSION = '9.0.10';
-const APP_CHANNEL = 'auto-unlock-rc';
+const APP_VERSION = '9.2.1';
+const APP_CHANNEL = 'local-rc';
 const SCHEMA_VERSION = 16;
 const DB_NAME = 'masareef_v8';
 const SUPPORTED_TX_TYPES = ['expense','income','transfer','external_transfer','adjustment'];
@@ -8089,7 +8089,7 @@ async function boot(){
    Local-first features: i18n, theme modes, app privacy lock,
    receipt attachments, Firebase cloud adapter, family sharing.
    ========================================================= */
-const SANAD_V9_VERSION = '9.0.10';
+const SANAD_V9_VERSION = APP_VERSION;
 const SANAD_FIREBASE_SDK = '10.14.1';
 /* Local Stable policy: cloud/family remain disabled until V9.1 per-record sync + rules ship. */
 const SANAD_CLOUD_FAMILY_BETA_ENABLED = false;
@@ -8713,12 +8713,13 @@ const SanadBankInbox = {
   },
   autoEnabled(){return !S.settings || S.settings.bankAutoImportEnabled !== false;},
   ack(ids){if(!ids||!ids.length||!this.supported())return;try{AndroidBridge.acknowledgeBankNotifications(JSON.stringify(Array.from(new Set(ids.map(String)))));}catch(_){}},
-  readNative(){
+  readNative(strict=false){
     if(!this.supported())return [];
     try{
       const rows=JSON.parse(AndroidBridge.getPendingBankNotifications()||'[]');
-      return BankIngestionCore.sortNotifications(Array.isArray(rows)?rows:[]);
-    }catch(_){return [];}
+      if(!Array.isArray(rows))throw new Error('inbox-invalid');
+      return BankIngestionCore.sortNotifications(rows);
+    }catch(e){if(strict)throw e;return [];}
   },
   kindLabel(kind){
     return {
@@ -8827,9 +8828,18 @@ const SanadBankInbox = {
     });
     return {ok:!!(result&&result.ok),reason:result&&result.reason,reconciliation};
   },
+  _syncPromise:null,
   async sync(options){
+    // A historical page must process its own queued events, never reuse a
+    // foreground scan's stale summary or weaker auto-import policy.
+    while(this._syncPromise){try{await this._syncPromise;}catch(_){} }
+    const task=this.syncImpl(options);
+    this._syncPromise=task;
+    try{return await task;}
+    finally{if(this._syncPromise===task)this._syncPromise=null;}
+  },
+  async syncImpl(options){
     const opts=options||{};
-    if(this.syncing)return this.lastSummary;
     if(!this.supported()){this.items=[];return this.lastSummary;}
     this.syncing=true;
     const summary={parsed:0,added:0,observed:0,duplicates:0,ignored:0,review:0,discovered:0,reconcileWarnings:0,activeRescanAdded:0,at:Date.now()};
@@ -8844,7 +8854,7 @@ const SanadBankInbox = {
         summary.activeRescanAdded=Math.max(0,Number(rescanned)||0);
       }
       const excludeIds=opts.excludeIds instanceof Set?opts.excludeIds:null;
-      const native=this.readNative().filter(n=>!excludeIds||!excludeIds.has(String(n.id)));
+      const native=this.readNative(true).filter(n=>!excludeIds||!excludeIds.has(String(n.id)));
       const allowAuto=canWrite()&&(opts.force===true||this.autoEnabled());
       let processedRows=0;
       summary.reviewIds=[];
@@ -8900,6 +8910,10 @@ const SanadBankInbox = {
         }
         toast(msg,4200);
       }
+      return summary;
+    }catch(_){
+      summary.ok=false;summary.status='processing-failed';
+      if(opts.userInitiated)toast('تعذر معالجة الرسائل؛ لم يتم حذف المعلق. أعد المحاولة.',5000);
       return summary;
     }finally{this.syncing=false;}
   },
@@ -9070,6 +9084,7 @@ const SanadBankInbox = {
           historical:true,
           excludeIds:this._historicalReviewIds
         });
+        if(!batch||batch.ok===false)throw new Error('bank-batch-failed');
         for(const id of (batch.reviewIds||[]))this._historicalReviewIds.add(String(id));
         total.parsed+=Number(batch.parsed||0);
         total.added+=Number(batch.added||0);
@@ -9082,6 +9097,7 @@ const SanadBankInbox = {
         this.historicalProgress=Object.assign({pages},total);
         if((S.tab==='settings'||S.tab==='home')&&(pages===1||pages%8===0))render();
 
+        if(this.historicalCancelRequested||S.tab!==startTab){status='cancelled';break;}
         if(page.done)break;
         if(page.capacityReached&&Number(batch.added||0)+Number(batch.observed||0)+Number(batch.duplicates||0)+Number(batch.ignored||0)===0){status='review-capacity';break;}
         const nextDate=Number(page.nextAfterDate||0),nextId=Number(page.nextAfterId||0);
@@ -9090,6 +9106,8 @@ const SanadBankInbox = {
         await this.yieldUi(24);
       }
       if(pages>=2000&&status==='complete')status='page-limit';
+    }catch(_){
+      status='processing-failed';
     }finally{
       this.historicalImporting=false;
       this.historicalCancelRequested=false;
@@ -9097,15 +9115,26 @@ const SanadBankInbox = {
     }
 
     this.lastHistoricalImport={at:Date.now(),startedAt,status,mode:options.mode||'historical',days:Number(days)||0,pages,total,nextAfterDate:afterDate,nextAfterId:afterId};
-    await SanadExtStorage.set('bankImportLastHistorical',this.lastHistoricalImport);
+    const summarySaved=await SanadExtStorage.set('bankImportLastHistorical',this.lastHistoricalImport);
+    if(summarySaved===false){status='checkpoint-failed';this.lastHistoricalImport.status=status;}
     if(options.mode==='recent'){
       const previous=await SanadExtStorage.get('bankImportLastRecent',null);
       this.lastRecentImport=Object.assign({},this.lastHistoricalImport,{scannedThrough:status==='complete'?startedAt:Number(previous&&previous.scannedThrough)||0});
-      await SanadExtStorage.set('bankImportLastRecent',this.lastRecentImport);
+      if(await SanadExtStorage.set('bankImportLastRecent',this.lastRecentImport)===false){
+        status='checkpoint-failed';
+        this.lastHistoricalImport.status=status;
+        this.lastRecentImport.status=status;
+        this.lastRecentImport.scannedThrough=Number(previous&&previous.scannedThrough)||0;
+      }
     }else if(status==='complete'){
       const previous=await SanadExtStorage.get('bankImportLastRecent',null);
       this.lastRecentImport=Object.assign({},this.lastHistoricalImport,{scannedThrough:Math.max(startedAt,Number(previous&&previous.scannedThrough)||0)});
-      await SanadExtStorage.set('bankImportLastRecent',this.lastRecentImport);
+      if(await SanadExtStorage.set('bankImportLastRecent',this.lastRecentImport)===false){
+        status='checkpoint-failed';
+        this.lastHistoricalImport.status=status;
+        this.lastRecentImport.status=status;
+        this.lastRecentImport.scannedThrough=Number(previous&&previous.scannedThrough)||0;
+      }
     }
     if(S.tab==='settings'||S.tab==='home')render();
 
@@ -9115,6 +9144,8 @@ const SanadBankInbox = {
     else if(status==='complete')toast('تم فحص '+total.scanned+' SMS · مالية '+total.financialCandidates+' · parsed '+total.parsed+' · أضيف '+total.added+' · مراجعة '+total.review+' · مكرر '+total.duplicates,6500);
     else if(status==='permission-restricted')toast('Android منع صلاحية قراءة SMS لهذه النسخة أو طريقة التثبيت',5000);
     else if(status==='query-failed')toast('تعذر قراءة صندوق SMS من Android',5000);
+    else if(status==='processing-failed')toast('توقف الفحص لتعذر معالجة دفعة؛ أعد السحب لاستكمالها بدون حذف الرسائل',6500);
+    else if(status==='checkpoint-failed')toast('لم تُحفظ نقطة الاستكمال؛ أعد السحب. العمليات المحفوظة لن تُضاف مرة ثانية.',6500);
     else if(status==='timeout')toast('قراءة SMS استغرقت وقتًا طويلًا وتم إيقافها بدون تجميد التطبيق',5200);
     else if(status==='worker-unavailable')toast('خدمة قراءة SMS غير متاحة الآن · أعد فتح التطبيق',5200);
     else toast('توقف استيراد SMS قبل الاكتمال · فُحص '+total.scanned+' رسالة',5000);

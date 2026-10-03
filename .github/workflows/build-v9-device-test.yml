@@ -1,4 +1,4 @@
-name: SANAD Architecture Refactor Gate
+name: SANAD Local Release Gate
 # architecture-gate: phase-1-finance-core
 
 on:
@@ -356,7 +356,7 @@ jobs:
           node --check app/src/test/js/report-core.test.js
           node app/src/test/js/report-core.test.js
 
-          grep -q "const SANAD_V9_VERSION = '9.0.10'" "$HTML"
+          grep -q "const SANAD_V9_VERSION = APP_VERSION" "$HTML"
           grep -q "_criticalMutationInFlight" "$HTML"
           grep -q "reason:'busy'" "$HTML"
           grep -q "relockAfterMs:30000" "$HTML"
@@ -639,6 +639,27 @@ jobs:
           node app/src/test/js/backup-repair-tool.test.js
           node app/src/test/js/bank-recent-import.test.js
 
+      - name: Browser integration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --prefix tools/e2e --ignore-scripts --no-audit --no-fund
+          tools/e2e/node_modules/.bin/playwright install --with-deps chromium
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory app/src/main/assets > "$RUNNER_TEMP/sanad-http.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" || true' EXIT
+          export SANAD_QA_OUTPUT="$RUNNER_TEMP/sanad-browser-qa"
+          node tools/e2e/browser-smoke.js
+
+      - name: Upload browser QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-BROWSER-QA
+          path: ${{ runner.temp }}/sanad-browser-qa
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: JVM regression tests
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
 
@@ -654,13 +675,13 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.0.10-REFACTOR-A13.apk"
+          cp "$APK" "SANAD-V9.2.1-LOCAL-RC.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
           grep -q "package: name='com.sanad.v9test'" apk-badging.txt
-          grep -q "versionCode='91000'" apk-badging.txt
-          grep -q "versionName='9.0.10-auto-unlock-rc'" apk-badging.txt
+          grep -q "versionCode='92001'" apk-badging.txt
+          grep -q "versionName='9.2.1-local-rc'" apk-badging.txt
           grep -q "application-label:'SANAD — سند'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
           grep -q "android.permission.POST_NOTIFICATIONS" apk-permissions.txt
@@ -719,7 +740,7 @@ jobs:
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          sha256sum "SANAD-V9.0.10-REFACTOR-A13.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.2.1-LOCAL-RC.apk" | tee apk-sha256.txt
 
       - name: Build isolated forensic QA APK
         run: gradle --no-daemon --stacktrace :app:assembleForensicQa
@@ -761,9 +782,9 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.0.10-REFACTOR-A13
+          name: SANAD-V9.2.1-LOCAL-RC
           path: |
-            SANAD-V9.0.10-REFACTOR-A13.apk
+            SANAD-V9.2.1-LOCAL-RC.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt

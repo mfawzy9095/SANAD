@@ -10,13 +10,13 @@ assert.throws(()=>I.recentScanStart(null,NaN),/valid-scan-time/);
 const start=html.indexOf('  async importHistoricalSms(days=0,options={}){');
 const end=html.indexOf('  canManualApprove(item){',start);
 assert(start>=0&&end>start);
-async function scenario(status,mode='recent',permission=true){
+async function scenario(status,mode='recent',permission=true,extra={}){
  const writes={},queries=[];let renders=0;
  const old={scannedThrough:now-3*day};
- const context={Date:class extends Date{static now(){return now;}},S:{tab:'home'},Set,Number,Math,Object,confirm:()=>true,AndroidBridge:{requestHistoricalSmsPermission(){}},toast(){},render(){renders++;},canWrite:()=>true,SanadExtStorage:{get:async k=>writes[k]||old,set:async(k,v)=>{writes[k]=v;}}};
+ const context={Date:class extends Date{static now(){return now;}},S:{tab:'home'},Set,Number,Math,Object,confirm:()=>true,AndroidBridge:{requestHistoricalSmsPermission(){}},toast(){},render(){renders++;},canWrite:()=>true,SanadExtStorage:{get:async k=>writes[k]||old,set:async(k,v)=>{if(extra.failKey===k)return false;writes[k]=JSON.parse(JSON.stringify(v));return true;}}};
  vm.createContext(context);
  const inbox=vm.runInContext('({'+html.slice(start,end)+'})',context);
- Object.assign(inbox,{historicalSupported:()=>true,historicalPermission:()=>permission,yieldUi:async()=>{},cancelHistoricalImport(){},requestHistoricalPage:async(days,date,id)=>{queries.push({days,date,id});return status==='complete'?{ok:true,done:true,scanned:2,financialCandidates:1}:{ok:false,status};},sync:async()=>({added:1,parsed:1,duplicates:0,review:0,reviewIds:[]})});
+ Object.assign(inbox,{historicalSupported:()=>true,historicalPermission:()=>permission,yieldUi:async()=>{},cancelHistoricalImport(){},requestHistoricalPage:async(days,date,id)=>{queries.push({days,date,id});return ['complete','processing-failed','cancel-last','navigate-last'].includes(status)?{ok:true,done:true,scanned:2,financialCandidates:1}:{ok:false,status};},sync:async()=>{if(status==='processing-failed')throw Error('batch failed');if(status==='cancel-last')inbox.historicalCancelRequested=true;if(status==='navigate-last')context.S.tab='tx';return {added:1,parsed:1,duplicates:0,review:0,reviewIds:[]};}});
  await inbox.importHistoricalSms(0,{mode,fromDate:now-4*day});
  return {writes,queries,inbox,renders};
 }
@@ -26,10 +26,15 @@ async function scenario(status,mode='recent',permission=true){
  assert.strictEqual(complete.writes.bankImportLastRecent.scannedThrough,now);
  assert.strictEqual(complete.writes.bankImportLastRecent.total.added,1);
  assert(complete.renders>=2,'home shows running and completed state');
- for(const failure of ['cancelled','review-capacity','query-failed','permission-restricted']){
+ for(const failure of ['cancelled','review-capacity','query-failed','permission-restricted','processing-failed','cancel-last','navigate-last']){
   const x=await scenario(failure);
   assert.strictEqual(x.writes.bankImportLastRecent.scannedThrough,now-3*day,'failed scan cannot skip unprocessed messages');
   assert.strictEqual(x.inbox.historicalImporting,false);
+ }
+ for(const failKey of ['bankImportLastHistorical','bankImportLastRecent']){
+  const x=await scenario('complete','recent',true,{failKey});
+  assert.strictEqual(x.inbox.lastRecentImport.scannedThrough,now-3*day);
+  assert.strictEqual(x.inbox.lastHistoricalImport.status,'checkpoint-failed');
  }
  const historical=await scenario('complete','historical');
  assert.strictEqual(historical.writes.bankImportLastRecent.scannedThrough,now,'historical scan seeds subsequent recent scans');
@@ -66,3 +71,24 @@ async function scenario(status,mode='recent',permission=true){
  assert.strictEqual(I.routeFromManualChoice(p,state,{sourceType:'instrument',sourceId:'card'}).status,'needs-review');
  assert.strictEqual(I.routeFromManualChoice({...p,currency:'EGP',amount:550},state,{sourceType:'instrument',sourceId:'card'}).status,'routed');
 }
+
+// Simultaneous foreground/history requests must each get a fresh scan with
+// their own force policy. A previous failure must not poison future requests.
+(async()=>{
+ const a=html.indexOf('  _syncPromise:null,'),b=html.indexOf('  async syncImpl(options){',a);
+ assert(a>=0&&b>a);
+ const ctx={};vm.createContext(ctx);
+ const inbox=vm.runInContext('({'+html.slice(a,b)+'})',ctx);
+ let release;const barrier=new Promise(r=>{release=r;});
+ const calls=[];let active=0,maxActive=0;
+ inbox.syncImpl=async options=>{calls.push(options.force);active++;maxActive=Math.max(maxActive,active);try{if(calls.length===1)await barrier;if(options.fail)throw Error('read failed');return {added:options.force?1:0};}finally{active--;}};
+ const first=inbox.sync({force:false}),second=inbox.sync({force:true}),third=inbox.sync({force:true});
+ assert.deepStrictEqual(calls,[false]);release();
+ const results=await Promise.all([first,second,third]);
+ assert.deepStrictEqual(calls,[false,true,true]);
+ assert.deepStrictEqual(results.map(x=>x.added),[0,1,1]);
+ assert.strictEqual(maxActive,1);assert.strictEqual(inbox._syncPromise,null);
+ await assert.rejects(inbox.sync({fail:true}),/read failed/);
+ assert.strictEqual((await inbox.sync({force:true})).added,1);
+ console.log('Concurrent bank scans preserve request policy and recover after failures: PASS');
+})().catch(e=>{console.error(e);process.exitCode=1;});

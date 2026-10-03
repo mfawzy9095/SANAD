@@ -639,11 +639,15 @@ public final class MainActivity extends Activity {
                     selectionArgs,
                     Telephony.Sms.DATE + " ASC, " + Telephony.Sms._ID + " ASC",
                     cancellationSignal)) {
-                if (cursor != null) {
+                if (cursor == null) throw new IllegalStateException("sms-query-unavailable");
+                {
                     int idCol = cursor.getColumnIndex(Telephony.Sms._ID);
                     int addressCol = cursor.getColumnIndex(Telephony.Sms.ADDRESS);
                     int bodyCol = cursor.getColumnIndex(Telephony.Sms.BODY);
                     int dateCol = cursor.getColumnIndex(Telephony.Sms.DATE);
+                    if (idCol < 0 || addressCol < 0 || bodyCol < 0 || dateCol < 0) {
+                        throw new IllegalStateException("sms-columns-unavailable");
+                    }
 
                     while (scanned < safeLimit && cursor.moveToNext()) {
                         if (cancellationSignal != null) cancellationSignal.throwIfCanceled();

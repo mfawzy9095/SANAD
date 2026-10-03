@@ -1,0 +1,4 @@
+.gradle/
+local.properties
+app/build/
+tools/e2e/node_modules/
