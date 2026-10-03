@@ -97,7 +97,7 @@ const record=(name)=>{results.push({name,status:'PASS'});console.log('PASS:',nam
  await page.waitForFunction(()=>S.accounts.some(a=>a.name==='QA Savings')&&!_criticalMutationInFlight);
  const savingsId=await page.evaluate(()=>S.accounts.find(a=>a.name==='QA Savings').id);
  await page.evaluate(()=>openNewTransfer());await page.locator('#fromAmtIn').fill('100');
- await page.locator('[data-act="save-transfer"]').click();
+ await page.locator('[data-act="save-tx"]').click();
  await page.waitForFunction(()=>S.transactions.some(t=>t.type==='transfer')&&!_financialFlowInFlight);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),9021.66);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),savingsId),100);record('Account creation and own transfer conserve money');
