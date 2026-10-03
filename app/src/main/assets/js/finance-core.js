@@ -15,10 +15,18 @@
     return accounts.find(a=>a&&a.id===id)||null;
   }
 
-  function accountBalance(state,accountId){
+  function accountBalance(state,accountId,asOf){
     const a=getAccount(state,accountId);
     if(!a)return 0;
-    const txs=state&&Array.isArray(state.transactions)?state.transactions:[];
+    const cutoff=asOf==null?Infinity:Number(asOf);
+    const baseline=a.bankBalanceBaseline;
+    const baselineAt=baseline&&Number(baseline.at)>0?Number(baseline.at):0;
+    if(baselineAt&&cutoff<baselineAt)return null;
+    const txs=(state&&Array.isArray(state.transactions)?state.transactions:[]).filter(t=>{
+      if(!t)return false;
+      const at=Number(t.created)||0;
+      return (!baselineAt||at>=baselineAt)&&at<=cutoff;
+    });
 
     if(isLiabilityAccount(a)){
       let debt=num(a.openingDebt);
@@ -40,7 +48,7 @@
       return -round2(debt);
     }
 
-    let bal=num(a.openingBalance);
+    let bal=baselineAt?num(baseline.balance):num(a.openingBalance);
     for(const t of txs){
       if(!t)continue;
       if(t.accountId===accountId){
@@ -61,6 +69,11 @@
       }
     }
     return round2(bal);
+  }
+
+  function accountBalanceAt(state,accountId,at){
+    if(at==null||!Number.isFinite(Number(at)))return null;
+    return accountBalance(state,accountId,Number(at));
   }
 
   function accountBalancePresentation(state,accountId){
@@ -146,6 +159,7 @@
 
   return Object.freeze({
     accountBalance,
+    accountBalanceAt,
     accountBalancePresentation,
     accountDebt,
     capturePrepaidBalances,

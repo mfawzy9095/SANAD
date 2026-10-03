@@ -189,7 +189,7 @@
     const out={
       id:uid('a'),institutionId:institutionId||null,country:countryForParsed(parsed),name,
       type:accountType,currency:parsed.currency||'AED',
-      openingBalance:opening,openingDebt:0,creditLimit:0,defaultRepaymentAccountId:null,
+      openingBalance:opening,bankBalanceBaseline:{at:Number(parsed.postedAt)||Date.now(),balance:opening},openingDebt:0,creditLimit:0,defaultRepaymentAccountId:null,
       icon:provider?'📱':'🏦',color:'#00695C',archived:false,created:new Date(parsed.postedAt||Date.now()).toISOString().slice(0,10),
       autoDiscovered:true,autoDiscoverySource:parsed.bankId||parsed.providerId||(sourceInstitution&&sourceInstitution.id)||null,
       observedBalance:num(parsed.availableBalance),observedBalanceAt:Number(parsed.postedAt)||Date.now()
@@ -732,7 +732,11 @@
     const dup=duplicateOf(parsed,state);
     if(dup)return {action:'duplicate',reason:'already-imported',existingTransactionId:dup.id,confidence:1};
 
-    let draft=clone(state||{});
+    // Planning only appends draft entities; never clone the complete historical ledger per SMS.
+    let draft=Object.assign({},state||{});
+    draft.institutions=arr(draft.institutions).slice();
+    draft.accounts=arr(draft.accounts).slice();
+    draft.paymentInstruments=arr(draft.paymentInstruments).slice();
     if(!Array.isArray(draft.institutions))draft.institutions=[];
     if(!Array.isArray(draft.accounts))draft.accounts=[];
     if(!Array.isArray(draft.paymentInstruments))draft.paymentInstruments=[];

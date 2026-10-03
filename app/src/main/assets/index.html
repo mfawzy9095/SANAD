@@ -8770,14 +8770,15 @@ const SanadBankInbox = {
     let warning=false;
     if(account&&isFiniteNumberLike(parsed.availableBalance)){
       const observed=Math.round(Number(parsed.availableBalance)*100)/100;
-      const calculated=Math.round(Finance.accountBalance(account.id)*100)/100;
-      const difference=Math.round((observed-calculated)*100)/100;
+      const balanceAt=FinanceCore.accountBalanceAt(S,account.id,ts);
+      const calculated=balanceAt==null?null:Math.round(balanceAt*100)/100;
+      const difference=calculated==null?null:Math.round((observed-calculated)*100)/100;
       const existingObservedAt=Number(account.observedBalanceAt)||0;
       if(existingObservedAt<=0||ts>=existingObservedAt){
         account.observedBalance=observed;
         account.observedBalanceAt=ts;
-        account.bankReconciliation={kind:'balance',observed,calculated,difference,at:ts,status:Math.abs(difference)<=0.01?'matched':'mismatch'};
-        warning=Math.abs(difference)>0.01;
+        account.bankReconciliation={kind:'balance',observed,calculated,difference,at:ts,status:difference==null?'observed-only':(Math.abs(difference)<=0.01?'matched':'mismatch')};
+        warning=difference!=null&&Math.abs(difference)>0.01;
       }
     }
     if(account&&isFiniteNumberLike(parsed.availableCredit)){

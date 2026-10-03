@@ -125,3 +125,15 @@ function state(accounts,transactions){return {accounts,transactions};}
 })();
 
 console.log('finance-core regression tests: PASS');
+
+// Historical imports before an explicit bank baseline must not be counted again.
+{
+  const s={accounts:[{id:'timeline',type:'bank',openingBalance:100,bankBalanceBaseline:{at:2000,balance:100}}],transactions:[
+    {type:'income',accountId:'timeline',amount:1000,created:1000},
+    {type:'expense',accountId:'timeline',amount:10,created:2000},
+    {type:'income',accountId:'timeline',amount:20,created:3000}
+  ]};
+  assert.strictEqual(F.accountBalance(s,'timeline'),110);
+  assert.strictEqual(F.accountBalanceAt(s,'timeline',2000),90);
+  assert.strictEqual(F.accountBalanceAt(s,'timeline',1000),null);
+}
