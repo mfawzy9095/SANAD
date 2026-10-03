@@ -100,7 +100,7 @@
     if(['internal_transfer','card_repayment','cash_withdrawal'].includes(kind))return 'transfer';
     return null;
   }
-  function semanticDuplicateOf(parsed,state){
+  function semanticDuplicateOf(parsed,state,probable){
     const expected=expectedTxType(parsed&&parsed.kind);
     const ts=Number(parsed&&parsed.postedAt);
     if(!expected||!Number.isFinite(ts)||ts<=0)return null;
@@ -108,7 +108,8 @@
     const merchantKey=normalizedText(parsed.merchant||parsed.beneficiaryName||'');
     const instruments=arr(state&&state.paymentInstruments),accounts=arr(state&&state.accounts);
     return arr(state&&state.transactions).find(t=>{
-      if(!t||t.type!==expected)return false;
+      if(!t||t.type!==expected||!t.bankImportKey)return false;
+      if(parsed.transactionRef&&t.bankTransactionRef&&parsed.transactionRef!==t.bankTransactionRef)return false;
       const created=Number(t.created);
       if(!Number.isFinite(created)||Math.abs(created-ts)>5*60*1000)return false;
       if(parsed.bankId&&String(t.bankId||'')!==String(parsed.bankId))return false;
@@ -133,13 +134,25 @@
         const noteKey=normalizedText(t.note||'');
         if(!noteKey||(!noteKey.includes(merchantKey)&&!merchantKey.includes(noteKey)))return false;
       }
-      return true;
+      const e=t.bankImportEvidence;
+      const balance=num(parsed.availableBalance),credit=num(parsed.availableCredit);
+      if(e){
+        if(balance!=null&&num(e.availableBalance)!=null&&balance!==num(e.availableBalance))return false;
+        if(credit!=null&&num(e.availableCredit)!=null&&credit!==num(e.availableCredit))return false;
+        const sameText=normalizedText(e.text)===normalizedText(parsed.raw);
+        const sameObservation=(balance!=null&&balance===num(e.availableBalance))||(credit!=null&&credit===num(e.availableCredit));
+        if(sameText&&sameObservation)return true;
+      }
+      return probable===true;
     })||null;
   }
   function duplicateOf(parsed,state){
     const key=MessageCore.dedupeKey(parsed);
     const exact=arr(state&&state.transactions).find(t=>
-      (parsed.transactionRef&&t.bankTransactionRef===parsed.transactionRef) ||
+      (parsed.transactionRef&&t.bankTransactionRef===parsed.transactionRef&&
+        (!parsed.bankId||t.bankId===parsed.bankId)&&(!parsed.providerId||t.providerId===parsed.providerId)&&
+        String(t.currency||t.fromCurrency||'').toUpperCase()===String(parsed.currency||'').toUpperCase()&&
+        round2(t.amount==null?t.fromAmount:t.amount)===round2(parsed.amount)&&t.type===expectedTxType(parsed.kind)) ||
       (parsed.eventId&&t.bankImportEventId===parsed.eventId) ||
       (key&&t.bankImportKey===key)
     )||null;
@@ -292,7 +305,10 @@
   }
   function templateSignature(parsed){
     if(!parsed)return '';
-    let x=normalizeSource(parsed.raw||'');
+    let x=String(parsed.raw||'').toLowerCase().replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+    x=x.replace(/(aed|egp|mad|usd|eur|gbp|sar)\s*-?[0-9][0-9,.]*/gi,'$1 AMOUNT');
+    x=x.replace(/-?[0-9][0-9,.]*\s*(aed|egp|mad|usd|eur|gbp|sar)/gi,'AMOUNT $1');
+    x=normalizeSource(x);
     if(!x)return '';
     const dynamic=[
       [parsed.transactionRef,'<ref>'],
@@ -731,6 +747,8 @@
     }
     const dup=duplicateOf(parsed,state);
     if(dup)return {action:'duplicate',reason:'already-imported',existingTransactionId:dup.id,confidence:1};
+    const probable=semanticDuplicateOf(parsed,state,true);
+    if(probable)return {action:'review',reason:'possible-duplicate',existingTransactionId:probable.id,confidence:0};
 
     // Planning only appends draft entities; never clone the complete historical ledger per SMS.
     let draft=Object.assign({},state||{});

@@ -330,7 +330,7 @@
     const eventKey=parsed&&parsed.transactionRef?('ref:'+String(parsed.transactionRef)):(parsed&&parsed.eventId?('event:'+String(parsed.eventId)):timeKey);
     return [eventKey,parsed.bankId||parsed.providerId||'source?',parsed.kind||'kind?',parsed.currency||'AED',Number(parsed.amount||0).toFixed(2),parsed.cardLast4||parsed.accountRef||parsed.accountSuffix||'instrument?',String(parsed.merchant||parsed.beneficiaryName||'').toLowerCase().replace(/\s+/g,' ').trim()].join('|');
   }
-  function buildTransaction(parsed,route,options){
+  function buildTransactionBase(parsed,route,options){
     const opts=options||{},date=opts.date||parsed.transactionDate||new Date(parsed.postedAt||Date.now()).toISOString().slice(0,10),id=typeof opts.uid==='function'?opts.uid('t'):('bank_'+Date.now()),key=dedupeKey(parsed);
     if(!route||route.status!=='routed')return {ok:false,reason:(route&&route.reason)||'route-required'};
     if(['purchase','bill_payment','mobile_recharge','deposit','salary','refund','incoming_transfer'].includes(parsed.kind)){
@@ -362,6 +362,16 @@
       return {ok:true,transaction:{id,type:'transfer',fromAccountId:from.id,fromAmount:parsed.amount,fromCurrency:from.currency,fromCountry:from.country,toAccountId:to.id,toAmount:parsed.amount,toCurrency:to.currency,toCountry:to.country,fxRate:1,fee:0,note:'سحب نقدي',tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,bankTransactionRef:parsed.transactionRef||null}};
     }
     return {ok:false,reason:'manual-review-required'};
+  }
+  function buildTransaction(parsed,route,options){
+    const built=buildTransactionBase(parsed,route,options);
+    if(built.ok&&built.transaction)built.transaction.bankImportEvidence={
+      text:cleanText(parsed.raw||'').toLowerCase(),
+      availableBalance:parsed.availableBalance==null?null:Number(parsed.availableBalance),
+      availableCredit:parsed.availableCredit==null?null:Number(parsed.availableCredit),
+      sourceHint:parsed.sourceHint||'',kind:parsed.kind
+    };
+    return built;
   }
   return Object.freeze({parse,resolveRoute,buildTransaction,dedupeKey,categoryForMerchant,ignoredReason,suffix,normalizeRef,countryForCurrency});
 });

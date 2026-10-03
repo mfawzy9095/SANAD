@@ -179,7 +179,7 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
 {
   const p=P.parse({id:'d4',postedAt:7000,text:"Hello Mohamed Abd, You've received AED 9.00 to your du Pay wallet. Your available balance is now AED 110.28, and the transaction ID is: DG148RKIXI"});
   const s=empty();
-  s.transactions.push({id:'old',bankTransactionRef:'DG148RKIXI'});
+  s.transactions.push({id:'old',type:'income',amount:9,currency:'AED',providerId:'du-pay',bankTransactionRef:'DG148RKIXI'});
   const plan=I.plan(p,s,{uid});
   assert.strictEqual(plan.action,'duplicate');
   assert.strictEqual(plan.existingTransactionId,'old');
@@ -670,4 +670,21 @@ console.log('bank ingestion core regression tests: PASS');
   assert.strictEqual(s.accounts[0].observedBalance,200);
   assert.strictEqual(I.reconciliation(p,s,plan,()=>51),null);
   assert.strictEqual(I.openingBalanceForObserved({...p,availableBalance:0}),149);
+}
+
+// Time proximity alone never suppresses genuine repeated debits or distinct references.
+{
+  const s=empty();s.institutions.push({id:'source',bankRegistryId:'emirates-nbd',country:'UAE'});
+  s.accounts.push({id:'credit',institutionId:'source',type:'credit',country:'UAE',currency:'AED',openingDebt:0});
+  s.paymentInstruments.push({id:'card',institutionId:'source',accountId:'credit',last4:'4021',type:'credit_card'});
+  const first=P.parse({id:'first',postedAt:1000000,text:'تمت عملية شراء في AED 32.00 TEST CAFE على البطاقة 4021 الائتمان المتوفر AED100.00'});
+  I.applyPlan(s,I.plan(first,s,{uid}));
+  const second=P.parse({id:'second',postedAt:1060000,text:'تمت عملية شراء في AED 32.00 TEST CAFE على البطاقة 4021 الائتمان المتوفر AED68.00'});
+  assert.strictEqual(I.plan(second,s,{uid}).action,'auto-save');
+  const replay={...first,eventId:'another-native-id',postedAt:1001900};
+  assert.strictEqual(I.plan(replay,s,{uid}).action,'duplicate');
+  const a={...first,eventId:'reference-a',transactionRef:'REF-A'};
+  const b={...first,eventId:'reference-b',transactionRef:'REF-B',postedAt:1001000};
+  s.transactions=[];I.applyPlan(s,I.plan(a,s,{uid}));
+  assert.strictEqual(I.plan(b,s,{uid}).action,'auto-save');
 }
