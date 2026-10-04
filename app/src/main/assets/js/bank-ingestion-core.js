@@ -938,12 +938,32 @@
     return {accountId,observed:round2(observed),calculated,difference:diff,matched:Math.abs(diff)<=0.01};
   }
 
-  function recentScanStart(previous,now){
+  function recentScanStart(previous,now,floor){
     const end=Number(now);
     if(!Number.isFinite(end)||end<=0)throw new Error('valid-scan-time-required');
     const checkpoint=Number(previous&&previous.scannedThrough)||0;
+    if(Number.isFinite(Number(floor))&&Number(floor)>0)return Math.max(Number(floor),checkpoint>0?Math.min(checkpoint,end)-300000:Number(floor));
+    // Legacy callers retain their historical default. Explicit UI ranges never use it.
     // A one-day overlap covers late SMS delivery. Financial evidence handles repeats.
     return Math.max(0,checkpoint>0?Math.min(checkpoint,end)-86400000:end-30*86400000);
+  }
+
+  const EVENT_DECISION_LIMIT=50000;
+  function eventDecision(state,id){
+    const decisions=state&&state.settings&&state.settings.bankEventDecisions;
+    return decisions&&Object.prototype.hasOwnProperty.call(decisions,String(id))?decisions[String(id)]:null;
+  }
+  function rememberEventDecision(state,id,action,at,transactionId){
+    if(!state||!state.settings||typeof id!=='string'||!id||id.length>240||['__proto__','constructor','prototype'].includes(id))throw Error('invalid-event-identity');
+    if(!['saved','observed','ignored','duplicate','dismissed'].includes(action)||!Number.isFinite(Number(at))||Number(at)<=0)throw Error('invalid-event-decision');
+    const decisions=state.settings.bankEventDecisions||(state.settings.bankEventDecisions={});
+    // Never evict decisions: an eviction could resurrect an old transaction.
+    if(!Object.prototype.hasOwnProperty.call(decisions,id)&&Object.keys(decisions).length>=EVENT_DECISION_LIMIT)throw Error('event-decision-capacity');
+    decisions[id]={action,at:Number(at),transactionId:transactionId||null};
+    return true;
+  }
+  function compatibleScanCheckpoint(previous,floor){
+    return previous&&Number(previous.configuredStartAt)===Number(floor)?previous:null;
   }
   function transferCounterparts(parsed,state){
     if(!parsed||!['deposit','incoming_transfer','outgoing_transfer'].includes(parsed.kind))return [];
@@ -990,7 +1010,7 @@
     return {ok:true,transaction:tx,replacesTransactionId:old.id,before:clone(old),observationAccountId:outgoing?from.id:receiver.id};
   }
   return Object.freeze({
-    recentScanStart,transferCounterparts,pairOwnTransfer,
+    recentScanStart,compatibleScanCheckpoint,eventDecision,rememberEventDecision,EVENT_DECISION_LIMIT,transferCounterparts,pairOwnTransfer,
     autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
   });
 });

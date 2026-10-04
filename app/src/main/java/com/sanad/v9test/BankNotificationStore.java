@@ -91,6 +91,26 @@ public final class BankNotificationStore {
         return ADDED;
     }
 
+    // Produces the exact same stable event identity as enqueueStatus, without
+    // writing to the bounded notification queue. Used by explicit SMS scans.
+    public static JSONObject smsEvent(String address, String body, long postedAt) {
+        String safePackage = trim("sms:" + (address == null ? "" : address.trim()), 180);
+        String safeTitle = trim(redactSensitiveCardNumbers(address), 300);
+        String safeText = trim(redactSensitiveCardNumbers(body), MAX_TEXT);
+        if (safeText.isEmpty()) return null;
+        long ts = postedAt > 0L ? postedAt : System.currentTimeMillis();
+        String fingerprint = sha256(safePackage + "\n" + safeTitle + "\n" + safeText);
+        JSONObject event = new JSONObject();
+        try {
+            event.put("id", ts + "-" + fingerprint.substring(0, 16));
+            event.put("packageName", safePackage);
+            event.put("title", safeTitle);
+            event.put("text", safeText);
+            event.put("postedAt", ts);
+            return event;
+        } catch (Exception error) { return null; }
+    }
+
     public static synchronized String getAllJson(Context context) {
         JSONArray source = read(context);
         JSONArray safe = new JSONArray();
@@ -241,3 +261,4 @@ public final class BankNotificationStore {
         }
     }
 }
+

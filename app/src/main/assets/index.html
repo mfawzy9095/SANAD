@@ -913,7 +913,7 @@ const ACCOUNT_ICONS = ['🏦','💵','💰','🪙','🏛️','📱','💼','🏧
 const CARD_ICONS = ['💳','🪪','💠','🎴','🏦','📱','💎'];
 const DEBT_ICONS = ['📋','🧾','📉','💸','📝','🏷️'];
 
-const APP_VERSION = '9.2.1';
+const APP_VERSION = '9.2.3';
 const APP_CHANNEL = 'local-rc';
 const SCHEMA_VERSION = 16;
 const DB_NAME = 'masareef_v8';
@@ -2155,6 +2155,24 @@ function recurringCardHtml(r, days){
       '<span>' + (paused ? '—' : 'يوم ' + r.day) + '</span></div></div>';
 }
 
+function localDateTimeInput(at){
+  const d=new Date(at);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+function parseLocalDateTime(value){
+  const m=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(value||''));
+  if(!m)return null;
+  const [y,mo,d,h,mi]=m.slice(1).map(Number),dt=new Date(y,mo-1,d,h,mi,0,0);
+  return dt.getFullYear()===y&&dt.getMonth()===mo-1&&dt.getDate()===d&&dt.getHours()===h&&dt.getMinutes()===mi?dt.getTime():null;
+}
+function transactionTimeText(t){
+  if(t&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t.transactionTime||''))return t.transactionTime+(t.timeSource==='bank-message'?' · وقت مذكور برسالة البنك':'');
+  if(t&&(t.bankImportKey||t.bankImportEventId))return 'وقت العملية غير مذكور · وصول الرسالة '+new Date(Number(t.smsReceivedAt||t.created)).toLocaleTimeString('ar-AE',{hour:'2-digit',minute:'2-digit'});
+  return 'وقت العملية غير مسجل';
+}
+function transactionTimeField(f){
+  if(f.transactionTime===undefined)f.transactionTime=f.id?'':localDateTimeInput(Date.now()).slice(11);
+  return '<div class="field"><label>وقت المعاملة</label><input id="txTimeIn" type="time" value="'+esc(f.transactionTime||'')+'" onchange="S.form.transactionTime=this.value"><div class="field-hint">الوقت المحلي للعملية؛ اتركه فارغًا إذا كان غير معلوم.</div></div>';
+}
 function txRowHtml(t, withSwipe){
   if (!t) return '';
   if (t.type === 'adjustment'){
@@ -2163,7 +2181,7 @@ function txRowHtml(t, withSwipe){
     const sign = (Number(t.walletAmount) || 0) >= 0 ? '+' : '−';
     const abs = Math.abs(Number(t.walletAmount) || 0);
     const inner = '<div class="ic" style="background:var(--warn-soft);color:var(--warn)">⚖️</div>' +
-      '<div class="info"><b>تسوية</b><span>' + (acc ? esc(acc.name) : '—') + ' · ' + esc(t.note || '') + '</span></div>' +
+      '<div class="info"><b>تسوية</b><span>' + (acc ? esc(acc.name) : '—') + ' · ' + esc(t.note || '') + '</span><span>'+esc(t.date)+' · '+esc(transactionTimeText(t))+'</span></div>' +
       '<div class="amt adjustment amt-val">' + sign + amtText(abs) + ' ' + Finance.curSymbol(cur) + '</div>';
     if (withSwipe) return '<div class="tx-item-wrap" data-wrap="' + t.id + '"><div class="hint-icon">✏️</div><div class="tx-item" data-txid="' + t.id + '">' + inner + '</div></div>';
     return '<div class="tx-item" data-txid="' + t.id + '">' + inner + '</div>';
@@ -2185,7 +2203,7 @@ function txRowHtml(t, withSwipe){
       else label = 'تحويل بين بلدين';
     } else label = 'تحويل بين حساباتي';
     const inner = '<div class="ic" style="background:var(--info-soft);color:var(--info)">🔄</div>' +
-      '<div class="info"><b>' + label + '</b><span>' + (fromAcc ? esc(fromAcc.name) : '—') + ' → ' + (toAcc ? esc(toAcc.name) : '—') + '</span></div>' +
+      '<div class="info"><b>' + label + '</b><span>' + (fromAcc ? esc(fromAcc.name) : '—') + ' → ' + (toAcc ? esc(toAcc.name) : '—') + '</span><span>'+esc(t.date)+' · '+esc(transactionTimeText(t))+'</span></div>' +
       '<div class="amt transfer amt-val">' + amtText(t.fromAmount) + ' ' + Finance.curSymbol(fromCur) +
         (fromCur !== toCur ? '<span class="fx amt-val">= ' + amtFull(t.toAmount, toCur) + '</span>' : '') + feeLine + '</div>';
     if (withSwipe) return '<div class="tx-item-wrap" data-wrap="' + t.id + '"><div class="hint-icon">✏️</div><div class="tx-item" data-txid="' + t.id + '">' + inner + '</div></div>';
@@ -2200,7 +2218,7 @@ function txRowHtml(t, withSwipe){
     const feeLine = fee > 0 ? '<span class="fx amt-val">+ رسوم ' + amtFull(fee, fromCur) + '</span>' : '';
     const inner = '<div class="ic" style="background:var(--error-soft);color:var(--error)">👤</div>' +
       '<div class="info"><b>تحويل إلى ' + (bene ? esc(bene.name) : '—') + '</b>' +
-        '<span>' + (fromAcc ? esc(fromAcc.name) : '—') + (bene ? ' · ' + countryInfo(bene.country).name : '') + '</span></div>' +
+        '<span>' + (fromAcc ? esc(fromAcc.name) : '—') + (bene ? ' · ' + countryInfo(bene.country).name : '') + '</span><span>'+esc(t.date)+' · '+esc(transactionTimeText(t))+'</span></div>' +
       '<div class="amt external amt-val">−' + amtText(t.fromAmount) + ' ' + Finance.curSymbol(fromCur) +
         (fromCur !== receivedCur ? '<span class="fx amt-val">= ' + amtFull(t.receivedAmount, receivedCur) + '</span>' : '') + feeLine + '</div>';
     if (withSwipe) return '<div class="tx-item-wrap" data-wrap="' + t.id + '"><div class="hint-icon">✏️</div><div class="tx-item" data-txid="' + t.id + '">' + inner + '</div></div>';
@@ -2220,7 +2238,7 @@ function txRowHtml(t, withSwipe){
     ? '<span class="fx amt-val">≈ ' + amtFull(t.walletAmount, walletCur) + '</span>' : '';
   const inner = '<div class="ic" style="background:' + c.c + '22;color:' + c.c + '">' + c.i + '</div>' +
     '<div class="info"><b>' + tags + esc(c.n) + (t.rec ? ' 🔁' : '') + '</b>' +
-      '<span>' + noteText + (sourceTxt ? ' • ' + esc(sourceTxt) : '') + '</span></div>' +
+      '<span>' + noteText + (sourceTxt ? ' • ' + esc(sourceTxt) : '') + '</span><span>'+esc(t.date)+' · '+esc(transactionTimeText(t))+'</span></div>' +
     '<div class="amt ' + cls + ' amt-val">' + sign + amtText(t.amount) + ' ' + Finance.curSymbol(origCur) + fxLine + '</div>';
   if (withSwipe) return '<div class="tx-item-wrap" data-wrap="' + t.id + '"><div class="hint-icon">✏️</div><div class="tx-item" data-txid="' + t.id + '">' + inner + '</div></div>';
   return '<div class="tx-item" data-txid="' + t.id + '">' + inner + '</div>';
@@ -3208,7 +3226,7 @@ function openEditTx(id){
     cat: t.cat, source,
     merchantName: t.merchantName || '',
     note: t.note || '', tags: (t.tags||[]).slice(),
-    date: t.date, recurring: false,
+    date: t.date, transactionTime:t.transactionTime||'', _originalTime:t.transactionTime||null, _originalDate:t.date, _originalTimeSource:t.timeSource||null, recurring: false,
     fxRate: savedFxRate,
     recFreq: 'monthly', recDay: 1, recMonth: new Date().getMonth(), recRem: 3,
     showAdvanced: false,
@@ -3424,7 +3442,7 @@ function renderTxSheet(){
           '<div class="cur">' + Finance.curInfo(f.currency).name + ' · ' + f.currency + '</div></div>' +
         '<div id="sanadReceiptQuickMount"></div>' +
       '</div>' + fxHtml +
-      '<div class="field tx-main-date" style="margin-top:12px"><label>التاريخ</label><div class="date-chips">' + dateChips + '</div></div>' +
+      '<div class="field tx-main-date" style="margin-top:12px"><label>التاريخ</label><div class="date-chips">' + dateChips + '</div></div>' + transactionTimeField(f) +
       '<details class="adv-details" ' + (f.showAdvanced || needsFx ? 'open' : '') + ' data-adv>' +
         '<summary>تفاصيل إضافية</summary>' +
         '<div class="adv-body">' +
@@ -3589,7 +3607,7 @@ async function saveTx(){
       note: (f.note || '').trim(),
       tags: (f.tags || []).slice(),
       date: f.date,
-      created: origCreated
+      created: origCreated, transactionTime:f.transactionTime||null, timeSource:(f.transactionTime===f._originalTime&&f.date===f._originalDate?f._originalTimeSource:'manual')
     };
     if (origRec) data.rec = origRec;
     if (wasEdit){
@@ -3725,7 +3743,7 @@ function openEditTransferSheet(id){
     fxRate: Number(t.fxRate) || 1,
     _transferMode: 'received',
     note: t.note || '', tags: (t.tags||[]).slice(),
-    date: t.date, showAdvanced: true,
+    date: t.date, transactionTime:t.transactionTime||'', _originalTime:t.transactionTime||null, _originalDate:t.date, _originalTimeSource:t.timeSource||null, showAdvanced: true,
     _originalCreated: t.created
   };
   renderTransferSheet();
@@ -3938,7 +3956,7 @@ function renderTransferSheet(){
       '</div>' +
       amountSection +
       '<div id="sanadReceiptQuickMount"></div>' +
-      '<div class="field tx-main-date" style="margin-top:12px"><label>التاريخ</label><div class="date-chips">' + dateChips + '</div></div>' +
+      '<div class="field tx-main-date" style="margin-top:12px"><label>التاريخ</label><div class="date-chips">' + dateChips + '</div></div>' + transactionTimeField(f) +
       hint +
       '<details class="adv-details" ' + (f.showAdvanced ? 'open' : '') + ' data-adv>' +
         '<summary>تفاصيل إضافية</summary>' +
@@ -4117,7 +4135,7 @@ async function saveTransfer(){
         fxRate, fee: feeForTransfer, instrumentId: null,
         note: (f.note || '').trim() || ('تحويل إلى ' + bene.name),
         tags: (f.tags || []).slice(), date: f.date,
-        created: origCreated
+        created: origCreated, transactionTime:f.transactionTime||null, timeSource:(f.transactionTime===f._originalTime&&f.date===f._originalDate?f._originalTimeSource:'manual')
       };
       if (wasEdit){
         const idx = S.transactions.findIndex(x => x.id === f.id);
@@ -4136,7 +4154,7 @@ async function saveTransfer(){
         fxRate, fee: feeForTransfer,
         note: (f.note || '').trim() || (isRepayment ? ('سداد ' + (targetAcc.type === 'credit' ? 'بطاقة' : 'دين')) : ''),
         tags: (f.tags || []).slice(), date: f.date,
-        created: origCreated
+        created: origCreated, transactionTime:f.transactionTime||null, timeSource:(f.transactionTime===f._originalTime&&f.date===f._originalDate?f._originalTimeSource:'manual')
       };
       if (wasEdit){
         const idx = S.transactions.findIndex(x => x.id === f.id);
@@ -4215,7 +4233,7 @@ function openEditExternalTransferSheet(id){
     fxRate: Number(t.fxRate) || 1,
     _transferMode: 'received',
     note: t.note || '', tags: (t.tags||[]).slice(),
-    date: t.date, showAdvanced: true,
+    date: t.date, transactionTime:t.transactionTime||'', _originalTime:t.transactionTime||null, _originalDate:t.date, _originalTimeSource:t.timeSource||null, showAdvanced: true,
     _originalCreated: t.created
   };
   renderTransferSheet();
@@ -4237,7 +4255,7 @@ function openRepaymentEditor(transferId){
     principal: String(t.fromAmount),
     rate: Number(t.fxRate) || 1,
     fee: effectiveFee > 0 ? String(effectiveFee) : '',
-    note: t.note || '', date: t.date,
+    note: t.note || '', date: t.date, transactionTime:t.transactionTime||'', _originalTime:t.transactionTime||null, _originalDate:t.date, _originalTimeSource:t.timeSource||null,
     _originalCreated: t.created,
     _originalToAmount: t.toAmount,
     _originalFromId: t.fromAccountId,
@@ -4311,7 +4329,7 @@ function renderRepaymentEditor(){
         '<input type="number" inputmode="decimal" id="payFee" value="' + esc(f.fee || '') + '" placeholder="0">' +
         '<div class="field-hint">تُسجَّل كمصروف "فوائد / رسوم دين".</div></div>' +
       '<div class="field"><label>ملاحظة</label><input type="text" id="payNote" placeholder="اختياري" maxlength="80" value="' + esc(f.note || '') + '"></div>' +
-      '<button type="button" class="btn primary" data-act="save-repayment-edit" style="margin-top:8px">حفظ</button>' +
+      transactionTimeField(f) + '<div class="field"><label>تاريخ المعاملة</label><input type="date" value="'+esc(f.date)+'" onchange="S.form.date=this.value"></div>' + '<button type="button" class="btn primary" data-act="save-repayment-edit" style="margin-top:8px">حفظ</button>' +
     '</div>',
     'repayment'
   );
@@ -4395,7 +4413,7 @@ async function saveRepaymentEdit(){
       toAccountId: target.id, toAmount, toCurrency: targetCur, toCountry: target.country,
       fxRate: rate, fee: 0,
       note: note || ('سداد ' + (target.type === 'credit' ? 'بطاقة' : 'دين')),
-      tags: (t.tags || []).slice(), date: t.date, created: t.created
+      tags: (t.tags || []).slice(), date: f.date, transactionTime:f.transactionTime||null, timeSource:'manual', created: t.created
     };
     const idx = S.transactions.findIndex(x => x.id === t.id);
     if (idx < 0) return false;
@@ -4526,7 +4544,7 @@ function openTxDetails(id){
     rows.push(moneyRow('المبلغ', abs, t.currency));
     rows.push(['الحساب', acc ? acc.name : '—']);
     if (acc) rows.push(['البلد', countryInfo(acc.country).flag + ' ' + countryInfo(acc.country).name]);
-    rows.push(['التاريخ', t.date]);
+    rows.push(['التاريخ', t.date]); rows.push(['الوقت', transactionTimeText(t)]);
     if (t.note) rows.push(['ملاحظة', t.note]);
   } else if (t.type === 'transfer'){
     const fromAcc = Finance.getAccount(t.fromAccountId);
@@ -4550,7 +4568,7 @@ function openTxDetails(id){
     const linkedFee = getLinkedRepaymentFees(t.id)[0] || null;
     if (linkedFee) rows.push(moneyRow('فوائد / رسوم', linkedFee.amount, linkedFee.currency));
     else if (Number(t.fee) > 0) rows.push(moneyRow('الرسوم', t.fee, t.fromCurrency));
-    rows.push(['التاريخ', t.date]);
+    rows.push(['التاريخ', t.date]); rows.push(['الوقت', transactionTimeText(t)]);
     if (t.note) rows.push(['ملاحظة', t.note]);
   } else if (t.type === 'external_transfer'){
     const fromAcc = Finance.getAccount(t.fromAccountId);
@@ -4566,7 +4584,7 @@ function openTxDetails(id){
       rows.push(['السعر', hide ? '•••' : ('1 ' + Finance.curSymbol(t.fromCurrency) + ' = ' + fmt(t.fxRate) + ' ' + Finance.curSymbol(t.receivedCurrency))]);
     }
     if (Number(t.fee) > 0) rows.push(moneyRow('الرسوم', t.fee, t.fromCurrency));
-    rows.push(['التاريخ', t.date]);
+    rows.push(['التاريخ', t.date]); rows.push(['الوقت', transactionTimeText(t)]);
     if (t.note) rows.push(['ملاحظة', t.note]);
   } else {
     const c = Finance.getCat(t.type, t.cat);
@@ -4579,7 +4597,7 @@ function openTxDetails(id){
     if (acc) rows.push(['البلد', countryInfo(acc.country).flag + ' ' + countryInfo(acc.country).name]);
     if (inst) rows.push(['البطاقة', inst.name + (inst.last4 ? ' ••' + inst.last4 : '')]);
     if (t.merchantName) rows.push(['التاجر', t.merchantName]);
-    rows.push(['التاريخ', t.date]);
+    rows.push(['التاريخ', t.date]); rows.push(['الوقت', transactionTimeText(t)]);
     if (t.rec) rows.push(['متكرر','🔁']);
     if (t.note) rows.push(['ملاحظة', t.note]);
   }
@@ -5565,7 +5583,7 @@ async function saveWalletBalance(walletId){
     S.transactions.push({
       id: uid('adj'), type:'adjustment', amount: Math.abs(diff), currency: a.currency,
       accountId: walletId, walletAmount: diff, fxRate: 1,
-      cat:'adjustment', note:'تسوية رصيد', tags:['تسوية'], date: isoToday(), created: Date.now()
+      cat:'adjustment', note:'تسوية رصيد', tags:['تسوية'], date: isoToday(), transactionTime:localDateTimeInput(Date.now()).slice(11),timeSource:'manual', created: Date.now()
     });
     return true;
   });
@@ -5604,7 +5622,7 @@ async function saveReconcileLiability(walletId){
     S.transactions.push({
       id: uid('adj'), type:'adjustment', amount: Math.abs(diff), currency: a.currency,
       accountId: walletId, walletAmount, fxRate: 1,
-      cat:'adjustment', note:'تسوية مديونية', tags:['تسوية'], date: isoToday(), created: Date.now()
+      cat:'adjustment', note:'تسوية مديونية', tags:['تسوية'], date: isoToday(), transactionTime:localDateTimeInput(Date.now()).slice(11),timeSource:'manual', created: Date.now()
     });
     return true;
   });
@@ -5637,7 +5655,7 @@ function openPayLiability(walletId){
   if (!defaultFrom) defaultFrom = sourceAccounts.find(x => x.country === target.country);
   if (!defaultFrom) defaultFrom = sourceAccounts[0];
   S.form = S.form || {};
-  S.form._sheet = 'pay';
+  S.form._sheet = 'pay';S.form.date=isoToday();S.form.transactionTime=localDateTimeInput(Date.now()).slice(11);
   S.form._pay = {targetId:target.id, fromId:defaultFrom.id, sourceAmount:'', rate:0, fee:'', note:''};
   const pay = S.form._pay;
   const fromW = Finance.getAccount(pay.fromId);
@@ -5715,7 +5733,7 @@ function renderPaySheet(){
           '<div class="field"><label>ملاحظة</label><input type="text" id="payNote" placeholder="اختياري" maxlength="80" value="' + esc(pay.note || '') + '"></div>' +
         '</div>' +
       '</details>' +
-      '<button type="button" class="btn liability" data-act="save-pay-liability" style="margin-top:14px">تسجيل السداد</button>' +
+      transactionTimeField(S.form) + '<div class="field"><label>تاريخ المعاملة</label><input type="date" value="'+esc(S.form.date)+'" onchange="S.form.date=this.value"></div>' + '<button type="button" class="btn liability" data-act="save-pay-liability" style="margin-top:14px">تسجيل السداد</button>' +
     '</div>',
     'pay'
   );
@@ -5762,7 +5780,7 @@ async function savePayLiability(){
       toAccountId: target.id, toAmount, toCurrency: targetCur, toCountry: target.country,
       fxRate: rate, fee: 0,
       note: note || ('سداد ' + (target.type === 'credit' ? 'بطاقة' : 'دين')),
-      tags: ['سداد'], date: today, created: Date.now()
+      tags: ['سداد'], date: S.form.date||today, transactionTime:S.form.transactionTime||null, timeSource:'manual', created: Date.now()
     });
     syncLinkedRepaymentFee(newTransferId, fee, fromW, today);
     /* V8.8.4.9 FIX 4: prepaid source must not go negative. */
@@ -8560,7 +8578,8 @@ const SanadFullBackup = {
     return new Blob([a],{type:mime});
   },
   async export(){return withExclusiveDataOperation(()=>this.exportImpl());},
-  async exportImpl(){
+  async exportSupport(){return withExclusiveDataOperation(()=>this.exportImpl(true));},
+  async exportImpl(diagnostic=false){
     if(SanadExtStorage.mode==='error'){
       toast('تعذر إنشاء نسخة كاملة — تخزين المرفقات غير متاح');
       return false;
@@ -8577,8 +8596,9 @@ const SanadFullBackup = {
       family:SanadFamily.state,
       syncMeta:Object.assign({},SanadCloud.meta,{dirty:true}),
       firebaseConfig:SanadCloud.config||null,
-      bankImportAudit:{version:1,parserVersion:'9.2-forensic-1',pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
+      bankImportAudit:{version:1,parserVersion:'9.2.3-durable-decisions',configuredStartAt:SanadBankInbox.configuredSmsStart(),decisions:await SanadExtStorage.get('bankDecisionAudit',null),smsReviewEvents:SanadBankInbox.smsReviewEvents,pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
     };
+    if(diagnostic)features.diagnosticReport={version:1,generatedAt:new Date().toISOString(),appVersion:APP_VERSION,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,clock:Date.now(),smsPermission:SanadBankInbox.historicalPermission(),native:SanadBankInbox.diagnostics(),import:features.bankImportAudit,counts:{accounts:state.accounts.length,transactions:state.transactions.length,receipts:packed.length},note:'Local export; financial source messages included. Decision log retains the latest 1000 records; omitted count is explicit. Operation time and SMS arrival time are separate.'};
     delete features.syncMeta.receiptDirty;
     const payload=BackupCore.makeFullBackup({
       state,
@@ -8590,7 +8610,7 @@ const SanadFullBackup = {
     });
     const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
-    a.download='sanad-full-backup-'+isoToday()+'.json';
+    a.download=(diagnostic?'sanad-diagnostic-backup-':'sanad-full-backup-')+isoToday()+'.json';
     document.body.appendChild(a);a.click();
     setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},3000);
     toast('تم التصدير');
@@ -8628,17 +8648,32 @@ const SanadFullBackup = {
     const valid=new Set(prepared.migrated.transactions.map(t=>t.id)),incomingFamily=Object.assign({id:null,name:'',members:[],sharedTxIds:[],pendingUnshareIds:[]},(data.features&&data.features.family)||{});
     incomingFamily.sharedTxIds=Array.isArray(incomingFamily.sharedTxIds)?incomingFamily.sharedTxIds.filter(id=>valid.has(id)):[];incomingFamily.pendingUnshareIds=Array.isArray(incomingFamily.pendingUnshareIds)?Array.from(new Set(incomingFamily.pendingUnshareIds.filter(id=>typeof id==='string'))):[];
     let incomingFirebase=(data.features&&data.features.firebaseConfig)||null;if(incomingFirebase&&(!SanadCloud.validConfig(incomingFirebase)||JSON.stringify(incomingFirebase).length>20000)){toast('تم رفض النسخة لحماية البيانات');return false;}
+    const importKeys=['bankSmsReviewEvents','bankDecisionAudit','bankImportLastRecent','bankImportLastHistorical'];
+    const beforeImport={};for(const k of importKeys)beforeImport[k]=await SanadExtStorage.get(k,null);
+    const incomingAudit=data.features&&data.features.bankImportAudit||{};
+    if(typeof incomingAudit!=='object'||Array.isArray(incomingAudit)||['smsReviewEvents','pendingEvents'].some(k=>incomingAudit[k]!=null&&!Array.isArray(incomingAudit[k]))){toast('تم رفض سجل رسائل غير صالح');return false;}
+    const auditLog=incomingAudit.decisions;
+    if(auditLog!=null&&(!Array.isArray(auditLog.rows)||auditLog.rows.length>1000||!Number.isSafeInteger(auditLog.omitted||0)||(auditLog.omitted||0)<0||auditLog.rows.some(r=>!r||typeof r!=='object'||Array.isArray(r)))){toast('تم رفض تقرير تشخيص غير صالح');return false;}
+    for(const checkpoint of [incomingAudit.recent,incomingAudit.historical])if(checkpoint!=null&&(typeof checkpoint!=='object'||Array.isArray(checkpoint)||['scannedThrough','configuredStartAt','fromDate','throughDate'].some(k=>checkpoint[k]!=null&&(!Number.isFinite(Number(checkpoint[k]))||Number(checkpoint[k])<0)))){toast('تم رفض نقطة استكمال غير صالحة');return false;}
+    const restoredEvents=[...(Array.isArray(incomingAudit.smsReviewEvents)?incomingAudit.smsReviewEvents:[]),...(Array.isArray(incomingAudit.pendingEvents)?incomingAudit.pendingEvents:[])];
+    if(restoredEvents.length>10000||restoredEvents.some(n=>!n||typeof n.id!=='string'||typeof n.text!=='string'||n.text.length>12000||!Number.isFinite(Number(n.postedAt))||Number(n.postedAt)<=0)){toast('تم رفض سجل الرسائل غير الصالح');return false;}
+    const restoredMap=new Map(restoredEvents.map(n=>[String(n.id),n]));
+    const incomingImport={bankSmsReviewEvents:Array.from(restoredMap.values()),bankDecisionAudit:incomingAudit.decisions||null,bankImportLastRecent:incomingAudit.recent?Object.assign({},incomingAudit.recent,{scannedThrough:0,status:'restored-needs-rescan'}):null,bankImportLastHistorical:incomingAudit.historical||null};
     try{
       const financeOk=await SanadCloud.safeApplyRemote(prepared.migrated);if(!financeOk)throw new Error('finance restore failed');
       if(!await SanadExtStorage.replaceReceipts(prepared.receipts))throw new Error('receipt replace failed');
       if(!await SanadExtStorage.set('family',incomingFamily))throw new Error('family restore failed');
       if(incomingFirebase){if(!await SanadExtStorage.set('firebaseConfig',incomingFirebase))throw new Error('firebase config restore failed');}else if(!await SanadExtStorage.del('firebaseConfig'))throw new Error('firebase config clear failed');
+      for(const k of importKeys)if(await SanadExtStorage.set(k,incomingImport[k])===false)throw new Error('sms support restore failed');
+      SanadBankInbox.smsReviewEvents=incomingImport.bankSmsReviewEvents;SanadBankInbox.lastRecentImport=incomingImport.bankImportLastRecent;
       SanadFamily.state=incomingFamily;SanadCloud.config=incomingFirebase;SanadCloud.meta=Object.assign({},beforeMeta,{dirty:true,receiptDirty:{},lastSync:null});if(!await SanadExtStorage.set('syncMeta',SanadCloud.meta))throw new Error('sync meta restore failed');syncNativeNotifications();render();toast('تم الاستيراد');return true;
     }catch(e){
       console.error(e);
       let restored=true;
       async function rollback(action){try{if(await action()!==true)restored=false;}catch(_){restored=false;}}
       await rollback(()=>SanadCloud.safeApplyRemote(beforeFinance));
+      for(const k of importKeys)await rollback(()=>SanadExtStorage.set(k,beforeImport[k]));
+      SanadBankInbox.smsReviewEvents=beforeImport.bankSmsReviewEvents||[];SanadBankInbox.lastRecentImport=beforeImport.bankImportLastRecent;
       await rollback(()=>SanadExtStorage.replaceReceipts(beforeReceipts));
       await rollback(()=>SanadExtStorage.set('family',beforeFamily));SanadFamily.state=beforeFamily;
       await rollback(()=>beforeFirebase?SanadExtStorage.set('firebaseConfig',beforeFirebase):SanadExtStorage.del('firebaseConfig'));SanadCloud.config=beforeFirebase;
@@ -8717,7 +8752,7 @@ const SanadBankInbox = {
   _historicalPageSeq:0,
   _historicalPageWaiters:new Map(),
   yieldUi(ms=18){return new Promise(resolve=>setTimeout(resolve,Math.max(0,Number(ms)||0)));},
-  requestHistoricalPage(days,afterDate,afterId,rawLimit){
+  requestHistoricalPage(days,afterDate,afterId,rawLimit,throughDate){
     if(!this.historicalSupported())return Promise.resolve({ok:false,status:'unsupported'});
     const requestId='sms-'+Date.now()+'-'+(++this._historicalPageSeq);
     return new Promise(resolve=>{
@@ -8735,7 +8770,9 @@ const SanadBankInbox = {
       },15000);
       this._historicalPageWaiters.set(requestId,finish);
       try{
-        AndroidBridge.startHistoricalFinancialSmsPage(
+        if(typeof AndroidBridge.startHistoricalFinancialSmsPageRange==='function'){
+          AndroidBridge.startHistoricalFinancialSmsPageRange(requestId,Number(days)||0,Number(afterDate)||0,Number(afterId)||0,Math.max(10,Math.min(Number(rawLimit)||20,40)),Number(throughDate)||Date.now());
+        }else AndroidBridge.startHistoricalFinancialSmsPage(
           requestId,Number(days)||0,Number(afterDate)||0,Number(afterId)||0,Math.max(10,Math.min(Number(rawLimit)||20,40))
         );
       }catch(_){
@@ -8760,13 +8797,35 @@ const SanadBankInbox = {
     return true;
   },
   autoEnabled(){return !S.settings || S.settings.bankAutoImportEnabled !== false;},
-  ack(ids){if(!ids||!ids.length||!this.supported())return;try{AndroidBridge.acknowledgeBankNotifications(JSON.stringify(Array.from(new Set(ids.map(String)))));}catch(_){}},
+  smsReviewEvents:[],
+  async ack(ids){
+    if(!ids||!ids.length)return;
+    const set=new Set(ids.map(String)),next=this.smsReviewEvents.filter(n=>!set.has(String(n.id)));
+    if(next.length!==this.smsReviewEvents.length){
+      if(await SanadExtStorage.set('bankSmsReviewEvents',next)===false)throw new Error('review-ack-write-failed');
+      this.smsReviewEvents=next;
+    }
+    if(this.supported())AndroidBridge.acknowledgeBankNotifications(JSON.stringify(Array.from(set)));
+  },
+  _auditWritePromise:null,
+  async recordAudit(rows){
+    while(this._auditWritePromise){try{await this._auditWritePromise;}catch(_){} }
+    const task=this.recordAuditImpl(rows);this._auditWritePromise=task;
+    try{return await task;}finally{if(this._auditWritePromise===task)this._auditWritePromise=null;}
+  },
+  async recordAuditImpl(rows){
+    if(!rows||!rows.length)return;
+    const old=await SanadExtStorage.get('bankDecisionAudit',{rows:[],omitted:0});
+    const clean=rows.map(r=>Object.assign({},r,{text:/otp|verification code|one time|رمز التحقق|كلمة مرور لمرة/i.test(r.text||'')?'[security message omitted]':r.text}));
+    const all=(old.rows||[]).concat(clean),drop=Math.max(0,all.length-1000);
+    if(await SanadExtStorage.set('bankDecisionAudit',{version:1,limit:1000,omitted:Number(old.omitted||0)+drop,rows:all.slice(drop)})===false)throw new Error('audit-write-failed');
+  },
   readNative(strict=false){
     if(!this.supported())return [];
     try{
       const rows=JSON.parse(AndroidBridge.getPendingBankNotifications()||'[]');
       if(!Array.isArray(rows))throw new Error('inbox-invalid');
-      return BankIngestionCore.sortNotifications(rows);
+      const merged=new Map(rows.concat(this.smsReviewEvents||[]).map(n=>[String(n.id),n]));return BankIngestionCore.sortNotifications(Array.from(merged.values()));
     }catch(e){if(strict)throw e;return [];}
   },
   kindLabel(kind){
@@ -8866,9 +8925,11 @@ const SanadBankInbox = {
     if(!plan||!['auto-save','observe'].includes(plan.action))return {ok:false,reason:(plan&&plan.reason)||'not-auto-save'};
     let reconciliation={warning:false};
     const result=await commitCriticalMutation(async()=>{
-      if(BankIngestionCore.duplicateOf(parsed,S))return true;
+      if(BankIngestionCore.eventDecision(S,String(parsed.eventId)))return true;
+      if(BankIngestionCore.duplicateOf(parsed,S)){BankIngestionCore.rememberEventDecision(S,String(parsed.eventId),'duplicate',Date.now());return true;}
       const applied=BankIngestionCore.applyPlan(S,plan);
       if(!applied)return false;
+      BankIngestionCore.rememberEventDecision(S,String(parsed.eventId),plan.transaction?'saved':'observed',Date.now(),plan.transaction&&plan.transaction.id);
       Finance.ensureAllPrimaries();
       reconciliation=this.applyReconciliation(parsed,plan);
       S.settings.bankAutoImportLastAt=Date.now();
@@ -8893,7 +8954,7 @@ const SanadBankInbox = {
     if(!this.supported()){this.items=[];return this.lastSummary;}
     this.syncing=true;
     const summary={parsed:0,added:0,observed:0,duplicates:0,ignored:0,review:0,discovered:0,reconcileWarnings:0,activeRescanAdded:0,at:Date.now()};
-    const ackIds=[],reviews=[];
+    const ackIds=[],reviews=[],decisions=[],terminal=[];
     try{
       if(opts.userInitiated){
         let rescanned=await this.rescanActive();
@@ -8904,29 +8965,35 @@ const SanadBankInbox = {
         summary.activeRescanAdded=Math.max(0,Number(rescanned)||0);
       }
       const excludeIds=opts.excludeIds instanceof Set?opts.excludeIds:null;
-      const native=this.readNative(true).filter(n=>!excludeIds||!excludeIds.has(String(n.id)));
-      const allowAuto=canWrite()&&(opts.force===true||this.autoEnabled());
+      const floor=opts.minPostedAt!=null?Number(opts.minPostedAt):opts.viewReview?0:this.configuredSmsStart();
+      const ceiling=Number(opts.maxPostedAt)||Infinity;
+      const native=BankIngestionCore.sortNotifications(opts.events||this.readNative(true)).filter(n=>(!excludeIds||!excludeIds.has(String(n.id)))&&Number(n.postedAt)>=floor&&Number(n.postedAt)<=ceiling);
+      const allowAuto=!opts.viewReview&&canWrite()&&(opts.force===true||this.autoEnabled());
       let processedRows=0;
       summary.reviewIds=[];
       for(const n of native){
         processedRows++;
-        const parsed=BankMessageCore.parse(n);
-        if(parsed&&parsed.ignored){ackIds.push(n.id);summary.ignored++;continue;}
+        const prior=BankIngestionCore.eventDecision(S,String(n.id));
+        if(prior){ackIds.push(n.id);if(prior.action==='dismissed'||prior.action==='ignored')summary.ignored++;else summary.duplicates++;continue;}
+        const parsed=BankMessageCore.parse(n)||{recognized:false,reason:'unrecognized'};
+        const evidence={id:n.id,sender:n.title,postedAt:n.postedAt,text:n.text,source:n.packageName,at:Date.now(),stage:'posting'};
+        const record=(action,reason,tx)=>decisions.push(Object.assign({},evidence,{action,reason,transactionId:tx&&tx.id||null,parsed:{recognized:!!parsed.recognized,kind:parsed.kind||null,amount:parsed.amount,currency:parsed.currency,bankId:parsed.bankId,providerId:parsed.providerId,transactionRef:parsed.transactionRef}}));
+        if(parsed&&parsed.ignored){record('ignored',parsed.reason);terminal.push({id:String(n.id),action:'ignored'});ackIds.push(n.id);summary.ignored++;continue;}
         if(!parsed||!parsed.recognized){
           reviews.push({native:n,parsed:parsed||{recognized:false,reason:'unrecognized'},route:null,plan:{action:'review',reason:(parsed&&parsed.reason)||'unrecognized'}});
-          summary.review++;summary.reviewIds.push(String(n.id));
+          record('review',parsed&&parsed.reason||'unrecognized');summary.review++;summary.reviewIds.push(String(n.id));
           if(opts.cooperative&&processedRows%4===0)await this.yieldUi(0);
           continue;
         }
         summary.parsed++;
         let plan=BankIngestionCore.plan(parsed,S,{uid});
         if(plan.action==='duplicate'){
-          ackIds.push(n.id);summary.duplicates++;continue;
+          record('duplicate',plan.reason);terminal.push({id:String(n.id),action:'duplicate'});ackIds.push(n.id);summary.duplicates++;continue;
         }
         if(['auto-save','observe'].includes(plan.action)&&allowAuto){
           const saved=await this.commitPlan(parsed,plan);
           if(saved.ok){
-            ackIds.push(n.id);if(plan.transaction)summary.added++;else summary.observed++;
+            record(plan.transaction?'saved':'observed',plan.reason,plan.transaction);ackIds.push(n.id);if(plan.transaction)summary.added++;else summary.observed++;
             if(plan.discovered)summary.discovered++;
             if(saved.reconciliation&&saved.reconciliation.warning)summary.reconcileWarnings++;
             if(opts.cooperative&&processedRows%4===0)await this.yieldUi(0);
@@ -8934,12 +9001,25 @@ const SanadBankInbox = {
           }
           plan={action:'review',reason:saved.reason||'save-failed'};
         }
-        const route=BankMessageCore.resolveRoute(parsed,S);
+        record('review',plan.reason||'auto-disabled');const route=BankMessageCore.resolveRoute(parsed,S);
         reviews.push({native:n,parsed,route,plan});
         summary.review++;summary.reviewIds.push(String(n.id));
         if(opts.cooperative&&processedRows%4===0)await this.yieldUi(0);
       }
-      if(ackIds.length)this.ack(ackIds);
+      if(opts.events){
+        const map=new Map(this.smsReviewEvents.map(n=>[String(n.id),n]));
+        reviews.forEach(r=>map.set(String(r.native.id),r.native));
+        const next=Array.from(map.values());
+        if(next.length>10000)throw Error('review-capacity');
+        if(await SanadExtStorage.set('bankSmsReviewEvents',next)===false)throw new Error('review-write-failed');
+        this.smsReviewEvents=next;
+      }
+      await this.recordAudit(decisions);
+      if(terminal.length){
+        const remembered=await commitCriticalMutation(async()=>{for(const row of terminal)BankIngestionCore.rememberEventDecision(S,row.id,row.action,Date.now());return true;});
+        if(!remembered.ok)throw Error('event-decision-write-failed');
+      }
+      if(ackIds.length)await this.ack(ackIds);
       this.items=reviews;
       this.lastSummary=summary;
       if(opts.userInitiated){
@@ -8999,7 +9079,7 @@ const SanadBankInbox = {
         (auto?'مفعّلة · العمليات عالية الثقة تُسجل تلقائيًا':'متوقفة · ستبقى العمليات للمراجعة') +
       '</span></div><div class="switch '+(auto?'on':'')+'"></div></div>' +
       '<div class="list-item" data-sanad-act="bank-sync"><div class="li-ico">🔄</div><div class="li-body"><b>مزامنة العمليات الجديدة الآن</b><span>'+syncDesc+'</span></div><div class="li-arrow">›</div></div>' +
-      '<div class="list-item" data-sanad-act="bank-sms-history"><div class="li-ico">💬</div><div class="li-body"><b>استيراد رسائل SMS السابقة</b><span>'+esc(histDesc)+'</span></div><div class="li-arrow">›</div></div>' +
+      '<div class="list-item" data-sanad-act="bank-sms-config"><div class="li-ico">🕒</div><div class="li-body"><b>بداية سحب الرسائل من الرئيسية</b><span>'+esc(new Date(this.configuredSmsStart()).toLocaleString('ar-AE'))+'</span></div></div>' + '<div class="list-item" data-sanad-act="bank-support-export"><div class="li-ico">📦</div><div class="li-body"><b>تصدير باكب + تقرير تشخيص</b><span>ملف محلي واحد يشمل البيانات وأسباب قرارات الرسائل</span></div></div>' + '<div class="list-item" data-sanad-act="bank-sms-history"><div class="li-ico">💬</div><div class="li-body"><b>استيراد رسائل SMS السابقة</b><span>'+esc(histDesc)+'</span></div><div class="li-arrow">›</div></div>' +
       '<div class="list-item"><div class="li-ico">🧪</div><div class="li-body"><b>تشخيص استيراد SMS</b><span style="direction:ltr;text-align:left;white-space:normal">'+esc(histDiagnostics)+'</span></div></div>' +
       '<div class="list-item" data-sanad-act="bank-inbox"><div class="li-ico">📥</div><div class="li-body"><b>عمليات تحتاج مراجعة</b><span>' +
         (count?count+' عملية':'لا توجد عمليات تحتاج مراجعة') +
@@ -9021,11 +9101,35 @@ const SanadBankInbox = {
     if(S.tab===tabBefore)render();
     return s;
   },
+  _defaultSmsStartAt:null,
+  configuredSmsStart(){
+    const n=Number(S.settings&&S.settings.bankSmsStartAt);if(Number.isFinite(n)&&n>0)return n;
+    // Freeze the initial default until it can be persisted. Never move it at midnight.
+    if(!this._defaultSmsStartAt)this._defaultSmsStartAt=Date.now()-30*86400000;
+    return this._defaultSmsStartAt;
+  },
+  async ensureSmsStart(){
+    if(Number(S.settings&&S.settings.bankSmsStartAt)>0)return true;
+    const floor=this.configuredSmsStart();
+    const result=await commitCriticalMutation(async()=>{S.settings.bankSmsStartAt=floor;return true;});
+    return !!result.ok;
+  },
+  openSmsConfig(){
+    openSheet('<div class="sheet-head"><button data-act="close-sheet" class="close">✕</button><h2>بداية سحب الرسائل</h2></div><div class="sheet-body"><div class="field"><label>ابدأ من التاريخ والوقت</label><input id="bankSmsConfiguredStart" type="datetime-local" value="'+localDateTimeInput(this.configuredSmsStart())+'"></div><div class="field-hint">زر ＋ يسحب من هذه البداية أولًا ثم يستكمل من آخر فحص ناجح. الرسائل الأقدم لا تُضاف تلقائيًا. تغيير البداية يعيد فحص الفترة بدون حذف معاملاتك.</div><button class="btn primary" data-sanad-act="bank-sms-config-save">حفظ البداية</button></div>','bank-sms-config');
+  },
+  async saveSmsConfig(){
+    if(this.historicalImporting||this.syncing||this._recentStarting){toast('انتظر انتهاء فحص الرسائل قبل تغيير البداية');return;}
+    const at=parseLocalDateTime((document.getElementById('bankSmsConfiguredStart')||{}).value);
+    if(at===null||at>Date.now()){toast('اختر تاريخًا ووقتًا صحيحين لا يتجاوزان الآن');return;}
+    const result=await commitCriticalMutation(async()=>{S.settings.bankSmsStartAt=at;return true;});
+    if(!result.ok){toast('تعذر حفظ البداية');return;}
+    closeSheet();render();toast('تم حفظ بداية سحب الرسائل');
+  },
   openHistoricalImportPicker(){
     if(this.historicalImporting)return this.cancelHistoricalImport('user');
     const d=new Date();
     d.setDate(d.getDate()-90);
-    const defaultDate=d.toISOString().slice(0,10);
+    const defaultDate=localDateTimeInput(d.getTime());
     openSheet(
       '<div class="sheet-head"><button type="button" class="close" data-act="close-sheet">✕</button><h2>استيراد رسائل البنك السابقة</h2><div style="width:36px"></div></div>'+
       '<div class="sheet-body">'+
@@ -9035,7 +9139,7 @@ const SanadBankInbox = {
           '<button type="button" data-sanad-act="bank-sms-range" data-days="90">90 يوم</button>'+
           '<button type="button" data-sanad-act="bank-sms-range" data-days="365">سنة</button>'+
         '</div>'+
-        '<div class="field"><label>أو ابدأ من تاريخ محدد</label><input id="bankSmsStartDate" type="date" value="'+esc(defaultDate)+'"></div>'+
+        '<div class="field"><label>أو ابدأ من تاريخ ووقت محددين</label><input id="bankSmsStartDate" type="datetime-local" value="'+esc(defaultDate)+'"></div>'+
         '<button type="button" class="btn primary" data-sanad-act="bank-sms-date">ابدأ من هذا التاريخ</button>'+
         '<button type="button" class="btn" data-sanad-act="bank-sms-range" data-days="0">كل الرسائل على الجهاز</button>'+
       '</div>',
@@ -9050,11 +9154,9 @@ const SanadBankInbox = {
     return Math.max(1,Math.ceil((Date.now()-start)/86400000)+1);
   },
   importHistoricalFromDate(){
-    const value=((document.getElementById('bankSmsStartDate')||{}).value||'').trim();
-    const days=this.historicalDaysFromDate(value);
-    if(days==null){toast('اختر تاريخ بداية صحيح');return null;}
-    closeSheet();
-    return this.importHistoricalSms(days);
+    const at=parseLocalDateTime((document.getElementById('bankSmsStartDate')||{}).value);
+    if(at===null||at>Date.now()){toast('اختر تاريخًا ووقتًا صحيحين');return null;}
+    closeSheet();return this.importHistoricalSms(0,{fromDate:at,mode:'historical'});
   },
   homeImportHtml(){
     const running=this.historicalImporting,stats=this.historicalProgress||{},last=this.lastRecentImport||{},total=last.total||{};
@@ -9068,9 +9170,12 @@ const SanadBankInbox = {
     closeSheet();
     this._recentStarting=true;
     try{
+      if(!await this.ensureSmsStart()){toast('تعذر حفظ بداية السحب؛ لم يبدأ الفحص');return null;}
       const previous=await SanadExtStorage.get('bankImportLastRecent',null);
-      const fromDate=BankIngestionCore.recentScanStart(previous,Date.now());
-      return await this.importHistoricalSms(0,{mode:'recent',fromDate});
+      const floor=this.configuredSmsStart();
+      const compatible=BankIngestionCore.compatibleScanCheckpoint(previous,floor);
+      const fromDate=BankIngestionCore.recentScanStart(compatible,Date.now(),floor);
+      return await this.importHistoricalSms(0,{mode:'recent',fromDate,configuredStartAt:floor});
     }finally{this._recentStarting=false;}
   },
   async importHistoricalSms(days=0,options={}){
@@ -9098,7 +9203,8 @@ const SanadBankInbox = {
     this._historicalReviewIds=new Set();
     const startTab=S.tab;
     const startedAt=Date.now();
-    let afterDate=Math.max(0,Number(options.fromDate)||0),afterId=0,pages=0;
+    const rangeStart=Math.max(0,options.fromDate!=null?Number(options.fromDate):Number(days)>0?startedAt-Number(days)*86400000:0);
+    let afterDate=Math.max(0,rangeStart-1),afterId=0,pages=0;
     const total={scanned:0,matchingRows:0,financialCandidates:0,parsed:0,added:0,observed:0,review:0,duplicates:0,ignored:0,discovered:0};
     let status='complete';
     this.historicalProgress=Object.assign({pages:0},total);
@@ -9113,7 +9219,7 @@ const SanadBankInbox = {
         pages++;
         let page=null;
         try{
-          page=await this.requestHistoricalPage(Number(days)||0,afterDate,afterId,20);
+          page=await this.requestHistoricalPage(0,afterDate,afterId,20,startedAt);
         }catch(_){
           page={ok:false,status:'query-failed'};
         }
@@ -9127,11 +9233,16 @@ const SanadBankInbox = {
         total.matchingRows=Math.max(total.matchingRows,Number(page.matchingRows||0));
         total.financialCandidates+=Number(page.financialCandidates||0);
 
+        let directEvents=null;
+        if(Array.isArray(page.messages)){
+          directEvents=page.messages.filter(n=>n.candidate||(BankMessageCore.parse(n)||{}).recognized);
+          await this.recordAudit(directEvents.map(n=>({id:n.id,sender:n.title,text:n.text,postedAt:n.postedAt,stage:'provider',action:'candidate',reason:n.candidate?'native-candidate':'parser-candidate',at:Date.now()})));
+        }
         const batch=await this.sync({
           force:true,
           userInitiated:false,
           cooperative:true,
-          historical:true,
+          historical:true,events:directEvents,minPostedAt:rangeStart,maxPostedAt:startedAt,
           excludeIds:this._historicalReviewIds
         });
         if(!batch||batch.ok===false)throw new Error('bank-batch-failed');
@@ -9164,28 +9275,20 @@ const SanadBankInbox = {
       this.historicalProgress=null;
     }
 
-    this.lastHistoricalImport={at:Date.now(),startedAt,status,mode:options.mode||'historical',days:Number(days)||0,pages,total,nextAfterDate:afterDate,nextAfterId:afterId};
+    this.lastHistoricalImport={at:Date.now(),startedAt,status,mode:options.mode||'historical',configuredStartAt:options.configuredStartAt||null,fromDate:rangeStart,throughDate:startedAt,days:Number(days)||0,pages,total,nextAfterDate:afterDate,nextAfterId:afterId};
     const summarySaved=await SanadExtStorage.set('bankImportLastHistorical',this.lastHistoricalImport);
     if(summarySaved===false){status='checkpoint-failed';this.lastHistoricalImport.status=status;}
     if(options.mode==='recent'){
       const previous=await SanadExtStorage.get('bankImportLastRecent',null);
-      this.lastRecentImport=Object.assign({},this.lastHistoricalImport,{scannedThrough:status==='complete'?startedAt:Number(previous&&previous.scannedThrough)||0});
+      const compatible=BankIngestionCore.compatibleScanCheckpoint(previous,options.configuredStartAt);
+      const priorThrough=Number(compatible&&compatible.scannedThrough)||0;
+      this.lastRecentImport=Object.assign({},this.lastHistoricalImport,{scannedThrough:status==='complete'?startedAt:priorThrough});
       if(await SanadExtStorage.set('bankImportLastRecent',this.lastRecentImport)===false){
-        status='checkpoint-failed';
-        this.lastHistoricalImport.status=status;
-        this.lastRecentImport.status=status;
-        this.lastRecentImport.scannedThrough=Number(previous&&previous.scannedThrough)||0;
-      }
-    }else if(status==='complete'){
-      const previous=await SanadExtStorage.get('bankImportLastRecent',null);
-      this.lastRecentImport=Object.assign({},this.lastHistoricalImport,{scannedThrough:Math.max(startedAt,Number(previous&&previous.scannedThrough)||0)});
-      if(await SanadExtStorage.set('bankImportLastRecent',this.lastRecentImport)===false){
-        status='checkpoint-failed';
-        this.lastHistoricalImport.status=status;
-        this.lastRecentImport.status=status;
-        this.lastRecentImport.scannedThrough=Number(previous&&previous.scannedThrough)||0;
+        status='checkpoint-failed';this.lastHistoricalImport.status=status;
+        this.lastRecentImport.status=status;this.lastRecentImport.scannedThrough=priorThrough;
       }
     }
+    // Historical imports have independent coverage and must not advance recent scans.
     if(S.tab==='settings'||S.tab==='home')render();
 
     if(status==='cancelled')toast('تم إيقاف استيراد SMS · فُحص '+total.scanned+' رسالة',4200);
@@ -9329,7 +9432,7 @@ const SanadBankInbox = {
       built.transaction.bankLinkedImportEvents=[{key:BankMessageCore.dedupeKey(original),eventId:original.eventId||null,bankId:original.bankId||null,providerId:original.providerId||null,currency:original.currency,amount:original.amount,ref:original.transactionRef||null,kind:original.kind,postedAt:Number(original.postedAt),text:original.raw||'',availableBalance:original.availableBalance}];
     }
     if(!built.ok){toast(built.reason==='fee-confirmation-required'?'أكد الرسوم الإضافية أولًا؛ صفر فقط إذا كانت بلا رسوم':built.reason==='invalid-confirmed-fee'?'أدخل رسومًا صحيحة غير سالبة':built.reason==='fee-direction-review-required'?'رسوم الاستلام تحتاج تأكيد صافي المبلغ من المصدر':'الربط غير صالح لهذه العملية');return;}
-    if(BankIngestionCore.duplicateOf(corrected,S)){this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
+    if(BankIngestionCore.duplicateOf(corrected,S)){await this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
     const result=await commitCriticalMutation(async()=>{
       if(built.replacesTransactionId){
         const index=S.transactions.findIndex(t=>t.id===built.replacesTransactionId);
@@ -9339,19 +9442,20 @@ const SanadBankInbox = {
         S.transactions.push(built.transaction);
         BankIngestionCore.learnFromApproval(S,corrected,route,{uid,kind});
       }
+      BankIngestionCore.rememberEventDecision(S,String(item.native.id),'saved',Date.now(),built.transaction.id);
       this.learnSourceAlias(item,route);
       this.applyReconciliation(corrected,{transaction:built.transaction,observationAccountId:built.observationAccountId});
       return true;
     });
     if(!result.ok){render();toast('تعذر حفظ التصحيح');return;}
-    this.ack([item.native.id]);
+    await this.ack([item.native.id]);
     await this.sync({force:false});
     render();
     await this.open();
     toast('تمت الإضافة · SANAD تعلّم الربط');
   },
   async open(){
-    await this.sync({force:false});
+    await this.sync({force:false,viewReview:true});
     const enabled=this.accessEnabled();
     const rows=this.items.map(item=>{
       const n=item.native,p=item.parsed||{},r=BankMessageCore.resolveRoute(p,S),plan=item.plan||{};
@@ -9387,27 +9491,32 @@ const SanadBankInbox = {
     if(!item){await this.open();return;}
     const parsed=item.parsed;
     let plan=BankIngestionCore.plan(parsed,S,{uid});
-    if(plan.action==='duplicate'){this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
+    if(plan.action==='duplicate'){await this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
     if(plan.reason==='possible-own-transfer'){this.openCorrection(id);return;}
     if(['auto-save','observe'].includes(plan.action)){
       const saved=await this.commitPlan(parsed,plan);
       if(!saved.ok){render();toast('تعذر إضافة العملية — لم يتم تغيير البيانات');return;}
-      this.ack([item.native.id]);await this.sync({force:false});render();await this.open();toast('تمت إضافة العملية');return;
+      await this.ack([item.native.id]);await this.sync({force:false});render();await this.open();toast('تمت إضافة العملية');return;
     }
     const route=BankMessageCore.resolveRoute(parsed,S);
     const built=BankMessageCore.buildTransaction(parsed,route,{uid});
     if(!built.ok){toast('اربط الحساب أو الكارت أولاً');return;}
-    if(BankIngestionCore.duplicateOf(parsed,S)){this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
+    if(BankIngestionCore.duplicateOf(parsed,S)){await this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
     const result=await commitCriticalMutation(async()=>{
       S.transactions.push(built.transaction);
+      BankIngestionCore.rememberEventDecision(S,String(item.native.id),'saved',Date.now(),built.transaction.id);
       BankIngestionCore.learnFromApproval(S,parsed,route,{uid});
       this.applyReconciliation(parsed,{transaction:built.transaction});
       return true;
     });
     if(!result.ok){render();toast('تعذر إضافة العملية — لم يتم تغيير البيانات');return;}
-    this.ack([item.native.id]);await this.sync({force:false});render();await this.open();toast('تمت إضافة العملية');
+    await this.ack([item.native.id]);await this.sync({force:false});render();await this.open();toast('تمت إضافة العملية');
   },
-  async dismiss(id){this.ack([id]);this.items=this.items.filter(x=>String(x.native.id)!==String(id));await this.open();}
+  async dismiss(id){
+    const result=await commitCriticalMutation(async()=>BankIngestionCore.rememberEventDecision(S,String(id),'dismissed',Date.now()));
+    if(!result.ok){toast('تعذر حفظ الاستبعاد؛ الرسالة ما زالت للمراجعة');return false;}
+    await this.ack([id]);this.items=this.items.filter(x=>String(x.native.id)!==String(id));await this.open();return true;
+  }
 };
 
 window.sanadBankRescanResult = function(requestId,added){try{SanadBankInbox.onRescanResult(String(requestId||''),Number(added));}catch(_){}};
@@ -9427,12 +9536,12 @@ window.sanadAppForegrounded = function(ts){
 
 const SanadV9 = {
   initialized:false,
-  async bootstrap(){await SanadExtStorage.init();await Promise.all([SanadSecurity.init(),SanadFamily.init(),SanadCloud.init().catch(e=>console.warn(e))]);SanadBankInbox.lastRecentImport=await SanadExtStorage.get('bankImportLastRecent',null);SanadTheme.init();SanadI18n.watch();this.ensureGlobalInputs();this.initialized=true;},
+  async bootstrap(){await SanadExtStorage.init();await Promise.all([SanadSecurity.init(),SanadFamily.init(),SanadCloud.init().catch(e=>console.warn(e))]);SanadBankInbox.smsReviewEvents=await SanadExtStorage.get('bankSmsReviewEvents',[]);SanadBankInbox.lastRecentImport=await SanadExtStorage.get('bankImportLastRecent',null);SanadTheme.init();SanadI18n.watch();this.ensureGlobalInputs();this.initialized=true;},
   ensureGlobalInputs(){SanadReceipts.ensureInput();},
   settingsHtml(){const lang=S.settings.language==='en'?'en':'ar',mode=SanadTheme.mode(),sec=SanadSecurity.cfg.enabled?'مفعّل':'غير مفعّل',langDesc=lang==='en'?'Arabic / English':'العربية / الإنجليزية',enLabel=lang==='en'?'English':'الإنجليزية';return '<div class="sec"><h2>اللغة والمظهر</h2></div><div class="card feature-card"><div class="feature-row"><div><b>🌐 اللغة</b><span>'+langDesc+'</span></div><div class="seg"><button type="button" class="'+(lang==='ar'?'on':'')+'" data-sanad-act="lang" data-value="ar">العربية</button><button type="button" class="'+(lang==='en'?'on':'')+'" data-sanad-act="lang" data-value="en">'+enLabel+'</button></div></div><div class="feature-row"><div><b>🎨 المظهر</b><span>فاتح، داكن أو حسب الجهاز</span></div><div class="seg"><button type="button" class="'+(mode==='light'?'on':'')+'" data-sanad-act="theme" data-value="light">☀️</button><button type="button" class="'+(mode==='dark'?'on':'')+'" data-sanad-act="theme" data-value="dark">🌙</button><button type="button" class="'+(mode==='system'?'on':'')+'" data-sanad-act="theme" data-value="system">◐</button></div></div></div>'+'<div class="sec"><h2>الأمان والخصوصية</h2></div><div class="list"><div class="list-item" data-sanad-act="toggle-security"><div class="li-ico">🔐</div><div class="li-body"><b>قفل بالبصمة / الجهاز</b><span>'+sec+(SanadSecurity.supported()?'':' · يحتاج HTTPS')+'</span></div><div class="li-arrow">›</div></div></div>'+SanadBankInbox.settingsHtml()+'<div class="sec"><h2>السحابة والعائلة</h2></div><div class="list"><div class="list-item" aria-disabled="true"><div class="li-ico">☁️</div><div class="li-body"><b>مؤجل إلى V9.1</b><span>معطّل في النسخة المحلية المستقرة</span></div></div></div>'+'<div class="sec"><h2>نسخة احتياطية كاملة</h2></div><button type="button" class="btn" data-sanad-act="full-export">📦 تصدير كامل مع الفواتير</button><button type="button" class="btn" data-sanad-act="full-import">📥 استيراد نسخة كاملة</button>';},
   async setLanguage(lang){if(!I18nCore.isValidLanguage(lang)||!canWrite())return;const prev=S.settings.language;S.settings.language=lang;const ok=await persist();if(!ok){S.settings.language=prev;return;}render();requestAnimationFrame(()=>SanadI18n.apply(document));},
-  async afterStart(fromUnlock=false){SanadTheme.apply();SanadI18n.apply();if(SanadExtStorage.mode==='error')toast('تنبيه: تخزين المرفقات غير متاح مؤقتاً');const validIds=new Set(S.transactions.map(t=>t.id));await SanadExtStorage.pruneReceiptOrphans(validIds);await SanadFamily.pruneMissingTransactions();if(SecurityCrypto.shouldShowLockOverlay({enabled:SanadSecurity.cfg.enabled,unlocked:SanadSecurity.unlocked})){SanadSecurity.show();return;}await SanadBankInbox.refresh();hideSanadBootSplash();},
-  async click(el){const a=el.dataset.sanadAct,v=el.dataset.value;if(a==='lang')return this.setLanguage(v);if(a==='theme')return SanadTheme.set(v);if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable();if(a==='amount-visibility')return SanadAmountPrivacy.toggle();if(a==='unlock')return SanadSecurity.unlock();if(a==='recovery-unlock')return SanadSecurity.recovery();if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;}if(a==='remove-receipt')return SanadReceipts.removeCurrent();if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);if(a==='firebase-config')return SanadCloud.openConfig();if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||'');if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle();if(a==='sync-now')return SanadCloud.syncNow();if(a==='verify-phone')return SanadCloud.verifyPhoneSheet();if(a==='send-phone-code')return SanadCloud.sendPhoneCode();if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();if(a==='open-family')return SanadFamily.open();if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||'');if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||'');if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();if(a==='bank-access')return SanadBankInbox.openAccess();if(a==='bank-auto-toggle')return SanadBankInbox.toggleAuto();if(a==='bank-sync')return SanadBankInbox.syncNow();if(a==='bank-sms-recent')return SanadBankInbox.refreshRecentSms();if(a==='bank-sms-history')return SanadBankInbox.historicalImporting?SanadBankInbox.cancelHistoricalImport('user'):SanadBankInbox.openHistoricalImportPicker();if(a==='bank-sms-range'){closeSheet();return SanadBankInbox.importHistoricalSms(Number(el.dataset.days)||0);}if(a==='bank-sms-date')return SanadBankInbox.importHistoricalFromDate();if(a==='bank-inbox')return SanadBankInbox.open();if(a==='bank-refresh')return SanadBankInbox.open();if(a==='bank-approve')return SanadBankInbox.approve(el.dataset.id);if(a==='bank-fix')return SanadBankInbox.openCorrection(el.dataset.id);if(a==='bank-fix-save')return SanadBankInbox.saveCorrection(el.dataset.id);if(a==='bank-dismiss')return SanadBankInbox.dismiss(el.dataset.id);if(a==='full-export')return SanadFullBackup.export();if(a==='full-import')return SanadFullBackup.importPicker();}
+  async afterStart(fromUnlock=false){SanadTheme.apply();SanadI18n.apply();if(SanadExtStorage.mode==='error')toast('تنبيه: تخزين المرفقات غير متاح مؤقتاً');const validIds=new Set(S.transactions.map(t=>t.id));await SanadExtStorage.pruneReceiptOrphans(validIds);await SanadFamily.pruneMissingTransactions();if(SecurityCrypto.shouldShowLockOverlay({enabled:SanadSecurity.cfg.enabled,unlocked:SanadSecurity.unlocked})){SanadSecurity.show();return;}if(await SanadBankInbox.ensureSmsStart())await SanadBankInbox.refresh();else toast('تعذر حفظ إعدادات سحب الرسائل');hideSanadBootSplash();},
+  async click(el){const a=el.dataset.sanadAct,v=el.dataset.value;if(a==='lang')return this.setLanguage(v);if(a==='theme')return SanadTheme.set(v);if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable();if(a==='amount-visibility')return SanadAmountPrivacy.toggle();if(a==='unlock')return SanadSecurity.unlock();if(a==='recovery-unlock')return SanadSecurity.recovery();if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;}if(a==='remove-receipt')return SanadReceipts.removeCurrent();if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);if(a==='firebase-config')return SanadCloud.openConfig();if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||'');if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle();if(a==='sync-now')return SanadCloud.syncNow();if(a==='verify-phone')return SanadCloud.verifyPhoneSheet();if(a==='send-phone-code')return SanadCloud.sendPhoneCode();if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();if(a==='open-family')return SanadFamily.open();if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||'');if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||'');if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();if(a==='bank-access')return SanadBankInbox.openAccess();if(a==='bank-auto-toggle')return SanadBankInbox.toggleAuto();if(a==='bank-sync')return SanadBankInbox.syncNow();if(a==='bank-sms-recent')return SanadBankInbox.refreshRecentSms();if(a==='bank-sms-config')return SanadBankInbox.openSmsConfig();if(a==='bank-sms-config-save')return SanadBankInbox.saveSmsConfig();if(a==='bank-support-export')return SanadFullBackup.exportSupport();if(a==='bank-sms-history')return SanadBankInbox.historicalImporting?SanadBankInbox.cancelHistoricalImport('user'):SanadBankInbox.openHistoricalImportPicker();if(a==='bank-sms-range'){closeSheet();return SanadBankInbox.importHistoricalSms(Number(el.dataset.days)||0);}if(a==='bank-sms-date')return SanadBankInbox.importHistoricalFromDate();if(a==='bank-inbox')return SanadBankInbox.open();if(a==='bank-refresh')return SanadBankInbox.open();if(a==='bank-approve')return SanadBankInbox.approve(el.dataset.id);if(a==='bank-fix')return SanadBankInbox.openCorrection(el.dataset.id);if(a==='bank-fix-save')return SanadBankInbox.saveCorrection(el.dataset.id);if(a==='bank-dismiss')return SanadBankInbox.dismiss(el.dataset.id);if(a==='full-export')return SanadFullBackup.export();if(a==='full-import')return SanadFullBackup.importPicker();}
 };
 
 /* ===== non-destructive wrappers around the stable V8.9.1 core ===== */
@@ -9459,7 +9568,7 @@ const _sanadCoreExportData=exportData; exportData=async function(){const oldCrea
 document.addEventListener('click',e=>{
   const bankOpt=e.target.closest&&e.target.closest('[data-bank-option]');if(bankOpt){e.preventDefault();e.stopPropagation();chooseBankRegistryOption(bankOpt.dataset.bankTarget,bankOpt.dataset.bankOption);return;}
   const providerOpt=e.target.closest&&e.target.closest('[data-provider-option]');if(providerOpt){e.preventDefault();e.stopPropagation();chooseProviderRegistryOption(providerOpt.dataset.providerTarget,providerOpt.dataset.providerOption);return;}
-  const el=e.target.closest&&e.target.closest('[data-sanad-act]');if(el){e.preventDefault();e.stopPropagation();SanadV9.click(el);return;}
+  const el=e.target.closest&&e.target.closest('[data-sanad-act]');if(el){e.preventDefault();e.stopPropagation();SanadV9.click(el).catch(error=>{console.warn('SANAD action failed',error);toast('تعذر إكمال الإجراء؛ راجع النتيجة ثم أعد المحاولة');});return;}
   const sh=e.target.closest&&e.target.closest('[data-family-share-toggle]');if(sh){if(!SANAD_CLOUD_FAMILY_BETA_ENABLED)return;sh.classList.toggle('on');buzz(6);return;}
 },true);
 document.addEventListener('input',e=>{
@@ -9490,3 +9599,4 @@ SanadV9.bootstrap().then(() => boot()).catch(e => {
 
 </body>
 </html>
+

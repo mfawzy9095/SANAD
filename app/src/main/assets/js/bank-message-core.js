@@ -398,7 +398,8 @@
     return [eventKey,parsed.bankId||parsed.providerId||'source?',parsed.kind||'kind?',parsed.currency||'AED',Number(parsed.amount||0).toFixed(2),parsed.cardLast4||parsed.accountRef||parsed.accountSuffix||'instrument?',String(parsed.merchant||parsed.beneficiaryName||'').toLowerCase().replace(/\s+/g,' ').trim()].join('|');
   }
   function buildTransactionBase(parsed,route,options){
-    const opts=options||{},date=opts.date||parsed.transactionDate||new Date(parsed.postedAt||Date.now()).toISOString().slice(0,10),id=typeof opts.uid==='function'?opts.uid('t'):('bank_'+Date.now()),key=dedupeKey(parsed);
+    const d=new Date(parsed.postedAt||Date.now()),localDate=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const opts=options||{},date=opts.date||parsed.transactionDate||localDate,id=typeof opts.uid==='function'?opts.uid('t'):('bank_'+Date.now()),key=dedupeKey(parsed);
     if(!route||route.status!=='routed')return {ok:false,reason:(route&&route.reason)||'route-required'};
     if(['purchase','bill_payment','mobile_recharge','deposit','salary','refund','incoming_transfer'].includes(parsed.kind)){
       const account=route.account;if(!account)return {ok:false,reason:'account-required'};if(account.currency!==parsed.currency)return {ok:false,reason:'fx-review-required'};
@@ -448,6 +449,7 @@
       else if(tx.type==='transfer'||tx.type==='external_transfer')tx.fee=Math.round(fee*100)/100;
       tx.bankFeeEvidence={amount:Math.round(fee*100)/100,currency:parsed.currency,confirmed:true,source:'manual-review'};
     }
+    if(built.ok&&built.transaction){const clock=/^(\d{1,2}):([0-5]\d)$/.exec(parsed.transactionTime||'');built.transaction.transactionTime=clock&&Number(clock[1])<24?String(clock[1]).padStart(2,'0')+':'+clock[2]:null;built.transaction.timeSource=built.transaction.transactionTime?'bank-message':'sms-received';built.transaction.smsReceivedAt=Number(parsed.postedAt)||Date.now();}
     if(built.ok&&built.transaction)built.transaction.bankImportEvidence={
       text:cleanText(parsed.raw||'').toLowerCase(),
       availableBalance:parsed.availableBalance==null?null:Number(parsed.availableBalance),
@@ -458,3 +460,4 @@
   }
   return Object.freeze({parse,resolveRoute,buildTransaction,dedupeKey,categoryForMerchant,ignoredReason,suffix,normalizeRef,countryForCurrency});
 });
+

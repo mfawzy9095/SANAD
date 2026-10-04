@@ -638,6 +638,8 @@ jobs:
           node app/src/test/js/bank-message-corpus.test.js
           node app/src/test/js/backup-repair-tool.test.js
           node app/src/test/js/bank-recent-import.test.js
+          node app/src/test/js/bank-exact-range.test.js
+          node app/src/test/js/bank-durable-import.test.js
           node app/src/test/js/backup-runtime.test.js
           node app/src/test/js/amount-input.test.js
 
@@ -677,13 +679,13 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.2.1-LOCAL-RC.apk"
+          cp "$APK" "SANAD-V9.2.3-LOCAL-RC.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
           grep -q "package: name='com.sanad.v9test'" apk-badging.txt
-          grep -q "versionCode='92001'" apk-badging.txt
-          grep -q "versionName='9.2.1-local-rc'" apk-badging.txt
+          grep -q "versionCode='92002'" apk-badging.txt
+          grep -q "versionName='9.2.3-local-rc'" apk-badging.txt
           grep -q "application-label:'SANAD — سند'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
           grep -q "android.permission.POST_NOTIFICATIONS" apk-permissions.txt
@@ -742,7 +744,7 @@ jobs:
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          sha256sum "SANAD-V9.2.1-LOCAL-RC.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.2.3-LOCAL-RC.apk" | tee apk-sha256.txt
 
       - name: Build isolated forensic QA APK
         run: gradle --no-daemon --stacktrace :app:assembleForensicQa
@@ -784,9 +786,9 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.2.1-LOCAL-RC
+          name: SANAD-V9.2.3-LOCAL-RC
           path: |
-            SANAD-V9.2.1-LOCAL-RC.apk
+            SANAD-V9.2.3-LOCAL-RC.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
@@ -830,3 +832,4 @@ jobs:
           path: ${{ runner.temp }}/sanad-android-qa
           if-no-files-found: warn
           retention-days: 30
+

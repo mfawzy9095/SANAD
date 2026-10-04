@@ -12,17 +12,17 @@ const end=html.indexOf('  canManualApprove(item){',start);
 assert(start>=0&&end>start);
 async function scenario(status,mode='recent',permission=true,extra={}){
  const writes={},queries=[];let renders=0;
- const old={scannedThrough:now-3*day};
- const context={Date:class extends Date{static now(){return now;}},S:{tab:'home'},Set,Number,Math,Object,confirm:()=>true,AndroidBridge:{requestHistoricalSmsPermission(){}},toast(){},render(){renders++;},canWrite:()=>true,SanadExtStorage:{get:async k=>writes[k]||old,set:async(k,v)=>{if(extra.failKey===k)return false;writes[k]=JSON.parse(JSON.stringify(v));return true;}}};
+ const old={scannedThrough:now-3*day,configuredStartAt:now-4*day};
+ const context={Date:class extends Date{static now(){return now;}},S:{tab:'home'},Set,Number,Math,Object,confirm:()=>true,AndroidBridge:{requestHistoricalSmsPermission(){}},toast(){},render(){renders++;},canWrite:()=>true,BankIngestionCore:I,SanadExtStorage:{get:async k=>writes[k]||old,set:async(k,v)=>{if(extra.failKey===k)return false;writes[k]=JSON.parse(JSON.stringify(v));return true;}}};
  vm.createContext(context);
  const inbox=vm.runInContext('({'+html.slice(start,end)+'})',context);
  Object.assign(inbox,{historicalSupported:()=>true,historicalPermission:()=>permission,yieldUi:async()=>{},cancelHistoricalImport(){},requestHistoricalPage:async(days,date,id)=>{queries.push({days,date,id});return ['complete','processing-failed','cancel-last','navigate-last'].includes(status)?{ok:true,done:true,scanned:2,financialCandidates:1}:{ok:false,status};},sync:async()=>{if(status==='processing-failed')throw Error('batch failed');if(status==='cancel-last')inbox.historicalCancelRequested=true;if(status==='navigate-last')context.S.tab='tx';return {added:1,parsed:1,duplicates:0,review:0,reviewIds:[]};}});
- await inbox.importHistoricalSms(0,{mode,fromDate:now-4*day});
+ await inbox.importHistoricalSms(0,{mode,fromDate:now-4*day,configuredStartAt:now-4*day});
  return {writes,queries,inbox,renders};
 }
 (async()=>{
  const complete=await scenario('complete');
- assert.strictEqual(complete.queries[0].date,now-4*day);
+ assert.strictEqual(complete.queries[0].date,now-4*day-1);
  assert.strictEqual(complete.writes.bankImportLastRecent.scannedThrough,now);
  assert.strictEqual(complete.writes.bankImportLastRecent.total.added,1);
  assert(complete.renders>=2,'home shows running and completed state');
@@ -37,7 +37,7 @@ async function scenario(status,mode='recent',permission=true,extra={}){
   assert.strictEqual(x.inbox.lastHistoricalImport.status,'checkpoint-failed');
  }
  const historical=await scenario('complete','historical');
- assert.strictEqual(historical.writes.bankImportLastRecent.scannedThrough,now,'historical scan seeds subsequent recent scans');
+ assert.strictEqual(historical.writes.bankImportLastRecent,undefined,'historical scan does not change recent coverage');
  const pending=await scenario('complete','recent',false);
  assert.strictEqual(pending.queries.length,0);
  assert.strictEqual(pending.inbox._historicalPendingOptions.fromDate,now-4*day,'permission handoff preserves recent cutoff');
@@ -92,3 +92,4 @@ async function scenario(status,mode='recent',permission=true,extra={}){
  assert.strictEqual((await inbox.sync({force:true})).added,1);
  console.log('Concurrent bank scans preserve request policy and recover after failures: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});
+

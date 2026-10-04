@@ -530,6 +530,57 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void startHistoricalFinancialSmsPageRange(
+                String requestId, int days, long afterDate, long afterId, int rawLimit, long throughDate) {
+            String safeRequestId = requestId == null ? "" : requestId.trim();
+            if (safeRequestId.isEmpty() || safeRequestId.length() > 80) {
+                JSONObject error = new JSONObject();
+                try {
+                    error.put("ok", false);
+                    error.put("status", "invalid-request");
+                } catch (Exception ignored) {}
+                notifyJsHistoricalSmsPageResult(safeRequestId, error);
+                return;
+            }
+
+            CancellationSignal signal = new CancellationSignal();
+            synchronized (historicalSmsLock) {
+                if (historicalSmsCancellation != null) {
+                    try { historicalSmsCancellation.cancel(); } catch (Exception ignored) {}
+                }
+                historicalSmsCancellation = signal;
+                historicalSmsRequestId = safeRequestId;
+            }
+
+            try {
+                historicalSmsExecutor.execute(() -> {
+                    JSONObject result = importHistoricalFinancialSmsPageInternal(
+                            days, afterDate, afterId, rawLimit, signal, throughDate, true);
+                    synchronized (historicalSmsLock) {
+                        if (historicalSmsCancellation == signal) {
+                            historicalSmsCancellation = null;
+                            historicalSmsRequestId = null;
+                        }
+                    }
+                    notifyJsHistoricalSmsPageResult(safeRequestId, result);
+                });
+            } catch (Exception error) {
+                synchronized (historicalSmsLock) {
+                    if (historicalSmsCancellation == signal) {
+                        historicalSmsCancellation = null;
+                        historicalSmsRequestId = null;
+                    }
+                }
+                JSONObject out = new JSONObject();
+                try {
+                    out.put("ok", false);
+                    out.put("status", "worker-unavailable");
+                } catch (Exception ignored) {}
+                notifyJsHistoricalSmsPageResult(safeRequestId, out);
+            }
+        }
+
+        @JavascriptInterface
         public void cancelHistoricalSmsImport() {
             CancellationSignal signal;
             synchronized (historicalSmsLock) {
@@ -577,6 +628,12 @@ public final class MainActivity extends Activity {
 
     private JSONObject importHistoricalFinancialSmsPageInternal(
             int days, long afterDate, long afterId, int rawLimit, CancellationSignal cancellationSignal) {
+        return importHistoricalFinancialSmsPageInternal(days, afterDate, afterId, rawLimit, cancellationSignal, System.currentTimeMillis(), false);
+    }
+
+    private JSONObject importHistoricalFinancialSmsPageInternal(
+            int days, long afterDate, long afterId, int rawLimit, CancellationSignal cancellationSignal,
+            long throughDate, boolean direct) {
         JSONObject out = new JSONObject();
         try {
             if (checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
@@ -624,6 +681,13 @@ public final class MainActivity extends Activity {
                 };
             }
 
+            if (direct) {
+                selection = "(" + selection + ") AND " + Telephony.Sms.DATE + "<=?";
+                String[] boundedArgs = java.util.Arrays.copyOf(selectionArgs, selectionArgs.length + 1);
+                boundedArgs[boundedArgs.length - 1] = String.valueOf(Math.max(0L, throughDate));
+                selectionArgs = boundedArgs;
+            }
+            org.json.JSONArray messages = new org.json.JSONArray();
             int scanned = 0;
             int candidates = 0;
             int added = 0;
@@ -666,7 +730,16 @@ public final class MainActivity extends Activity {
                         if (body == null || body.trim().isEmpty()) continue;
                         String safeAddress = address == null ? "" : address.trim();
                         String probe = (safeAddress + " " + body).trim();
-                        if (!BankNotificationFilter.looksLikeCandidate(probe)) continue;
+                        boolean candidate = BankNotificationFilter.looksLikeCandidate(probe);
+                        if (direct) {
+                            JSONObject event = BankNotificationStore.smsEvent(safeAddress, body, at);
+                            if (event == null) throw new IllegalStateException("sms-event-invalid");
+                            event.put("candidate", candidate);
+                            messages.put(event);
+                            if (candidate) candidates++;
+                            continue;
+                        }
+                        if (!candidate) continue;
 
                         candidates++;
                         int enqueueStatus = BankNotificationStore.enqueueStatus(
@@ -692,6 +765,7 @@ public final class MainActivity extends Activity {
                 }
             }
 
+            if (direct) out.put("messages", messages);
             out.put("ok", true);
             out.put("status", "complete");
             out.put("days", safeDays);
@@ -903,3 +977,4 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 }
+

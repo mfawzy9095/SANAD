@@ -45,6 +45,10 @@
   }
 
   function txTimeValue(t){
+    if(t&&isValidIsoDate(t.date)&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t.transactionTime||'')){
+      const [y,m,d]=t.date.split('-').map(Number),[h,mi]=t.transactionTime.split(':').map(Number);
+      return new Date(y,m-1,d,h,mi,0,0).getTime();
+    }
     const c=Number(t&&t.created);
     if(Number.isFinite(c))return c;
     if(t&&isValidIsoDate(t.date)){
@@ -70,3 +74,4 @@
     compareTxDesc
   });
 });
+

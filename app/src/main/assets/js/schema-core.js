@@ -590,6 +590,17 @@
     if (!state.categories || typeof state.categories !== 'object' || !Array.isArray(state.categories.expense) || !Array.isArray(state.categories.income)) push('فئات المعاملات غير صالحة');
     if (!state.settings || typeof state.settings !== 'object' || Array.isArray(state.settings)) push('الإعدادات غير صالحة');
 
+    if(state.settings){
+      if(state.settings.bankSmsStartAt!=null&&(!Number.isSafeInteger(state.settings.bankSmsStartAt)||state.settings.bankSmsStartAt<=0))push('بداية سحب الرسائل غير صالحة');
+      const decisions=state.settings.bankEventDecisions;
+      if(decisions!=null){
+        if(typeof decisions!=='object'||Array.isArray(decisions)||Object.keys(decisions).length>50000)push('سجل قرارات الرسائل غير صالح');
+        else for(const [id,row] of Object.entries(decisions)){
+          if(!id||id.length>240||['__proto__','constructor','prototype'].includes(id)||!row||!['saved','observed','ignored','duplicate','dismissed'].includes(row.action)||!Number.isSafeInteger(row.at)||row.at<=0||(row.transactionId!=null&&typeof row.transactionId!=='string')){push('قرار رسالة غير صالح');break;}
+        }
+      }
+    }
+
     const countries = new Set(Object.keys(COUNTRIES));
     const currencies = new Set(Object.keys(CURRENCIES));
     const accountTypes = new Set(ACCOUNT_TYPES.map(x => x.id));
@@ -670,6 +681,7 @@
       if (!SUPPORTED_TX_TYPES.includes(t.type)){ push('نوع معاملة غير صالح: ' + t.id); continue; }
       if (!isValidIsoDate(t.date)) push('تاريخ معاملة غير صالح: ' + t.id);
       if (t.created != null && !isFiniteNumberLike(t.created)) push('وقت إنشاء معاملة غير صالح: ' + t.id);
+      if(t.transactionTime!=null&&t.transactionTime!==''&&!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t.transactionTime))push('وقت معاملة غير صالح: '+t.id);
       if(t.bankPostingTimes!=null){
         if(t.type!=='transfer'||!isFiniteNumberLike(t.bankPostingTimes.from)||Number(t.bankPostingTimes.from)<=0||!isFiniteNumberLike(t.bankPostingTimes.to)||Number(t.bankPostingTimes.to)<=0)push('توقيت طرفي التحويل غير صالح: '+t.id);
       }
