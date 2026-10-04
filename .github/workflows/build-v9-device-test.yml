@@ -684,8 +684,11 @@ jobs:
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
           grep -q "package: name='com.sanad.v9test'" apk-badging.txt
-          grep -q "versionCode='92002'" apk-badging.txt
-          grep -q "versionName='9.2.3-local-rc'" apk-badging.txt
+          VERSION_CODE="$(awk '$1=="versionCode"{print $2}' app/build.gradle)"
+          VERSION_NAME="$(awk '$1=="versionName"{print $2}' app/build.gradle)"
+          test -n "$VERSION_CODE" && test -n "$VERSION_NAME"
+          grep -Fq "versionCode='$VERSION_CODE'" apk-badging.txt
+          grep -Fq "versionName=$VERSION_NAME" apk-badging.txt
           grep -q "application-label:'SANAD — سند'" apk-badging.txt
           grep -q "android.permission.INTERNET" apk-permissions.txt
           grep -q "android.permission.POST_NOTIFICATIONS" apk-permissions.txt
