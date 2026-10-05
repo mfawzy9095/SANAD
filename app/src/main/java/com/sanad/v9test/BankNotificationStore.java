@@ -50,7 +50,12 @@ public final class BankNotificationStore {
         long ts = postedAt > 0L ? postedAt : System.currentTimeMillis();
         String fingerprint = sha256(safePackage + "\n" + safeTitle + "\n" + safeText);
         String contentFingerprint = sha256(safeText.replaceAll("\\s+", " ").trim());
-        JSONArray current = read(context);
+        JSONArray current;
+        try { current = read(context); }
+        catch (IllegalStateException corrupt) {
+            recordCaptureFailure(context, "INBOX_CORRUPT", ts);
+            return ERROR;
+        }
 
         for (int i = 0; i < current.length(); i++) {
             JSONObject old = current.optJSONObject(i);
@@ -63,7 +68,7 @@ public final class BankNotificationStore {
 
         // Preserve the first bounded queue and use explicit overflow headroom.
         // Never evict a financial notification to admit a newer one.
-        if (current.length() >= MAX_EVENTS + OVERFLOW_EVENTS) {
+        if (!queueCanAccept(current.length())) {
             recordCaptureFailure(context, "FULL", ts);
             return FULL;
         }
@@ -128,7 +133,9 @@ public final class BankNotificationStore {
     }
 
     public static synchronized String getAllJson(Context context) {
-        JSONArray source = read(context);
+        JSONArray source;
+        try { source = read(context); }
+        catch (IllegalStateException corrupt) { return "{\"error\":\"inbox-corrupt\"}"; }
         JSONArray safe = new JSONArray();
         for (int i = 0; i < source.length(); i++) {
             JSONObject old = source.optJSONObject(i);
@@ -161,7 +168,9 @@ public final class BankNotificationStore {
         }
         if (ids.isEmpty()) return;
 
-        JSONArray current = read(context);
+        JSONArray current;
+        try { current = read(context); }
+        catch (IllegalStateException corrupt) { return; }
         JSONArray next = new JSONArray();
         for (int i = 0; i < current.length(); i++) {
             JSONObject old = current.optJSONObject(i);
@@ -176,7 +185,9 @@ public final class BankNotificationStore {
         if (context == null) return out.toString();
         try {
             SharedPreferences p = prefs(context);
-            int count = read(context).length();
+            int count;
+            try { count = read(context).length(); out.put("queueCorrupt", false); }
+            catch (IllegalStateException corrupt) { count = -1; out.put("queueCorrupt", true); }
             out.put("pendingCount", count);
             out.put("queueCapacity", MAX_EVENTS + OVERFLOW_EVENTS);
             out.put("overflowPending", Math.max(0, count - MAX_EVENTS));
@@ -184,7 +195,7 @@ public final class BankNotificationStore {
             out.put("captureFailuresInProcess", captureFailuresInProcess);
             out.put("lastCaptureFailure", p.getString("last_capture_failure", ""));
             out.put("lastCaptureFailureAt", p.getLong("last_capture_failure_at", 0L));
-            out.put("recoveryRequired", count > MAX_EVENTS || p.getLong("capture_failures", 0L) > 0L || captureFailuresInProcess > 0L);
+            out.put("recoveryRequired", count < 0 || count > MAX_EVENTS || p.getLong("capture_failures", 0L) > 0L || captureFailuresInProcess > 0L);
             out.put("capturedTotal", p.getLong(KEY_CAPTURED_TOTAL, 0L));
             out.put("lastCapturedAt", p.getLong(KEY_LAST_CAPTURED_AT, 0L));
             out.put("lastPackage", p.getString(KEY_LAST_PACKAGE, ""));
@@ -223,9 +234,11 @@ public final class BankNotificationStore {
             if (changed) prefs(context).edit().putString(KEY, arr.toString()).apply();
             return arr;
         } catch (Exception ignored) {
-            return new JSONArray();
+            throw new IllegalStateException("inbox-corrupt: original bytes preserved", ignored);
         }
     }
+
+    static boolean queueCanAccept(int count) { return count >= 0 && count < MAX_EVENTS + OVERFLOW_EVENTS; }
 
     static boolean capacityReached(int count) { return count >= MAX_EVENTS; }
 

@@ -36,4 +36,13 @@ public class BankNotificationStoreTest {
         assertTrue(BankNotificationStore.capacityReached(200));
         assertTrue(BankNotificationStore.capacityReached(201));
     }
+    @Test
+    public void overflowPreservesHeadroomButNeverEvictsAtHardLimit() {
+        assertFalse(BankNotificationStore.queueCanAccept(-1));
+        assertTrue(BankNotificationStore.queueCanAccept(199));
+        assertTrue(BankNotificationStore.queueCanAccept(200));
+        assertTrue(BankNotificationStore.queueCanAccept(2199));
+        assertFalse(BankNotificationStore.queueCanAccept(2200));
+        assertFalse(BankNotificationStore.queueCanAccept(2201));
+    }
 }
