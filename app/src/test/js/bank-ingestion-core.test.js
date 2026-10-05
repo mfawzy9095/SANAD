@@ -166,7 +166,7 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   const p=fixtureParse({id:'d3',postedAt:5000,text:'Your request to transfer AED 149.00 to Test User Name is successfully processed and the amount has been credited in the beneficiary account. TID: DIR7BQ7FZ3'});
   const plan=I.plan(p,empty(),{uid});
   assert.strictEqual(plan.action,'review');
-  assert.strictEqual(plan.reason,'transfer-source-not-found');
+  assert.strictEqual(plan.reason,'outgoing-destination-unconfirmed');
 }
 
 // Exact identity resolves the account; it cannot establish external income.
@@ -604,19 +604,13 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.transaction.cat,'home');
 }
 
-// Named person transfers automatically link/create a beneficiary, without duplicating the same name.
+// A named beneficiary does not prove the destination is outside the user's accounts.
 {
-  const p=fixtureParse({id:'person1',postedAt:8200,text:'Your request to transfer AED 149.00 to Test User Name is successfully processed and the amount has been credited in the beneficiary account. TID: PERSONREF1'});
-  const s={institutions:[{id:'dui',name:'du Pay',country:'UAE',type:'wallet_provider',providerRegistryId:'du-pay'}],accounts:[
-    {id:'w',institutionId:'dui',country:'UAE',name:'du Pay Wallet',type:'ewallet',currency:'AED',openingBalance:500,openingDebt:0,creditLimit:0,archived:false}
-  ],paymentInstruments:[],transactions:[],beneficiaries:[]};
-  const plan=I.plan(p,s,{uid});
-  assert.strictEqual(plan.action,'auto-save');
-  assert.strictEqual(plan.create.beneficiaries.length,1);
-  assert.strictEqual(plan.create.beneficiaries[0].name,'Test User Name');
-  assert.strictEqual(plan.transaction.beneficiaryId,plan.create.beneficiaries[0].id);
-  I.applyPlan(s,plan);
-  assert.strictEqual(s.beneficiaries.length,1);
+  const p=fixtureParse({id:'person1',postedAt:8200,text:'Your request to transfer AED 149.00 to Example Person is successfully processed and the amount has been credited in the beneficiary account. TID: PERSONREF1'});
+  const s={institutions:[{id:'dui',name:'du Pay',country:'UAE',type:'wallet_provider',providerRegistryId:'du-pay'}],accounts:[{id:'w',institutionId:'dui',country:'UAE',type:'ewallet',currency:'AED',openingBalance:500}],paymentInstruments:[],transactions:[],beneficiaries:[]};
+  assert.strictEqual(I.plan(p,s,{uid}).reason,'outgoing-destination-unconfirmed');
+  const built=P.buildTransaction(p,{status:'routed',fromAccount:s.accounts[0]},{uid,confirmedOutgoingDestination:'external'});assert.strictEqual(built.ok,true);s.transactions.push(built.transaction);
+  assert.strictEqual(require('../../main/assets/js/finance-core').accountBalance(s,'w'),351);assert.strictEqual(built.transaction.economicOrigin.source,'user-confirmation');
 }
 
 // Registered-bank generic messages can safely auto-discover when transaction + balance + instrument are explicit.
@@ -685,9 +679,9 @@ console.log('bank ingestion core regression tests: PASS');
   s.institutions.push({id:'du',name:'du Pay',country:'UAE',type:'wallet_provider',providerRegistryId:'du-pay'});
   s.accounts.push({id:'wallet',institutionId:'du',country:'UAE',type:'ewallet',currency:'AED',openingBalance:200,observedBalance:200,observedBalanceAt:1000});
   const plan=I.plan(p,s,{uid});
-  assert.strictEqual(plan.action,'auto-save');
-  assert.deepStrictEqual(plan.observations,[]);
-  I.applyPlan(s,plan);
+  assert.strictEqual(plan.reason,'outgoing-destination-unconfirmed');
+  const built=P.buildTransaction(p,{status:'routed',fromAccount:s.accounts[0]},{uid,confirmedOutgoingDestination:'external'});assert.strictEqual(built.ok,true);
+  assert.strictEqual(built.transaction.fromAmount,149);s.transactions.push(built.transaction);
   assert.strictEqual(s.accounts[0].observedBalance,200);
   assert.strictEqual(I.reconciliation(p,s,plan,()=>51),null);
   assert.strictEqual(I.openingBalanceForObserved({...p,availableBalance:0}),149);
@@ -738,9 +732,8 @@ console.log('bank ingestion core regression tests: PASS');
   const p=fixtureParse({id:'recipient-unknown',title:'duPay',postedAt:9000000,text:'Your request to transfer AED 25.00 to Test Recipient is successfully processed and the amount has been credited in the beneficiary account. TID: NEWREF123'});
   const s=empty();s.institutions.push({id:'du',providerRegistryId:'du-pay',country:'UAE',type:'wallet_provider'});
   s.accounts.push({id:'wallet',institutionId:'du',type:'ewallet',country:'UAE',currency:'AED',openingBalance:100});
-  const plan=I.plan(p,s,{uid});assert.strictEqual(plan.action,'auto-save');
-  assert.strictEqual(plan.transaction.receivedAmountKnown,false);
-  assert.strictEqual(plan.create.beneficiaries[0].country,'OTHER');assert.strictEqual(plan.create.beneficiaries[0].defaultCurrency,null);
+  assert.strictEqual(I.plan(p,s,{uid}).reason,'outgoing-destination-unconfirmed');
+  const built=P.buildTransaction(p,{status:'routed',fromAccount:s.accounts[0]},{uid,confirmedOutgoingDestination:'external'});assert.strictEqual(built.ok,true);assert.strictEqual(built.transaction.receivedAmountKnown,false);assert.strictEqual((s.beneficiaries||[]).length,0);
 }
 
 // Contradictory refund settlement evidence must be reviewed rather than adding a blind credit.
@@ -759,7 +752,7 @@ console.log('bank ingestion core regression tests: PASS');
  const s={institutions:[{id:'en',country:'UAE',name:'Emirates NBD',bankRegistryId:'emirates-nbd'},{id:'du',country:'UAE',name:'du Pay',providerRegistryId:'du-pay'}],accounts:[{id:'from',country:'UAE',currency:'AED',type:'ewallet',institutionId:'du',openingBalance:200},{id:'to',country:'UAE',currency:'AED',type:'bank',institutionId:'en',bankRefs:['012XXX50XXX01'],openingBalance:10}],paymentInstruments:[],transactions:[]};
  const at=1790859000000;
  const outgoing={kind:'outgoing_transfer',currency:'AED',country:'UAE',providerId:'du-pay',amount:100,eventId:'debit-id',postedAt:at,raw:'sent 100 AED, ref d1',transactionRef:'d1',availableBalance:100};
- const old=P.buildTransaction(outgoing,{status:'routed',fromAccount:s.accounts[0]},{uid:()=> 'old'}).transaction;s.transactions.push(old);
+ const old=P.buildTransaction(outgoing,{status:'routed',fromAccount:s.accounts[0]},{uid:()=> 'old',confirmedOutgoingDestination:'external'}).transaction;s.transactions.push(old);
  const incoming=fixtureParse({id:'credit-id',title:'ENBD',postedAt:at+2000,text:'لقد تم ايداع AED 100.00 في رقم حسابك 012XXX50XXX01 OBP TR REF RECEIPT123.الرصيد المتوفر هو AED 110.00'});
  assert.strictEqual(I.transferCounterparts(incoming,s).length,1);
  assert.strictEqual(I.plan(incoming,s,{uid}).reason,'possible-own-transfer');

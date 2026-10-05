@@ -91,9 +91,9 @@ function state(accounts,transactions){return {accounts,transactions};}
 (function rates(){
   const defaults={USD_AED:3.67,AED_USD:0.272};
   assert.strictEqual(F.suggestRate('AED','AED',{},defaults),1);
-  assert.strictEqual(F.suggestRate('USD','AED',{USD_AED:3.66},defaults),3.66);
-  assert.strictEqual(F.suggestRate('USD','AED',{},defaults),3.67);
-  assert.strictEqual(F.suggestRate('AED','USD',{}, {USD_AED:3.67}),0.2725);
+  assert.strictEqual(F.suggestRate('USD','AED',{USD_AED:{rate:3.66,source:'user-entry',recordedAt:1}},defaults),3.66);
+  assert.strictEqual(F.suggestRate('USD','AED',{},defaults),null);
+  assert.strictEqual(F.suggestRate('AED','USD',{}, {USD_AED:3.67}),null);
   assert.strictEqual(F.suggestRate('ABC','XYZ',{},defaults),null);
 })();
 

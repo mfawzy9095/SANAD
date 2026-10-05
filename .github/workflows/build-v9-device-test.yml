@@ -522,6 +522,8 @@ jobs:
         run: |
           node app/src/test/js/incoming-origin-manual-guard.test.js
           node app/src/test/js/balance-certainty.test.js
+          node app/src/test/js/report-financial-contract.test.js
+          node app/src/test/js/outgoing-destination.test.js
           node app/src/test/js/financial-closure.test.js
           node app/src/test/js/money-core.test.js
           node app/src/test/js/financial-acceptance.test.js

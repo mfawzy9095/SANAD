@@ -125,11 +125,11 @@ const state={
     {fromAccountId:'a',toAccountId:'c',fromAmount:5,toAmount:2,fromCurrency:'USD'},
     {fromAccountId:'missing',toAccountId:'missing2',fromAmount:3,toAmount:4}
   ];
-  assert.deepStrictEqual(R.transferCurrencyTotals(transferState,transfers,true),{AED:13,USD:5});
-  assert.deepStrictEqual(R.transferCurrencyTotals(transferState,transfers,false),{EGP:100,USD:2,AED:4});
+  assert.deepStrictEqual(R.transferCurrencyTotals(transferState,transfers,true),{AED:10,USD:5,UNKNOWN:null});
+  assert.deepStrictEqual(R.transferCurrencyTotals(transferState,transfers,false),{EGP:100,USD:2,UNKNOWN:null});
   assert.deepStrictEqual(R.transferCurrencyTotals(transferState,null,true),{});
 
-  const creditState={transactions:[
+  const creditState={accounts:[{id:'card',currency:'AED'}],transactions:[
     {type:'expense',accountId:'card',amount:999,walletAmount:120,date:'2026-09-10'},
     {type:'expense',accountId:'card',amount:80,date:'2026-09-11'},
     {type:'expense',accountId:'other',amount:50,date:'2026-09-11'},

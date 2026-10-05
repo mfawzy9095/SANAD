@@ -174,14 +174,13 @@ function process(text,input,state){
   s.institutions.push({id:'dui2',name:'du Pay',country:'UAE',type:'wallet_provider',providerRegistryId:'du-pay'});
   s.accounts.push({id:'wallet2',institutionId:'dui2',country:'UAE',name:'du Pay Wallet',type:'ewallet',currency:'AED',openingBalance:500,openingDebt:0,creditLimit:0,archived:false});
   strictOk(s,'pre person transfer');
-  process(
-    'Your request to transfer AED 149.00 to Test User Name is successfully processed and the amount has been credited in the beneficiary account. TID: PERSONLEDGER1',
-    {id:'person-ledger'},s
-  );
-  assert.strictEqual(s.beneficiaries.length,1);
-  assert.strictEqual(s.beneficiaries[0].name,'Test User Name');
+  const p=fixtureParse({id:'person-ledger',postedAt:Date.UTC(2026,9,1),text:'Your request to transfer AED 149.00 to Test User Name is successfully processed and the amount has been credited in the beneficiary account. TID: PERSONLEDGER1'});
+  assert.strictEqual(Ingest.plan(p,s,{uid}).reason,'outgoing-destination-unconfirmed');
+  const built=Message.buildTransaction(p,Ingest.routeFromManualChoice(p,s,{sourceType:'account',sourceId:'wallet2'}),{uid,confirmedOutgoingDestination:'external'});assert.strictEqual(built.ok,true);
+  s.transactions.push(built.transaction);strictOk(s,'explicit external destination');
+  assert.strictEqual(s.beneficiaries.length,0);
   assert.strictEqual(s.transactions[0].type,'external_transfer');
-  assert.strictEqual(s.transactions[0].beneficiaryId,s.beneficiaries[0].id);
+  assert.strictEqual(s.transactions[0].economicOrigin.kind,'external-destination');
   assert.strictEqual(Finance.accountBalance(s,'wallet2'),351);
 })();
 

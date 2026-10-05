@@ -1,8 +1,8 @@
 (function(root,factory){
-  const api=factory();
+  const api=factory(typeof module==='object'&&module.exports?require('./money-core.js'):root.SanadMoneyCore);
   if(typeof module==='object'&&module.exports)module.exports=api;
   if(root)root.SanadReportCore=api;
-})(typeof globalThis!=='undefined'?globalThis:this,function(){
+})(typeof globalThis!=='undefined'?globalThis:this,function(Money){
   'use strict';
 
   const pad=n=>String(n).padStart(2,'0');
@@ -11,6 +11,27 @@
   function getAccount(state,id){
     const accounts=state&&Array.isArray(state.accounts)?state.accounts:[];
     return accounts.find(a=>a&&a.id===id)||null;
+  }
+
+  function exactTotal(values,currency){const total=Money.sum(values,currency);return total.ok?total.value:null;}
+  function reportMoney(value,currency){const parsed=Money.decimal(value,currency);return parsed.ok?parsed.value:null;}
+  function isRefund(t){return !!(t&&(t.financialEvent==='purchase-refund'||t.bankImportEvidence&&t.bankImportEvidence.kind==='refund'));}
+  function reportUncertainty(t,account){
+    if(!account)return 'account-unresolved';
+    if(t.accountId&&t.currency&&t.currency!==account.currency&&t.walletAmount==null)return 'currency-unresolved';
+    if(t.type==='income'&&!isRefund(t)){
+      const kind=t.bankImportEvidence&&t.bankImportEvidence.kind;
+      if(['credit','debt'].includes(account.type))return 'liability-income-review';
+      if(['deposit','incoming_transfer'].includes(kind)&&!(t.economicOrigin&&t.economicOrigin.kind==='external-income'&&t.economicOrigin.source==='user-confirmation'))return 'historical-incoming-origin-unconfirmed';
+    }
+    if(t.type==='external_transfer'&&t.bankImportEvidence&&t.bankImportEvidence.kind==='outgoing_transfer'&&!(t.economicOrigin&&t.economicOrigin.kind==='external-destination'&&t.economicOrigin.source==='user-confirmation'))return 'historical-outgoing-destination-unconfirmed';
+    return null;
+  }
+
+  function groupedTotals(entries,key){
+    const groups={};for(const e of entries){const k=key(e);(groups[k]||(groups[k]=[])).push(e);}
+    const out={};for(const [k,rows]of Object.entries(groups))out[k]=exactTotal(rows.map(e=>e.amount),rows[0].currency);
+    return out;
   }
 
   function periodRange(period,monthKey,now){
@@ -43,9 +64,13 @@
     const o=options||{};
     const range=periodRange(o.period,o.month,o.now);
     const out=[];
+    const byId=new Map(((state&&state.transactions)||[]).map(t=>[t.id,t]));
     const push=entry=>{
       if(o.accountId&&entry.accountId!==o.accountId)return;
       if(o.currency&&entry.currency!==o.currency)return;
+      const source=byId.get(entry.sourceTxId);
+      const reason=reportUncertainty(source,getAccount(state,entry.accountId));
+      if(reason){entry.recordedAmount=entry.amount;entry.amount=null;entry.reviewReason=reason;}
       out.push(entry);
     };
     for(const t of (state&&state.transactions)||[]){
@@ -53,13 +78,18 @@
       if(t.type==='expense'){
         const acc=getAccount(state,t.accountId);
         if(!acc||acc.country!==o.country)continue;
-        const amount=Number(t.walletAmount!=null?t.walletAmount:t.amount)||0;
-        if(amount<=0)continue;
+        const amount=reportMoney(t.walletAmount!=null?t.walletAmount:t.amount,acc.currency);
+        if(amount!==null&&amount<=0)continue;
         push({
           id:t.id+':exp',sourceTxId:t.id,sourceType:'expense',
           amount,currency:acc.currency,category:t.cat||'other',
           date:t.date,accountId:t.accountId,instrumentId:t.instrumentId||null,note:t.note||''
         });
+      }
+      if(t.type==='income'&&isRefund(t)){
+        const acc=getAccount(state,t.accountId);if(!acc||acc.country!==o.country)continue;
+        const value=reportMoney(t.walletAmount!=null?t.walletAmount:t.amount,acc.currency);
+        push({id:t.id+':refund',sourceTxId:t.id,sourceType:'refund',amount:value===null?null:-value,currency:acc.currency,category:'purchaseRefund',date:t.date,accountId:t.accountId,note:t.note||''});
       }
       if(t.type==='transfer'){
         const fee=Number(t.fee)||0;
@@ -101,14 +131,14 @@
     const range=periodRange(o.period,o.month,o.now);
     const out=[];
     for(const t of (state&&state.transactions)||[]){
-      if(!t||t.type!=='income'||!t.date||t.date<range.start||t.date>range.end)continue;
+      if(!t||t.type!=='income'||isRefund(t)||!t.date||t.date<range.start||t.date>range.end)continue;
       const acc=getAccount(state,t.accountId);
       if(!acc||acc.country!==o.country)continue;
       if(o.accountId&&t.accountId!==o.accountId)continue;
       if(o.currency&&acc.currency!==o.currency)continue;
-      const amount=Number(t.walletAmount!=null?t.walletAmount:t.amount)||0;
+      const value=reportMoney(t.walletAmount!=null?t.walletAmount:t.amount,acc.currency),reason=reportUncertainty(t,acc),amount=reason?null:value;
       out.push({
-        id:t.id+':inc',sourceTxId:t.id,amount,currency:acc.currency,
+        id:t.id+':inc',recordedAmount:value,reviewReason:reason,sourceTxId:t.id,amount,currency:acc.currency,
         category:t.cat||'other',date:t.date,accountId:t.accountId,note:t.note||''
       });
     }
@@ -152,15 +182,18 @@
     today.setHours(0,0,0,0);
     const mk=month||ymKey(today),[Y,M]=mk.split('-').map(Number);
     const list=Array.isArray(expenses)?expenses:[];
+    const currencies=new Set(list.map(e=>e.currency));if(currencies.size>1||currencies.has(undefined)||list.some(e=>e.amount===null))return [];
+    const currency=list.length?list[0].currency:null;
+    const total=rows=>rows.length?exactTotal(rows.map(e=>e.amount),currency):0;
     if(period==='today'){
-      return [{label:'اليوم',val:list.reduce((s,e)=>s+(Number(e.amount)||0),0),hi:true}];
+      return [{label:'اليوم',val:total(list),hi:true}];
     }
     if(period==='week'){
       const days=[];
       for(let i=6;i>=0;i--){
         const d=new Date(today);d.setDate(d.getDate()-i);
         const key=localIso(d);
-        const val=list.filter(e=>e.date===key).reduce((s,e)=>s+(Number(e.amount)||0),0);
+        const val=total(list.filter(e=>e.date===key));
         days.push({label:d.toLocaleDateString('ar-EG-u-nu-latn',{weekday:'short'}),val,hi:i===0});
       }
       return days;
@@ -170,7 +203,7 @@
       for(let i=0;i<nWeeks;i++){
         const start=i*7+1,end=Math.min((i+1)*7,last),dateSet=new Set();
         for(let d=start;d<=end;d++)dateSet.add(Y+'-'+pad(M)+'-'+pad(d));
-        const val=list.filter(e=>dateSet.has(e.date)).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
+        const val=total(list.filter(e=>dateSet.has(e.date)));
         weeks.push({label:'أ'+(i+1),val,hi:false});
       }
       return weeks;
@@ -179,7 +212,7 @@
       const months=[];
       for(let i=5;i>=0;i--){
         const d=new Date(Y,M-1-i,1),key=ymKey(d);
-        const val=list.filter(e=>String(e.date||'').slice(0,7)===key).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
+        const val=total(list.filter(e=>String(e.date||'').slice(0,7)===key));
         months.push({label:d.toLocaleDateString('ar-EG-u-nu-latn',{month:'short'}),val,hi:i===0});
       }
       return months;
@@ -192,20 +225,17 @@
     const expenses=reportExpenseEntries(state,o);
     const incomes=reportIncomeEntries(state,o);
     const transfers=reportTransferEntries(state,o);
-    const spendingByCur={},incomeByCur={},categoryByCur={};
-    expenses.forEach(e=>{
-      spendingByCur[e.currency]=(spendingByCur[e.currency]||0)+e.amount;
-      if(!categoryByCur[e.currency])categoryByCur[e.currency]={};
-      categoryByCur[e.currency][e.category]=(categoryByCur[e.currency][e.category]||0)+e.amount;
-    });
-    incomes.forEach(e=>{incomeByCur[e.currency]=(incomeByCur[e.currency]||0)+e.amount;});
+    const spendingByCur=groupedTotals(expenses,e=>e.currency),incomeByCur=groupedTotals(incomes,e=>e.currency),categoryByCur={};
+    for(const currency of new Set(expenses.map(e=>e.currency)))categoryByCur[currency]=groupedTotals(expenses.filter(e=>e.currency===currency),e=>e.category);
+    const chartCurrencyRequired=new Set(expenses.map(e=>e.currency)).size>1;
     return {
       country:o.country,
       period:o.period,
       accountId:o.accountId,
       currency:o.currency,
       month:o.month,
-      expenses,incomes,transfers,spendingByCur,incomeByCur,categoryByCur,
+      expenses,incomes,transfers,spendingByCur,incomeByCur,categoryByCur,chartCurrencyRequired,
+      financialReviews:expenses.concat(incomes).filter(e=>e.reviewReason||e.amount===null).map(e=>({sourceTxId:e.sourceTxId,reason:e.reviewReason||'money-invalid',recordedAmount:e.recordedAmount,currency:e.currency})),
       chartBuckets:chartBuckets(o.period,expenses,o.month,o.now)
     };
   }
@@ -253,7 +283,7 @@
     Object.entries(overallByCur).forEach(([cur,limit])=>{
       const lim=Number(limit)||0;
       if(lim<=0)return;
-      const spent=spendingByCur[cur]||0;
+      const spent=spendingByCur[cur]===undefined?0:spendingByCur[cur];
       const st=computeBudgetStatus(spent,lim);
       evaluated.push({type:'overall',month,country,currency:cur,level:st.level,spent,limit:lim,pct:st.pct});
     });
@@ -273,6 +303,7 @@
     for(const al of evaluated){
       const key=al.type+'|'+al.month+'|'+al.country+'|'+al.currency+'|'+(al.category||'_');
       const stored=budgetAlerts[key]||{warned80:false,warned95:false,warned100:false};
+      if(al.level==='unknown')continue;
       const pct=al.pct||0;
       if(pct<80){
         stored.warned80=false;stored.warned95=false;stored.warned100=false;
@@ -294,36 +325,22 @@
   }
 
   function transferCurrencyTotals(state,list,useFrom){
-    const totals={};
-    const rows=Array.isArray(list)?list:[];
-    rows.forEach(t=>{
-      if(!t)return;
-      const accountId=useFrom?t.fromAccountId:t.toAccountId;
-      const acc=getAccount(state,accountId);
-      const cur=(useFrom?t.fromCurrency:t.toCurrency)||(acc?acc.currency:'AED');
-      const amount=useFrom?(Number(t.fromAmount)||0):(Number(t.toAmount)||0);
-      totals[cur]=(totals[cur]||0)+amount;
-    });
-    return totals;
+    const rows=(Array.isArray(list)?list:[]).filter(Boolean).map(t=>{const acc=getAccount(state,useFrom?t.fromAccountId:t.toAccountId);return {currency:(useFrom?t.fromCurrency:t.toCurrency)||(acc&&acc.currency)||'UNKNOWN',amount:useFrom?t.fromAmount:t.toAmount};});
+    return groupedTotals(rows,e=>e.currency);
   }
-
   function creditPeriodActivity(state,accountId,range){
-    const r=range||{};
-    let purchases=0,repaymentPrincipal=0;
+    const r=range||{},purchases=[],repayment=[];const acc=getAccount(state,accountId);
     for(const t of (state&&state.transactions)||[]){
       if(!t||!t.date||t.date<r.start||t.date>r.end)continue;
-      if(t.type==='expense'&&t.accountId===accountId){
-        purchases+=Number(t.walletAmount!=null?t.walletAmount:t.amount)||0;
-      }
-      if(t.type==='transfer'&&t.toAccountId===accountId){
-        repaymentPrincipal+=Number(t.toAmount)||0;
-      }
+      if(t.type==='expense'&&t.accountId===accountId)purchases.push(t.walletAmount!=null?t.walletAmount:t.amount);
+      if(t.type==='income'&&t.accountId===accountId&&isRefund(t))purchases.push(-Number(t.walletAmount!=null?t.walletAmount:t.amount));
+      if(t.type==='transfer'&&t.toAccountId===accountId)repayment.push(t.toAmount);
     }
-    return {purchases,repaymentPrincipal};
+    return {purchases:purchases.length?exactTotal(purchases,acc&&acc.currency):0,repaymentPrincipal:repayment.length?exactTotal(repayment,acc&&acc.currency):0};
   }
 
   function categoryPieBuckets(categoryTotals){
-    const all=Object.entries(categoryTotals||{}).sort((a,b)=>(Number(b[1])||0)-(Number(a[1])||0));
+    const all=Object.entries(categoryTotals||{}).filter(([,value])=>value!==null&&Number(value)>0).sort((a,b)=>(Number(b[1])||0)-(Number(a[1])||0));
     if(all.length<=6)return all.map(([id,value])=>({id,value:Number(value)||0,other:false}));
     const top5=all.slice(0,5).map(([id,value])=>({id,value:Number(value)||0,other:false}));
     const rest=all.slice(5).reduce((sum,[,value])=>sum+(Number(value)||0),0);
@@ -337,6 +354,7 @@
   }
 
   function computeBudgetStatus(spent,budget){
+    if(spent===null)return {level:'unknown',pct:null};
     const b=Number(budget)||0,s=Number(spent)||0;
     if(b<=0)return {level:'none',pct:0};
     const pct=(s/b)*100;

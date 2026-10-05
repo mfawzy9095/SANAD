@@ -13,6 +13,7 @@ for(const text of ['Salary AED 6250 failed; no funds were credited','Pending sal
 for(const text of ['تم إيداع الراتب AED 6250 في حسابك .019XXX70XXX04','Purchase reversal AED 40 on credit card ending 9765','Purchase KWD 4.125 using credit card ending 9765','Purchase AED 4.125 using credit card ending 9765','Salary AED 6250 credited to account 000000000','Purchase AED 900719925474099.99 using credit card ending 9765'])cases.push({text,action:'review'});
 cases.push({sender:'UnknownBank',text:'تم إيداع الراتب AED 6250 في حسابك .019XXX70XXX03',action:'review'});
 cases.push({text:'تم إيداع AED 110.00 في حسابك 019XXX70XXX03',action:'review'},{text:'تم تحويل مبلغ AED 85.00 إلى حسابك رقم 019XXX70XXX03',action:'review'});
+cases.push({text:'Transfer AED 85.00 from account 019XXX70XXX03 to Example Person successfully processed',action:'review'},{text:'Successfully transferred AED 105.00 from account 019XXX70XXX03 to beneficiary account',action:'review'});
 for(const [n,c] of cases.entries()){
  const s=state(),p=M.parse({id:'acceptance-'+n,title:c.sender||'EmiratesNBD',text:c.text,postedAt:1791010000000+n*1000000});
  const plan=p.ignored?{action:'ignored'}:I.plan(p,s,{uid:()=> 't-'+n});

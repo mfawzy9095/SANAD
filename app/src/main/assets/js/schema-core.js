@@ -107,7 +107,8 @@
       if (a.creditLimit === undefined) a.creditLimit = 0;
       if (a.defaultRepaymentAccountId === undefined) a.defaultRepaymentAccountId = null;
       if (a.archived === undefined) a.archived = false;
-      if (!CURRENCIES[a.currency]) a.currency = 'EGP';
+      // Preserve unsupported currency units; strict validation enters recovery instead of relabeling money.
+      if (!a.currency) a.currency = 'UNKNOWN';
       if (a.institutionId){
         const inst = instById[a.institutionId];
         if (!inst || inst.country !== a.country) a.institutionId = null;

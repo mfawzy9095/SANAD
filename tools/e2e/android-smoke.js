@@ -78,7 +78,7 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  assert.equal(await page.evaluate(id=>FinanceCore.accountMovement(S,id),bank.id),9100);
  await page.evaluate(id=>openAccountSheet(id),bank.id);
  await page.locator('#wBalance').fill('1.66');await page.evaluate(()=>{document.getElementById('wOpeningKnown').checked=true;});
- await page.locator('[data-act="save-account"]').click();await page.waitForFunction(()=>!_criticalMutationInFlight);
+ await page.locator('[data-act="save-account"]').click();await page.waitForFunction(id=>S.accounts.find(a=>a.id===id)?.openingBalanceKnown===true&&S.accounts.find(a=>a.id===id)?.openingBalance===1.66&&!_criticalMutationInFlight,bank.id);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bank.id),9101.66);
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),2);pass('Native SMS provider, paged bridge callback, salary/deposit import, balance and deduplication');
  const before=await page.evaluate(()=>stateFingerprint(snapshotState()));

@@ -821,6 +821,7 @@
     if(parsed.ignored)return {ok:false,reason:parsed.reason||'ignored'};
     if(parsed.reviewReason)return {ok:false,reason:parsed.reviewReason};
     if(['deposit','incoming_transfer'].includes(parsed.kind))return {ok:false,reason:'incoming-origin-unconfirmed'};
+    if(parsed.kind==='outgoing_transfer')return {ok:false,reason:'outgoing-destination-unconfirmed'};
     if(['salary','deposit','incoming_transfer'].includes(parsed.kind)&&route&&route.account&&['credit','debt'].includes(route.account.type))return {ok:false,reason:'asset-account-required'};
     if(parsed.feeFormula)return {ok:false,reason:'fee-review-required'};
     if(parsed.kind==='refund'&&route&&route.account){
@@ -872,7 +873,7 @@
     const manual=manualDuplicateCandidate(parsed,state);
     if(manual)return {action:'review',reason:'possible-manual-duplicate',existingTransactionId:manual.id,confidence:0};
     const learnedRule=matchLearnedRule(parsed,state);
-    if(learnedRule&&learnedRule.kind&&learnedRule.kind!==parsed.kind&&!['deposit','incoming_transfer'].includes(parsed.kind)){
+    if(learnedRule&&learnedRule.kind&&learnedRule.kind!==parsed.kind&&!['deposit','incoming_transfer','outgoing_transfer'].includes(parsed.kind)){
       parsed=Object.assign({},parsed,{kind:learnedRule.kind});
     }
     const dup=duplicateOf(parsed,state);
@@ -882,6 +883,7 @@
     const counterparts=transferCounterparts(parsed,state);
     if(counterparts.length)return {action:'review',reason:'possible-own-transfer',counterpartTransactionIds:counterparts.map(t=>t.id),confidence:0};
     if(['deposit','incoming_transfer'].includes(parsed.kind))return {action:'review',reason:'incoming-origin-unconfirmed',confidence:0};
+    if(parsed.kind==='outgoing_transfer')return {action:'review',reason:'outgoing-destination-unconfirmed',confidence:0};
 
     // Planning only appends draft entities; never clone the complete historical ledger per SMS.
     let draft=Object.assign({},state||{});

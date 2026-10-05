@@ -1189,7 +1189,7 @@ async function commitCriticalMutation(mutateFn){
 
 /* ---------- FINANCE ENGINE ---------- */
 const Finance = {
-  curInfo(code){ return CURRENCIES[code] || CURRENCIES.EGP; },
+  curInfo(code){ return CURRENCIES[code] || {code,symbol:code||'?',name:'عملة غير مدعومة '+(code||'?'),flag:'❓'}; },
   curSymbol(code){ const c=this.curInfo(code); return (S.settings&&S.settings.language==='en') ? (c.code||code) : c.symbol; },
   getAccount(id){ return S.accounts.find(a => a.id === id) || null; },
   getInstrument(id){ return S.paymentInstruments.find(i => i.id === id) || null; },
@@ -1374,10 +1374,11 @@ const Finance = {
   suggestRate(fromCur,toCur){ return FinanceCore.suggestRate(fromCur,toCur,S.settings.lastFx,DEFAULT_FX); },
   rememberRate(fromCur,toCur,rate){
     if (!S.settings.lastFx) S.settings.lastFx = {};
-    S.settings.lastFx[fromCur + '_' + toCur] = rate;
-    if (rate > 0) S.settings.lastFx[toCur + '_' + fromCur] = Math.round((1/rate)*10000)/10000;
+    S.settings.lastFx[fromCur + '_' + toCur] = {rate,source:'user-entry',recordedAt:Date.now()};
+    if (rate > 0) S.settings.lastFx[toCur + '_' + fromCur] = {rate:Number((1/rate).toFixed(10)),source:'user-entry',recordedAt:Date.now(),derivedFrom:fromCur+'_'+toCur};
   },
   getCat(type,id){
+    if(type==='expense'&&id==='purchaseRefund')return {id,n:'استردادات مشتريات',i:'↩️',c:'#008577'};
     const all = (S.categories[type]||[]).concat(DEFAULT_CATS[type]||[]);
     const seen = new Set(); const uniq = [];
     for (const c of all){ if (seen.has(c.id)) continue; seen.add(c.id); uniq.push(c); }
@@ -1861,7 +1862,7 @@ function viewHome(){
           '<div class="wh-cur">' + (inst ? esc(inst.name) + ' · ' : '') + Finance.curInfo(defaultAcc.currency).name + '</div></div>' +
       '</div>' +
       '<div class="wh-balance-row"><div class="wh-bal amt-val">' + amtText(bal) + ' <span style="font-size:14px;opacity:.85">' + Finance.curSymbol(defaultAcc.currency) + '</span></div>' + quickAmountEye + '</div>' +
-      '<div class="wh-sub">الحساب الأساسي في ' + esc(cInfo.name) + (heroBalanceView?' · '+(bal===null?'الرصيد الافتتاحي غير مؤكد':'رصيد الحساب من السجل')+(heroBalanceView.observed!==null?' · آخر رصيد متاح بالرسالة '+amtText(heroBalanceView.observed):''):'') + '</div>' +
+      '<div class="wh-sub">الحساب الأساسي في ' + esc(cInfo.name) + (heroBalanceView?' · '+(bal===null?'الرصيد غير مؤكد — راجع البداية والعمليات':'رصيد الحساب من السجل')+(heroBalanceView.observed!==null?' · آخر رصيد متاح بالرسالة '+amtText(heroBalanceView.observed):''):'') + '</div>' +
     '</div>';
   } else {
     heroHtml = '<div class="card" style="text-align:center;padding:20px">' +
@@ -1890,7 +1891,7 @@ function viewHome(){
     '<div class="cs-hdr">ملخص ' + esc(countryInfo(country).name) + '</div>' +
     '<div class="cs-sub">أرصدة الأصول من السجل</div>' + liquidityRows +
     '<div style="border-top:1px solid var(--outline);margin:8px 0 4px"></div>' +
-    '<div class="cs-sub">مصروف هذا الشهر</div>' + spendingRows +
+    '<div class="cs-sub">صافي مصروف هذا الشهر</div>' + spendingRows +
     (outboundRows ? '<div style="border-top:1px solid var(--outline);margin:8px 0 4px"></div>' +
       '<div class="cs-sub">تحويلات خارج البلد</div>' + outboundRows : '') + '</div>';
   const liabAccounts = Finance.getCountryAccounts(country).filter(a => isLiabilityAccount(a));
@@ -2063,7 +2064,8 @@ async function applyPendingRecurring(){
       let fxRate = 1, walletAmount = Number(r.amount) || 0;
       if (txCur !== accCur){
         fxRate = Finance.suggestRate(txCur, accCur);
-        walletAmount = Math.round((Number(r.amount) || 0) * fxRate * 100) / 100;
+        if(!(fxRate>0)){_lastMutationError='transaction-fx-required';return false;}
+        const converted=SanadMoneyCore.convert(r.amount,txCur,accCur,fxRate);if(!converted.ok){_lastMutationError=converted.reason;return false;}walletAmount=converted.value;
       }
       /* V8.8.4.10: prepaid-aware check BEFORE pushing this occurrence */
       if (r.type === 'expense' && acc.type === 'prepaid'){
@@ -2079,7 +2081,7 @@ async function applyPendingRecurring(){
         amount: Number(r.amount) || 0,
         currency: txCur, accountId: r.accountId,
         instrumentId: r.instrumentId || null,
-        walletAmount, fxRate,
+        walletAmount, fxRate, fxRateSource:'user-entry',
         cat: r.category, note: r.name, tags: [],
         date: p.occ.date, rec: p.tag, created: Date.now()
       });
@@ -2528,11 +2530,11 @@ function viewRep(){
   }
   const ds = Finance.buildReportDataset({country, period:p, accountId: S.repAccountId || null, currency: activeCur, month: S.month});
   const dsBudget = Finance.buildReportDataset({country, period:'month', accountId:null, currency: activeCur, month: S.month});
-  const budgetSpending = dsBudget.spendingByCur[activeCur] || 0;
+  const budgetSpending = (dsBudget.spendingByCur[activeCur]===undefined?0:dsBudget.spendingByCur[activeCur]);
   const budgetCategoryTotals = dsBudget.categoryByCur[activeCur] || {};
-  const spending = ds.spendingByCur[activeCur] || 0;
-  const income = ds.incomeByCur[activeCur] || 0;
-  const net = income - spending;
+  const spending = (ds.spendingByCur[activeCur]===undefined?0:ds.spendingByCur[activeCur]);
+  const income = (ds.incomeByCur[activeCur]===undefined?0:ds.incomeByCur[activeCur]);
+  const net = income===null||spending===null?null:SanadMoneyCore.sum([income,-spending],activeCur).value;
   const categoryTotals = ds.categoryByCur[activeCur] || {};
   const cats = Object.entries(categoryTotals).sort((a,b) => b[1] - a[1]);
   const maxCat = cats.length ? cats[0][1] : 1;
@@ -2633,7 +2635,7 @@ function viewRep(){
           'لم يتم تحديد حدود. اضغط تعديل لإضافة حد.</div>';
     }
     const rows = Array.from(budgetCats).map(catId => {
-      const spent = budgetCategoryTotals[catId] || 0;
+      const spent = (budgetCategoryTotals[catId]===undefined?0:budgetCategoryTotals[catId]);
       const limit = Finance.getCategoryBudget(budgetMonth, country, activeCur, catId);
       const c = Finance.getCat('expense', catId);
       if (limit <= 0){
@@ -2683,6 +2685,7 @@ function viewRep(){
       '<div class="stat-card"><div class="lbl">متوسط المعاملة</div><div class="v amt-val">' + amtText(totalExpCount ? spending/totalExpCount : 0) + '</div></div>' +
       '<div class="stat-card"><div class="lbl">الصافي</div><div class="v ' + (net >= 0 ? 'pos' : 'neg') + ' amt-val">' + amtText(net) + '</div></div>' +
     '</div>' +
+    (ds.financialReviews.length?'<div class="help-box"><span class="hi">⚠️</span><div class="ht">بعض إجماليات التقرير غير مؤكدة. هذه اقتراحات مراجعة؛ السجل المحفوظ لم يتغير.<br>'+ds.financialReviews.slice(0,12).map(e=>'<button type="button" data-txid="'+esc(e.sourceTxId)+'">راجع مصدر/وجهة الحركة '+esc(e.sourceTxId)+' · '+amtFull(e.recordedAmount,e.currency)+'</button>').join('<br>')+'</div></div>':'')+
     overallHtml + budgetSection +
     (pieData.length ?
       '<div class="sec"><h2>التوزيع</h2></div>' +
@@ -3462,6 +3465,7 @@ function renderTxSheet(){
       '</details>' +
     '</div>' +
     '<div class="sheet-footer tx-footer">' +
+      (f.id&&f.kind==='income'&&['deposit','incoming_transfer'].includes((S.transactions.find(t=>t.id===f.id)||{}).bankImportEvidence?.kind)?'<div class="help-box"><span class="hi">⚠️</span><div class="ht">رسالة الوصول لا تثبت مصدر المال. اترك الحركة للمراجعة إن كانت من حساب آخر تملكه.<label><input type="checkbox" id="txExternalOriginConfirmed"> أؤكد أن هذه الحركة دخل من خارج حساباتي</label></div></div>':'')+
       '<button type="button" class="btn primary tx-save-btn" data-act="save-tx">' +
         '<span class="tx-save-icon">✓</span><span>' + (f.id ? 'حفظ التعديلات' : (isIncome ? 'إضافة الدخل' : 'إضافة المصروف')) + '</span>' +
       '</button>' +
@@ -3579,7 +3583,7 @@ async function saveTx(){
     const uiRate = rateIn ? parseFloat(rateIn.value) : NaN;
     fxRate = (!isNaN(uiRate) && uiRate > 0) ? uiRate : (Number(f.fxRate) || Finance.suggestRate(txCur, accCur));
     if (!fxRate || fxRate <= 0){ toast('أدخل سعر تحويل صحيح'); return; }
-    walletAmount = Math.round(amt * fxRate * 100) / 100;
+    const converted=SanadMoneyCore.convert(amt,txCur,accCur,fxRate);if(!converted.ok){toast('مبلغ التحويل أو سعره غير صالح');return;}walletAmount=converted.value;
     // FX memory is persisted inside the critical mutation.
   }
   const wasEdit = !!f.id;
@@ -3614,7 +3618,7 @@ async function saveTx(){
       type: f.kind, amount: amt, currency: txCur,
       accountId: f.source.accountId,
       instrumentId: f.source.type === 'instrument' ? f.source.id : null,
-      walletAmount, fxRate, cat: f.cat,
+      walletAmount, fxRate, fxRateSource:'user-entry', cat: f.cat,
       merchantName: (f.merchantName || '').trim(),
       note: (f.note || '').trim(),
       tags: (f.tags || []).slice(),
@@ -3622,6 +3626,7 @@ async function saveTx(){
       created: origCreated, transactionTime:f.transactionTime||null, timeSource:(f.transactionTime===f._originalTime&&f.date===f._originalDate?f._originalTimeSource:'manual')
     };
     if (origRec) data.rec = origRec;
+    if(document.getElementById('txExternalOriginConfirmed')?.checked){data.economicOrigin={kind:'external-income',source:'user-confirmation',eventId:oldTxSnapshot?.bankImportEventId||null};data.originConfirmationAudit={source:'user-confirmation',at:Date.now()};}
     if(!await confirmManualImportCandidate(data))return false;
     if (wasEdit){
       const idx = S.transactions.findIndex(x => x.id === f.id);
@@ -4106,7 +4111,7 @@ async function saveTransfer(){
       const rateEl = document.getElementById('rateIn');
       fxRate = parseFloat(rateEl ? rateEl.value : '');
       if (!fxRate || fxRate <= 0){ toast('أدخل سعر تحويل صحيح'); return; }
-      toAmount = Math.round(fromAmt * fxRate * 100) / 100;
+      const converted=SanadMoneyCore.convert(fromAmt,fromCur,toCur,fxRate);if(!converted.ok){toast('مبلغ التحويل أو سعره غير صالح');return;}toAmount=converted.value;
     }
     // FX memory is persisted inside the critical mutation.
   }
@@ -4141,11 +4146,11 @@ async function saveTransfer(){
     if (!sameCur) Finance.rememberRate(fromCur, toCur, fxRate);
     if (isExternal){
       const data = {
-        id: newId, type: 'external_transfer',
+        id: newId, type: 'external_transfer',economicOrigin:{kind:'external-destination',source:'user-confirmation'},
         fromAccountId: fromAcc.id, fromAmount: fromAmt, fromCurrency: fromCur,
         fromCountry: fromAcc.country,
         beneficiaryId: bene.id, receivedAmount: toAmount, receivedCurrency: toCur, receivedAmountKnown:true,
-        fxRate, fee: feeForTransfer, instrumentId: null,
+        fxRate, fxRateSource:!sameCur&&(f._transferMode||'received')==='received'?'user-received-amounts':'user-entry', fee: feeForTransfer, instrumentId: null,
         note: (f.note || '').trim() || ('تحويل إلى ' + bene.name),
         tags: (f.tags || []).slice(), date: f.date,
         created: origCreated, transactionTime:f.transactionTime||null, timeSource:(f.transactionTime===f._originalTime&&f.date===f._originalDate?f._originalTimeSource:'manual')
@@ -4165,7 +4170,7 @@ async function saveTransfer(){
         fromAccountId: fromAcc.id, fromAmount: fromAmt, fromCurrency: fromCur,
         fromCountry: fromAcc.country,
         toAccountId: targetAcc.id, toAmount, toCurrency: toCur, toCountry: targetAcc.country,
-        fxRate, fee: feeForTransfer,
+        fxRate, fxRateSource:!sameCur&&(f._transferMode||'received')==='received'?'user-received-amounts':'user-entry', fee: feeForTransfer,
         note: (f.note || '').trim() || (isRepayment ? ('سداد ' + (targetAcc.type === 'credit' ? 'بطاقة' : 'دين')) : ''),
         tags: (f.tags || []).slice(), date: f.date,
         created: origCreated, transactionTime:f.transactionTime||null, timeSource:(f.transactionTime===f._originalTime&&f.date===f._originalDate?f._originalTimeSource:'manual')
@@ -4406,7 +4411,7 @@ async function saveRepaymentEdit(){
     const rateEl = document.getElementById('payRate');
     rate = rateEl ? parseFloat(rateEl.value) : 0;
     if (!rate || rate <= 0){ toast('أدخل سعر تحويل صحيح'); return; }
-    toAmount = Math.round(fromAmt * rate * 100) / 100;
+    const converted=SanadMoneyCore.convert(fromAmt,fromCur,targetCur,rate);if(!converted.ok){toast('مبلغ التحويل أو سعره غير صالح');return;}toAmount=converted.value;
   }
   const debt = Finance.accountDebt(target.id);
   const debtBefore = debt + (Number(t.toAmount) || 0);
@@ -4426,7 +4431,7 @@ async function saveRepaymentEdit(){
       fromAccountId: fromW.id, fromAmount: fromAmt, fromCurrency: fromCur,
       fromCountry: fromW.country,
       toAccountId: target.id, toAmount, toCurrency: targetCur, toCountry: target.country,
-      fxRate: rate, fee: 0,
+      fxRate: rate, fxRateSource:'user-entry', fee: 0,
       note: note || ('سداد ' + (target.type === 'credit' ? 'بطاقة' : 'دين')),
       tags: (t.tags || []).slice(), date: f.date, transactionTime:f.transactionTime||null, timeSource:'manual', created: t.created
     };
@@ -5686,7 +5691,8 @@ function openPayLiability(walletId){
   pay.rate = Finance.suggestRate(fromW.currency, targetCur);
   if (fromW.currency === targetCur) pay.sourceAmount = debt===null?'':String(debt);
   else {
-    const rate = pay.rate || 1;
+    const rate = pay.rate;
+    if(debt===null||!(rate>0)){pay.sourceAmount='';renderPaySheet();return;}
     pay.sourceAmount = String(Math.round((debt / rate) * 100) / 100);
   }
   renderPaySheet();
@@ -5780,7 +5786,7 @@ async function savePayLiability(){
     const rateEl = document.getElementById('payRate');
     rate = rateEl ? parseFloat(rateEl.value) : 0;
     if (!rate || rate <= 0){ toast('أدخل سعر تحويل صحيح'); return; }
-    toAmount = Math.round(fromAmt * rate * 100) / 100;
+    const converted=SanadMoneyCore.convert(fromAmt,fromCur,targetCur,rate);if(!converted.ok){toast('مبلغ التحويل أو سعره غير صالح');return;}toAmount=converted.value;
     // FX memory is persisted inside the critical mutation.
   }
   const debt = Finance.accountDebt(target.id);
@@ -5802,7 +5808,7 @@ async function savePayLiability(){
       id: newTransferId, type:'transfer',
       fromAccountId: fromW.id, fromAmount: fromAmt, fromCurrency: fromCur, fromCountry: fromW.country,
       toAccountId: target.id, toAmount, toCurrency: targetCur, toCountry: target.country,
-      fxRate: rate, fee: 0,
+      fxRate: rate, fxRateSource:'user-entry', fee: 0,
       note: note || ('سداد ' + (target.type === 'credit' ? 'بطاقة' : 'دين')),
       tags: ['سداد'], date: S.form.date||today, transactionTime:S.form.transactionTime||null, timeSource:'manual', created: Date.now()
     };
@@ -7570,7 +7576,8 @@ document.addEventListener('click', e => {
           if (fromW.currency === target.currency) S.form._pay.sourceAmount = debt===null?'':String(debt);
           else {
             S.form._pay.rate = Finance.suggestRate(fromW.currency, target.currency);
-            const rate = S.form._pay.rate || 1;
+            const rate = S.form._pay.rate;
+            if(debt===null||!(rate>0)){S.form._pay.sourceAmount='';renderPaySheet();return;}
             S.form._pay.sourceAmount = String(Math.round((debt / rate) * 100) / 100);
           }
         }
@@ -8869,6 +8876,7 @@ const SanadBankInbox = {
   reasonLabel(reason){
     return {
       'unrecognized':'صيغة الرسالة غير معروفة',
+      'outgoing-destination-unconfirmed':'الخصم لا يثبت أن الوجهة خارج حساباتك — حدّد ملكية الحساب المستفيد',
       'incoming-origin-unconfirmed':'وصول المبلغ لا يثبت أنه دخل خارجي — حدّد إن كان من حساباتك أو دخلاً من خارجها',
       'possible-bank-duplicate':'قد تكون العملية مؤكدة بالفعل برسالة — راجع السجل قبل إضافة حركة أخرى',
       'possible-manual-duplicate':'قد تؤكد الرسالة عملية يدوية أو طرف تحويل موجود — راجع السجل قبل الإضافة',
@@ -9415,6 +9423,7 @@ const SanadBankInbox = {
         '<div class="field"><label>نوع العملية</label><select id="bankFixKind">'+kindOpts+'</select></div>'+
         pairHtml+
         manualLinkHtml+
+        (p.kind==='outgoing_transfer'?'<div class="field"><label><input id="bankFixExternalDestination" type="checkbox"> أؤكد أن الوجهة خارج حساباتي، وليست نقلاً بين أموالي</label><div class="field-hint">اسم المستفيد لا يثبت ملكية الحساب. إذا كان حساباً تملكه، اختر تحويل بين حساباتي وحدد الوجهتين. التأكيد لهذه الحركة فقط.</div></div>':'')+
         (['deposit','incoming_transfer'].includes(p.kind)?'<div class="field"><label><input id="bankFixExternalIncome" type="checkbox"> أؤكد أن هذه الحركة دخل من خارج حساباتي، وليست تحويلًا بين أموالي</label><div class="field-hint">إذا كانت من حساب آخر تملكه، اختر تحويل بين حساباتي وحدد المصدر والوجهة. هذا التأكيد لهذه الحركة فقط.</div></div>':'')+
         '<div class="field"><label>المبلغ</label><input id="bankFixAmount" type="number" inputmode="decimal" step="0.01" value="'+esc(String(p.amount||''))+'"></div>'+
         '<div class="field"><label>عملة المبلغ المسجل في الحساب</label><select id="bankFixCurrency">'+curOpts+'</select><div class="field-hint">للشراء بعملة أجنبية: أدخل مبلغ الخصم المؤكد وعملته من كشف الحساب؛ لا تحول العملة بالاسم فقط أو تستنتج سعر الصرف من فرق الرصيد.</div></div>'+
@@ -9491,6 +9500,7 @@ const SanadBankInbox = {
       if(!(document.getElementById('bankFixExternalIncome')||{}).checked){toast(this.reasonLabel('incoming-origin-unconfirmed'));return;}
       buildOptions.confirmedIncomingOrigin='external-income';
     }
+    if(kind==='outgoing_transfer'){if(!document.getElementById('bankFixExternalDestination')?.checked){toast('وجهة التحويل غير مؤكدة؛ حدد هل هي خارج حساباتك');return;}buildOptions.confirmedOutgoingDestination='external';}
     if(feeInput!=='')buildOptions.confirmedFee=Number(feeInput);
     const pairId=String((document.getElementById('bankFixPair')||{}).value||'');
     if(pairId&&kind!=='internal_transfer'){toast('اختر تحويل بين حساباتي للربط بالطرف المحفوظ');return;}

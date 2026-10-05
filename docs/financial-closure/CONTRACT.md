@@ -27,3 +27,15 @@ An available balance is an observation, never a certified opening ledger balance
 Opening confirmation means the value immediately before the first recorded transaction. It requires the explicit account/card form checkbox, preserves original bank observations, and does not generate a balancing adjustment. Unknown balances cannot be settled, hidden by archiving, used as sufficient prepaid funds, or summed as zero in country totals. Confirmation is not evidence of complete historical coverage.
 
 Ledger terms and totals use bounded integer minor units with currency-specific precision. Supported precision table is explicit; invalid precision, currency contradictions and cumulative overflow block changed financial writes before safety snapshot/durable write. Mixed currencies have no implicit exchange rate. Unknown FX suggestions return null. UI/manual conversion and full report calculations require their own separate validation and are not certified by this ledger change.
+
+
+## Report and FX amendment (9.2.6)
+
+Confirmed purchase refunds offset net spending and do not create external income or duplicate repayment expense. Without a confirmed original-purchase link their category is shown separately; no original category is guessed. Per-currency report totals use exact minor units. Mixed-currency charts require a single currency selection; unknown currency never defaults to AED in transfer totals.
+
+Generic outgoing transfer messages require per-event external-destination confirmation, including named beneficiaries. Learned corrections cannot convert unknown ownership into certainty for future messages. Two owned legs remain an internal transfer after explicit confirmation.
+
+Foreign-currency writes use declared user rates or explicit user-reported source/received amounts. Static rates with no source and old primitive stored rate values are not offered as known rates. Conversion uses an integer rational rate and half-away-from-zero rounding to the target currency unit; precision and cumulative limits apply before durable write. The posting UI supports AED/EGP/USD/EUR/SAR/MAD. Other currencies may be extracted but are review-only at import. Unsupported backup account currency is preserved and rejected by strict validation rather than silently relabeled.
+
+
+Historical generic imported income/outgoing principal with unconfirmed ownership contributes an unknown report total, with its unchanged recorded amount and transaction ID available for review. This is a presentation of uncertainty, not a silent ledger reclassification. Explicit per-event user confirmation adds provenance without changing the principal or transaction identity. Imported purchase refunds retain their separate meaning.

@@ -67,6 +67,10 @@ function ingest(state,event){
     const built=Message.buildTransaction(parsed,Message.resolveRoute(parsed,state),{uid,confirmedIncomingOrigin:'external-income'});
     assert.strictEqual(built.ok,true);plan={action:'auto-save',transaction:built.transaction,observations:[{accountId:built.transaction.accountId,observedBalance:parsed.availableBalance,observedBalanceAt:parsed.postedAt}]};
   }
+  if(parsed.kind==='outgoing_transfer'){
+    assert.strictEqual(plan.reason,'outgoing-destination-unconfirmed');
+    const built=Message.buildTransaction(parsed,Message.resolveRoute(parsed,state),{uid,confirmedOutgoingDestination:'external'});assert.strictEqual(built.ok,true);plan={action:'auto-save',transaction:built.transaction};
+  }
   assert.strictEqual(plan.action,'auto-save',event.id+' plan '+plan.reason);
   assert.strictEqual(Ingest.applyPlan(state,plan),true,event.id+' apply');
   strict(state,event.id+' strict');
@@ -105,8 +109,7 @@ function ingest(state,event){
   assert.strictEqual(state.transactions.length,5);
   assert.strictEqual(state.paymentInstruments.length,1);
   assert.strictEqual(state.paymentInstruments[0].last4,'7105');
-  assert.strictEqual(state.beneficiaries.length,1);
-  assert.strictEqual(state.beneficiaries[0].name,'Ahmed Ali');
+  assert.strictEqual(state.beneficiaries.length,0);assert.ok(state.transactions.some(t=>t.type==='external_transfer'&&t.note.includes('Ahmed Ali')));
 
   const duplicate=fixtureParse({id:'different-notification-id',postedAt:6000,text:"Hello Test User, You've received AED 50.00 to your du Pay wallet. Your available balance is now AED 750.40, and the transaction ID is: SEQ-DEPOSIT-2"});
   const dupPlan=Ingest.plan(duplicate,state,{uid});

@@ -73,7 +73,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.match(await page.locator('#app').innerText(),/غير معروف|غير مؤكد/);
  await page.evaluate(id=>openAccountSheet(id),bankId);
  await page.locator('#wBalance').fill('1.66');await page.locator('#wOpeningKnown').check();
- await page.locator('[data-act="save-account"]').click();await page.waitForFunction(()=>!_criticalMutationInFlight);
+ await page.locator('[data-act="save-account"]').click();await page.waitForFunction(id=>S.accounts.find(a=>a.id===id)?.openingBalanceKnown===true&&S.accounts.find(a=>a.id===id)?.openingBalance===1.66&&!_criticalMutationInFlight,bankId);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),9101.66);
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
  await page.waitForFunction(()=>!SanadBankInbox._recentStarting&&!SanadBankInbox.historicalImporting);
@@ -200,6 +200,34 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(()=>SanadBankInbox.lastRecentImport.fromDate),expandedFloor);
  record('Failed expanded range retries from the saved start without inheriting old coverage');
 
+ const beforeOutgoing=await page.evaluate(()=>S.transactions.length);
+ await page.evaluate(()=>{window.__qaRows=[{id:'qa-outgoing-origin',title:'EmiratesNBD',packageName:'sms:ENBD',postedAt:Date.now()-1000,text:'تم خصم مبلغ AED 37.35 من حسابك 012XXX50XXX01 لتحويل الاموال'}];});
+ await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeOutgoing);
+ await page.evaluate(()=>SanadBankInbox.openCorrection('qa-outgoing-origin'));
+ await page.locator('[data-sanad-act="bank-fix-save"]').click();assert.equal(await page.evaluate(()=>S.transactions.length),beforeOutgoing);
+ await page.locator('#bankFixExternalDestination').check();await page.locator('[data-sanad-act="bank-fix-save"]').click();
+ await page.waitForFunction(n=>S.transactions.length===n+1&&!_criticalMutationInFlight,beforeOutgoing);
+ assert.equal(await page.evaluate(()=>S.transactions.find(t=>t.bankImportEventId==='qa-outgoing-origin').economicOrigin.kind),'external-destination');
+ await page.evaluate(()=>closeSheet());await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeOutgoing+1);
+ record('Outgoing direction needs per-event destination ownership confirmation and posts once');
+ const legacyReview=await page.evaluate(async()=>{
+   const t=S.transactions.find(t=>t.bankImportEventId==='qa-deposit'),before={id:t.id,amount:t.amount,count:S.transactions.length};
+   const result=await commitCriticalMutation(()=>{delete t.economicOrigin;return true;});if(!result.ok)throw Error('legacy fixture mutation failed');return before;
+ });
+ await page.evaluate(()=>go('rep'));
+ assert.equal(await page.evaluate(()=>Finance.buildReportDataset({country:'UAE',period:'month',currency:'AED',month:isoToday().slice(0,7)}).incomeByCur.AED),null);
+ assert.match(await page.locator('#view').innerText(),/إجماليات التقرير غير مؤكدة/);
+ await page.evaluate(id=>openEditTx(id),legacyReview.id);
+ await page.locator('#txExternalOriginConfirmed').check();await page.locator('[data-act="save-tx"]').click();
+ await page.waitForFunction(id=>S.transactions.find(t=>t.id===id)?.economicOrigin?.kind==='external-income'&&!_criticalMutationInFlight,legacyReview.id);
+ assert.equal(await page.evaluate(()=>S.transactions.length),legacyReview.count);assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).amount,legacyReview.id),legacyReview.amount);
+ record('Legacy origin uncertainty is visible; user confirmation preserves transaction ID, count and principal');
+ const beforeFx=await page.evaluate(()=>S.transactions.length);
+ await page.evaluate(id=>{openNewTx('expense');S.form.source={type:'account',id,accountId:id};S.form.currency='USD';S.form.amount='0.01';renderTxSheet();},bankId);
+ await page.locator('#fxRateIn').fill('1.5');await page.locator('[data-act="save-tx"]').click();
+ await page.waitForFunction(n=>S.transactions.length===n+1&&!_criticalMutationInFlight,beforeFx);
+ const fxSaved=await page.evaluate(()=>S.transactions.at(-1));assert.equal(fxSaved.walletAmount,0.02);assert.equal(fxSaved.fxRateSource,'user-entry');assert.equal(fxSaved.currency,'USD');
+ record('Actual foreign-currency expense uses exact declared FX and target minor-unit rounding');
  assert.deepEqual(errors,[]);record('No JavaScript runtime or console errors');
  fs.writeFileSync(path.join(output,'results.json'),JSON.stringify({status:'PASS',environment:'Chromium/Linux; Android bridge simulated; synthetic data only',results,errors},null,2));
 })().catch(async e=>{

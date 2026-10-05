@@ -478,8 +478,10 @@
     if(!Number.isFinite(fee)||fee<0)return {ok:false,reason:'invalid-confirmed-fee'};
     if(fee>0&&!['purchase','bill_payment','mobile_recharge','outgoing_transfer','internal_transfer','card_repayment','cash_withdrawal'].includes(parsed.kind))return {ok:false,reason:'fee-direction-review-required'};
     if(parsed.reviewReason&&!(parsed.reviewReason==='ambiguous-date'&&/^\d{4}-\d{2}-\d{2}$/.test(opts.date||'')))return {ok:false,reason:parsed.reviewReason};
+    if(parsed.kind==='outgoing_transfer'&&opts.confirmedOutgoingDestination!=='external')return {ok:false,reason:'outgoing-destination-unconfirmed'};
     const money=Money.ledgerValue(parsed.amount,parsed.currency);if(!money.ok||Number(parsed.amount)<=0)return {ok:false,reason:money.reason||'invalid-amount'};
     const built=buildTransactionBase(parsed,route,options);
+    if(built.ok&&built.transaction&&parsed.kind==='outgoing_transfer')built.transaction.economicOrigin={kind:'external-destination',source:'user-confirmation',eventId:parsed.eventId||null};
     if(built.ok&&built.transaction&&['deposit','incoming_transfer'].includes(parsed.kind))built.transaction.economicOrigin={kind:'external-income',source:'user-confirmation',eventId:parsed.eventId||null};
     if(built.ok&&built.transaction&&feeConfirmed){
       const tx=built.transaction;

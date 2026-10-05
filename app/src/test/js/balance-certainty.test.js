@@ -46,5 +46,12 @@ test('prewrite precision, currency and aggregate bounds reject without false bal
  assert.equal(F.validateMoneyChanges(state(asset({openingBalance:0}),[{id:'x',type:'income',accountId:'a',currency:'USD',amount:1}]),before).reason,'transaction-currency-mismatch');
  assert.equal(F.validateMoneyChanges(state(asset({openingBalance:9999999999.99}),[{id:'x',type:'income',accountId:'a',amount:0.02}]),before).reason,'money-out-of-range');
 });
+test('FX conversion uses exact rational rates and explicit rounding',()=>{
+ assert.equal(M.convert(1.005,'USD','AED','1').value,undefined); // source amount itself has invalid precision
+ assert.equal(M.convert(0.01,'USD','AED','1.5').value,0.02);
+ assert.equal(M.convert(1.001,'KWD','JPY','1000').value,1001);
+ assert.equal(M.convert(100,'USD','AED','3.67').value,367);
+ assert.equal(M.convert(100,'USD','AED',null).ok,false);
+});
 let failed=0;for(const [name,fn]of cases){try{fn();console.log('PASS '+name);}catch(e){failed++;console.error('FAIL '+name+': '+e.message);}}
 if(failed)process.exitCode=1;

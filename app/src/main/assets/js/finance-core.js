@@ -80,11 +80,24 @@
       const ids=[t.accountId,t.fromAccountId,t.toAccountId].filter(Boolean);ids.forEach(id=>touched.add(id));
       if(t.accountId){
         const a=getAccount(candidate,t.accountId);if(!a)return reject('transaction-account-required');
+        if(t.type==='income'&&isLiabilityAccount(a)&&!(t.financialEvent==='purchase-refund'||t.bankImportEvidence&&t.bankImportEvidence.kind==='refund'))return reject('liability-income-review');
         const wallet=t.walletAmount!==null&&t.walletAmount!==undefined;
         if((t.walletCurrency&&t.walletCurrency!==a.currency)||(!wallet&&t.currency&&t.currency!==a.currency))return reject('transaction-currency-mismatch');
         let error=check(wallet?t.walletAmount:t.amount,a.currency);if(error)return error;
         if(t.amount!=null){error=check(t.amount,t.currency||a.currency);if(error)return error;}
-        if(t.currency&&t.currency!==a.currency&&(!wallet||!(Number(t.fxRate)>0)))return reject('transaction-fx-required');
+        if(t.currency&&t.currency!==a.currency){
+          if(!wallet||!(Number(t.fxRate)>0)||t.fxRateSource!=='user-entry')return reject('transaction-fx-required');
+          const converted=Money.convert(t.amount,t.currency,a.currency,t.fxRate);if(!converted.ok)return reject(converted.reason);
+          if(Money.decimal(t.walletAmount,a.currency).minorUnits!==converted.minorUnits)return reject('transaction-fx-amount-mismatch');
+        }
+      }
+      if(t.type==='transfer'&&t.fromCurrency&&t.toCurrency&&t.fromCurrency!==t.toCurrency){
+        if(!['user-entry','user-received-amounts'].includes(t.fxRateSource))return reject('transaction-fx-required');
+        if(t.fxRateSource==='user-entry'){
+        const converted=Money.convert(t.fromAmount,t.fromCurrency,t.toCurrency,t.fxRate);if(!converted.ok)return reject(converted.reason);
+        const received=Money.decimal(t.toAmount,t.toCurrency);if(!received.ok)return reject(received.reason);
+        if(received.minorUnits!==converted.minorUnits)return reject('transaction-fx-amount-mismatch');
+        }
       }
       for(const side of ['from','to']){
         const a=getAccount(candidate,t[side+'AccountId']);if(!a)continue;
@@ -164,7 +177,7 @@
     if(!a||a.type!=='credit'||!openingKnown(a))return null;
     const limit=num(a.creditLimit);
     if(limit<=0)return null;
-    return Math.max(0,round2(limit-accountDebt(state,accountId)));
+    const total=Money.sum([limit,-accountDebt(state,accountId)],a.currency);return total.ok?Math.max(0,total.value):null;
   }
 
   function creditAvailable(state,accountId){
@@ -173,7 +186,7 @@
     const value=a.observedAvailableCredit,at=Number(a.observedAvailableCreditAt)||0;
     const known=value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value));
     const later=(state&&Array.isArray(state.transactions)?state.transactions:[]).some(t=>t&&(t.accountId===accountId||t.fromAccountId===accountId||t.toAccountId===accountId)&&Number(t.created)>at);
-    if(known&&at>0&&!later)return round2(value);
+    if(known&&at>0&&!later){const observed=Money.decimal(value,a.currency);return observed.ok?observed.value:null;}
     return creditAvailableCalculated(state,accountId);
   }
 
@@ -210,14 +223,10 @@
     return null;
   }
 
-  function suggestRate(fromCur,toCur,lastFx,defaultFx){
+  function suggestRate(fromCur,toCur,lastFx){
     if(fromCur===toCur)return 1;
-    const saved=lastFx&&num(lastFx[fromCur+'_'+toCur]);
-    if(saved>0)return saved;
-    const direct=defaultFx&&num(defaultFx[fromCur+'_'+toCur]);
-    if(direct>0)return direct;
-    const inverse=defaultFx&&num(defaultFx[toCur+'_'+fromCur]);
-    if(inverse>0)return Math.round((1/inverse)*10000)/10000;
+    const saved=lastFx&&lastFx[fromCur+'_'+toCur];
+    if(saved&&typeof saved==='object'&&saved.source==='user-entry'&&Number(saved.recordedAt)>0&&num(saved.rate)>0)return Number(saved.rate);
     return null;
   }
 
