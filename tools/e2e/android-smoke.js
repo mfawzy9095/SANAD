@@ -77,7 +77,7 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bank.id),9101.66);
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),2);pass('Native SMS provider, paged bridge callback, salary/deposit import, balance and deduplication');
  const before=await page.evaluate(()=>stateFingerprint(snapshotState()));
- await page.reload();await page.waitForFunction(()=>S.ready&&SanadV9.initialized);
+ await page.reload();await page.waitForFunction(()=>typeof S!=='undefined'&&S.ready&&typeof SanadV9!=='undefined'&&SanadV9.initialized);
  assert.equal(await page.evaluate(()=>stateFingerprint(snapshotState())),before);pass('Android WebView restart preserves financial state exactly');
  await page.evaluate(()=>openNewTx('expense'));await page.locator('#amountIn').fill('25');await page.locator('[data-act="save-tx"]').click();
  await page.waitForFunction(()=>S.transactions.length===3&&!_financialFlowInFlight);
