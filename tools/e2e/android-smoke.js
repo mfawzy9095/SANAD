@@ -41,8 +41,12 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  assert.equal(await page.evaluate(()=>S.transactions.length),0);
  assert(await page.evaluate(()=>SanadBankInbox.items.length>=2));
  pass('Unknown numeric SMS sender cannot impersonate bank body');
- // The emulator provider is controlled test data: explicitly set sender metadata.
- adb('shell','content','update','--uri','content://sms','--bind','address:s:EmiratesNBD','--where',"address='15551234567'");
+ // Use fresh native evidence after the previous scan checkpoint. Changing an old
+ // provider row must not silently reinterpret the already retained review evidence.
+ adb('emu','sms','send','15557654321','تم ايداع الراتب AED 9,000.00 في حسابك .012XXX50XXX01 OBP TR REF QANATIVESALARY01. الرصيد المتوفر هو AED 9,001.66');
+ adb('emu','sms','send','15557654321','تم ايداع AED 100.00 في حسابك 012XXX50XXX01 OBP TR REF QANATIVEDEPOSIT01. الرصيد المتوفر هو AED 9,101.66');
+ for(let n=0;n<30;n++){const rows=adb('shell','content','query','--uri','content://sms/inbox','--projection','_id:body');if(rows.includes('QANATIVESALARY01')&&rows.includes('QANATIVEDEPOSIT01'))break;await new Promise(r=>setTimeout(r,1000));}
+ adb('shell','content','update','--uri','content://sms','--bind','address:s:EmiratesNBD','--where',"address='15557654321'");
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
  const result=await page.evaluate(()=>({last:SanadBankInbox.lastRecentImport,transactions:S.transactions,accounts:S.accounts}));
  assert.equal(result.last.status,'complete');assert.equal(result.transactions.length,2);
