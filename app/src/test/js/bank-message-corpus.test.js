@@ -129,3 +129,12 @@ assert.strictEqual(gold.kind,'investment_sale');assert.strictEqual(gold.amount,n
  const p=M.parse(e);assert.equal(p.transactionDate,'2025-12-01','Egypt bank day/month contract must extract a valid explicit date');assert.notEqual(p.reviewReason,'invalid-operation-date');
  assert.equal(M.parse({...e,text:e.text.replace('01/12/2025','31/02/2025')}).reviewReason,'invalid-operation-date');
 }
+{
+ const M=require('../../main/assets/js/bank-message-core'),I=require('../../main/assets/js/bank-ingestion-core');
+ for(const merchant of ['E AND MONEY,Abu Dhabi','e& money,Dubai','du Pay']){
+  const p=M.parse({id:'wallet-merchant-'+merchant,title:'EmiratesNBD',postedAt:1791010000000,text:`تمت عملية شراء في AED 63.25 ${merchant} على البطاقة 8234 الائتمان المتوفر AED 1000.00`});
+  assert.equal(p.reviewReason,'wallet-funding-purpose-unconfirmed','card acquisition wording does not prove consumption');
+  assert.equal(I.plan(p,{institutions:[],accounts:[],paymentInstruments:[],transactions:[]}).action,'review');
+ }
+ const ordinary=M.parse({title:'EmiratesNBD',text:'تمت عملية شراء في AED 63.25 DU Google Payment,Dubai على البطاقة 8234 الائتمان المتوفر AED 1000.00'});assert.equal(ordinary.kind,'purchase');assert.equal(ordinary.reviewReason,undefined);
+}
