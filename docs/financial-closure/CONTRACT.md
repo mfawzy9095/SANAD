@@ -50,3 +50,5 @@ Confirming an opening balance does not resolve the ownership of historical impor
 
 
 Report origin confirmation must refer to the same captured event, including older records represented only by their import key. A purchase with confirmed fee components contributes its principal and fee exactly once in separate report categories; inconsistent components remain unknown/review.
+
+A copy-only repair quarantine adds a durable review hold keyed by its original event ID. Restores/rescans and parser updates cannot auto-post it. Only an explicit user correction/link or dismissal clears that hold in the same financial mutation; diagnostics show the hold rather than an obsolete saved decision.

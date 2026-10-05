@@ -8894,6 +8894,7 @@ const SanadBankInbox = {
       'refund-instrument-required':'استرداد يحتاج ربط البطاقة المذكورة بالرسالة',
       'refund-balance-review':'رسالة استرداد برصيد أقل من السابق — تحتاج مراجعة التسوية',
       'balance-source-required':'رصيد مؤكد يحتاج تحديد المحفظة',
+      'repair-destination-unconfirmed':'عملية معزولة في نسخة الإصلاح — حدد الحساب وأكد التصحيح',
       'possible-duplicate':'عملية مشابهة تحتاج مقارنة مرجع الرسالة والرصيد قبل الحفظ',
       'low-confidence':'يحتاج تأكيد نوع العملية',
       'route-confidence-low':'ربط المصدر غير مؤكد',
@@ -8977,6 +8978,7 @@ const SanadBankInbox = {
     if(!plan||!['auto-save','observe'].includes(plan.action))return {ok:false,reason:(plan&&plan.reason)||'not-auto-save'};
     let reconciliation={warning:false};
     const result=await commitCriticalMutation(async()=>{
+      if(BankIngestionCore.reviewHold(S,parsed.eventId))return false;
       if(BankIngestionCore.eventDecision(S,String(parsed.eventId)))return true;
       const existing=BankIngestionCore.duplicateOf(parsed,S);if(existing){BankIngestionCore.rememberEventDecision(S,String(parsed.eventId),'duplicate',Date.now(),existing.id);return true;}
       const applied=BankIngestionCore.applyPlan(S,plan);
@@ -9030,7 +9032,7 @@ const SanadBankInbox = {
         const parsed=BankMessageCore.parse(n)||{recognized:false,reason:'unrecognized'};
         const evidence={id:n.id,sender:n.title,postedAt:n.postedAt,text:n.text,source:n.packageName,at:Date.now(),stage:'posting'};
         const record=(action,reason,tx)=>decisions.push(Object.assign({},evidence,{action,reason,transactionId:tx&&tx.id||null,parsed:{recognized:!!parsed.recognized,kind:parsed.kind||null,amount:parsed.amount,currency:parsed.currency,bankId:parsed.bankId,providerId:parsed.providerId,transactionRef:parsed.transactionRef}}));
-        if(parsed&&parsed.ignored){record('ignored',parsed.reason);terminal.push({id:String(n.id),action:'ignored'});ackIds.push(n.id);summary.ignored++;continue;}
+        if(parsed&&parsed.ignored&&!BankIngestionCore.reviewHold(S,n.id)){record('ignored',parsed.reason);terminal.push({id:String(n.id),action:'ignored'});ackIds.push(n.id);summary.ignored++;continue;}
         if(!parsed||!parsed.recognized){
           reviews.push({native:n,parsed:parsed||{recognized:false,reason:'unrecognized'},route:null,plan:{action:'review',reason:(parsed&&parsed.reason)||'unrecognized'}});
           record('review',parsed&&parsed.reason||'unrecognized');summary.review++;summary.reviewIds.push(String(n.id));
@@ -9369,7 +9371,7 @@ const SanadBankInbox = {
   },
   canManualApprove(item){
     if(!item||!item.parsed||!item.parsed.recognized)return false;
-    if(item.plan&&['possible-own-transfer','possible-manual-duplicate','possible-duplicate','incoming-origin-unconfirmed'].includes(item.plan.reason))return false;
+    if(item.plan&&['possible-own-transfer','possible-manual-duplicate','possible-duplicate','incoming-origin-unconfirmed','repair-destination-unconfirmed'].includes(item.plan.reason))return false;
     if(item.plan&&item.plan.action==='auto-save')return true;
     const r=BankMessageCore.resolveRoute(item.parsed,S);
     if(!r||r.status!=='routed')return false;
@@ -9572,7 +9574,7 @@ const SanadBankInbox = {
     const parsed=item.parsed;
     let plan=BankIngestionCore.plan(parsed,S,{uid});
     if(plan.action==='duplicate'){await this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
-    if(['possible-own-transfer','possible-manual-duplicate','possible-duplicate','incoming-origin-unconfirmed'].includes(plan.reason)){this.openCorrection(id);return;}
+    if(['possible-own-transfer','possible-manual-duplicate','possible-duplicate','incoming-origin-unconfirmed','repair-destination-unconfirmed'].includes(plan.reason)){this.openCorrection(id);return;}
     if(['auto-save','observe'].includes(plan.action)){
       const saved=await this.commitPlan(parsed,plan);
       if(!saved.ok){render();toast('تعذر إضافة العملية — لم يتم تغيير البيانات');return;}

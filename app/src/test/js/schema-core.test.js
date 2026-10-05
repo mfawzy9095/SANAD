@@ -171,3 +171,10 @@ console.log('schema-core regression tests: PASS');
   console.log('Documented FX validation and restore: PASS');
 })();
 
+{
+ const s=Schema.migrate(emptyState());s.settings.bankReviewHolds={repair:{reason:'repair-destination-unconfirmed',at:1000,parserVersion:'9.2.7-financial-contract',decisionSource:'deterministic-contract'}};
+ assert.deepStrictEqual(Schema.validateStateStrict(s),[]);
+ assert.deepStrictEqual(Schema.migrate(JSON.parse(JSON.stringify(s))).settings.bankReviewHolds,s.settings.bankReviewHolds);
+ s.settings.bankReviewHolds.repair.reason='unknown';assert(Schema.validateStateStrict(s).some(e=>e.includes('مراجعة إصلاح')));
+ console.log('Repair review holds survive strict backup migration: PASS');
+}

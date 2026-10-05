@@ -887,6 +887,8 @@
   }
   function plan(parsed,state,options){
     const uid=idFactory(options);
+    const hold=parsed&&reviewHold(state,parsed.eventId);
+    if(hold)return {action:'review',reason:hold.reason,confidence:0};
     if(!parsed||!parsed.recognized)return {action:'review',reason:(parsed&&parsed.reason)||'unrecognized',confidence:0};
     if(!parsed.bankId&&!parsed.providerId&&!findCustomInstitutionByHint(state,parsed)&&!matchLearnedRule(parsed,state))return {action:'review',reason:'source-not-identified',confidence:0};
     if(parsed.kind==='balance_observation')return planBalanceObservation(parsed,state||{},uid);
@@ -1073,11 +1075,18 @@
     const decisions=state&&state.settings&&state.settings.bankEventDecisions;
     return decisions&&Object.prototype.hasOwnProperty.call(decisions,String(id))?decisions[String(id)]:null;
   }
+  function reviewHold(state,id){
+    const holds=state&&state.settings&&state.settings.bankReviewHolds;
+    return holds&&Object.prototype.hasOwnProperty.call(holds,String(id))?holds[String(id)]:null;
+  }
   function auditWithDurableDecisions(audit,state){
     const old=audit||{},rows=new Map(arr(old.rows).filter(r=>r&&r.id).map(r=>[String(r.id),clone(r)]));
     for(const [id,d] of Object.entries((state&&state.settings&&state.settings.bankEventDecisions)||{})){
       const row=rows.get(id)||{id};
       rows.set(id,Object.assign({},row,d,{durable:true,reason:row.action===d.action?row.reason:'durable-'+d.action}));
+    }
+    for(const [id,hold] of Object.entries((state&&state.settings&&state.settings.bankReviewHolds)||{})){
+      rows.set(id,Object.assign({},rows.get(id)||{id},hold,{action:'review',transactionId:null,durable:true}));
     }
     const combined=Array.from(rows.values()).sort((a,b)=>Number(a.at||0)-Number(b.at||0)),drop=Math.max(0,combined.length-1000);
     return Object.assign({},old,{version:2,limit:1000,rows:combined.slice(drop),omitted:Number(old.omitted||0)+drop,authority:'finance.settings.bankEventDecisions'});
@@ -1087,10 +1096,12 @@
     if(!['saved','observed','ignored','duplicate','dismissed'].includes(action)||!Number.isFinite(Number(at))||Number(at)<=0)throw Error('invalid-event-decision');
     const decisionSource=(options&&options.decisionSource)||(action==='dismissed'?'user-dismissal':'deterministic-contract');
     if(!['deterministic-contract','user-confirmation','user-dismissal'].includes(decisionSource))throw Error('invalid-decision-source');
+    if(reviewHold(state,id)&&decisionSource!=='user-confirmation'&&decisionSource!=='user-dismissal')throw Error('review-confirmation-required');
     const decisions=state.settings.bankEventDecisions||(state.settings.bankEventDecisions={});
     // Never evict decisions: an eviction could resurrect an old transaction.
     if(!Object.prototype.hasOwnProperty.call(decisions,id)&&Object.keys(decisions).length>=EVENT_DECISION_LIMIT)throw Error('event-decision-capacity');
     decisions[id]={action,at:Number(at),transactionId:transactionId||null,parserVersion:'9.2.7-financial-contract',decisionSource};
+    if(reviewHold(state,id))delete state.settings.bankReviewHolds[id];
     return true;
   }
   function compatibleScanCheckpoint(previous,floor){
@@ -1142,7 +1153,7 @@
   }
   return Object.freeze({
     manualImportCandidates,manualDuplicateCandidates,linkManualConfirmation,validateManualImportChanges,preserveImportAudit,auditWithDurableDecisions,
-    recentScanStart,compatibleScanCheckpoint,eventDecision,rememberEventDecision,EVENT_DECISION_LIMIT,transferCounterparts,pairOwnTransfer,
+    recentScanStart,compatibleScanCheckpoint,eventDecision,reviewHold,rememberEventDecision,EVENT_DECISION_LIMIT,transferCounterparts,pairOwnTransfer,
     autoEligible,duplicateOf,conflictingReferenceOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
   });
 });

@@ -600,6 +600,13 @@
           if(!id||id.length>240||['__proto__','constructor','prototype'].includes(id)||!row||!['saved','observed','ignored','duplicate','dismissed'].includes(row.action)||!Number.isSafeInteger(row.at)||row.at<=0||(row.transactionId!=null&&typeof row.transactionId!=='string')){push('قرار رسالة غير صالح');break;}
         }
       }
+      const holds=state.settings.bankReviewHolds;
+      if(holds!=null){
+        if(typeof holds!=='object'||Array.isArray(holds)||Object.keys(holds).length>50000)push('حالات مراجعة الإصلاح غير صالحة');
+        else for(const [id,row] of Object.entries(holds)){
+          if(!id||id.length>240||['__proto__','constructor','prototype'].includes(id)||!row||row.reason!=='repair-destination-unconfirmed'||!Number.isSafeInteger(row.at)||row.at<=0||row.decisionSource!=='deterministic-contract'||typeof row.parserVersion!=='string'){push('حالة مراجعة إصلاح غير صالحة');break;}
+        }
+      }
     }
 
     const countries = new Set(Object.keys(COUNTRIES));

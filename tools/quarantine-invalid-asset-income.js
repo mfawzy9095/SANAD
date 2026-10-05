@@ -27,6 +27,11 @@ function apply(bytes,plan){
   b.finance.transactions=b.finance.transactions.filter(t=>t.id!==p.id);
   const decisions=b.finance.settings.bankEventDecisions||{};
   for(const [id,d] of Object.entries(decisions)){if(id===p.eventId||d.transactionId===p.id)delete decisions[id];}
+  assert(typeof p.eventId==='string'&&p.eventId.length<=240&&!['__proto__','constructor','prototype'].includes(p.eventId),'invalid-review-event');
+  const holds=b.finance.settings.bankReviewHolds||(b.finance.settings.bankReviewHolds={});
+  assert(typeof holds==='object'&&!Array.isArray(holds),'invalid-review-holds');
+  assert(Object.prototype.hasOwnProperty.call(holds,p.eventId)||Object.keys(holds).length<50000,'review-hold-capacity');
+  holds[p.eventId]={reason:'repair-destination-unconfirmed',at:Date.now(),parserVersion:'9.2.7-financial-contract',decisionSource:'deterministic-contract'};
   const native={id:p.eventId,postedAt:Number(t.smsReceivedAt||t.created),text:t.bankImportEvidence.text,packageName:'repair:'+String(t.bankId||t.providerId||'unknown'),title:t.bankImportEvidence.sourceHint||'',repairReason:p.reason,repairTransactionId:p.id};
   if(!audit.smsReviewEvents.some(e=>e.id===native.id))audit.smsReviewEvents.push(native);
   // Remove the misrouted bank-balance observation only if it is proven to come from this evidence.
