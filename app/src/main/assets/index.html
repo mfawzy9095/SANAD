@@ -1024,7 +1024,7 @@ const Schema = SchemaCore.createSchema({
 const PersistenceService = PersistenceCore.createPersistenceService({
   storage: Storage,
   validateState: st => Schema.validateStateStrict(st),
-  validateChanges: (next,before) => BankIngestionCore.validateManualImportChanges(next,before),
+  validateChanges: (next,before) => _dataReplacementInFlight ? null : BankIngestionCore.validateManualImportChanges(next,before),
   fingerprint: stateFingerprint,
   onRecovery: enterRecoveryMode,
   logError: (...args) => console.error(...args)
@@ -8612,7 +8612,7 @@ const SanadFullBackup = {
       family:SanadFamily.state,
       syncMeta:Object.assign({},SanadCloud.meta,{dirty:true}),
       firebaseConfig:SanadCloud.config||null,
-      bankImportAudit:{version:1,parserVersion:'9.2.5-financial-contract',configuredStartAt:SanadBankInbox.configuredSmsStart(),decisions:await SanadExtStorage.get('bankDecisionAudit',null),smsReviewEvents:SanadBankInbox.smsReviewEvents,pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
+      bankImportAudit:{version:1,parserVersion:'9.2.5-financial-contract',configuredStartAt:SanadBankInbox.configuredSmsStart(),decisions:BankIngestionCore.auditWithDurableDecisions(await SanadExtStorage.get('bankDecisionAudit',null),S),smsReviewEvents:SanadBankInbox.smsReviewEvents,pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
     };
     if(diagnostic)features.diagnosticReport={version:1,generatedAt:new Date().toISOString(),appVersion:APP_VERSION,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,clock:Date.now(),smsPermission:SanadBankInbox.historicalPermission(),native:SanadBankInbox.diagnostics(),import:features.bankImportAudit,counts:{accounts:state.accounts.length,transactions:state.transactions.length,receipts:packed.length},note:'Local export; financial source messages included. Decision log retains the latest 1000 records; omitted count is explicit. Operation time and SMS arrival time are separate.'};
     delete features.syncMeta.receiptDirty;
@@ -9397,7 +9397,7 @@ const SanadBankInbox = {
     openSheet(
       '<div class="sheet-head"><button type="button" class="close" data-sanad-act="bank-inbox"><span>‹</span></button><h2>تعديل وربط العملية</h2><div style="width:36px"></div></div>'+
       '<div class="sheet-body">'+
-        '<div class="help-box"><span class="hi">🧠</span><div class="ht"><b>صححها مرة</b>SANAD سيحفظ ربطًا محليًا لنفس مصدر وشكل الرسالة، بدون إرسال SMS لأي خادم.</div></div>'+
+        '<div class="help-box"><span class="hi">🧠</span><div class="ht"><b>صححها مرة</b>يُحفظ قرار هذه الحركة؛ تذكّر هوية الحساب محدود بالمصدر، ولا يعمّم تأكيد الدخل على الرسائل التالية.</div></div>'+
         '<div class="field"><label>نوع العملية</label><select id="bankFixKind">'+kindOpts+'</select></div>'+
         pairHtml+
         manualLinkHtml+
@@ -9410,7 +9410,7 @@ const SanadBankInbox = {
         '<div class="field"><label>حساب الوجهة (للتحويل بين حساباتك / سداد بطاقة / سحب كاش)</label><select id="bankFixTarget">'+this.correctionTargetOptions(p,target)+'</select></div>'+
         '<div class="field"><label>التاجر / الشخص / الوصف</label><input id="bankFixParty" type="text" maxlength="100" value="'+esc(counterparty)+'"></div>'+
         '<div class="field"><label>الفئة للمصروف</label><select id="bankFixCategory">'+catOpts+'</select></div>'+
-        '<button type="button" class="btn primary" data-sanad-act="bank-fix-save" data-id="'+esc(id)+'">حفظ العملية وتعلّم هذا النمط</button>'+
+        '<button type="button" class="btn primary" data-sanad-act="bank-fix-save" data-id="'+esc(id)+'">حفظ القرار لهذه الحركة</button>'+
       '</div>','bank-review-fix'
     );
   },

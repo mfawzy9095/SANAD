@@ -152,9 +152,17 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
 
  await page.evaluate(()=>{window.__qaRows.push({id:'qa-after-scan',title:'Emirates NBD',packageName:'sms:ENBD',postedAt:Date.now(),text:'لقد تم ايداع AED 10.00 في رقم حسابك 012XXX50XXX01 OBP TR REF QAAFTERSCAN01. الرصيد المتوفر هو AED 9,031.66'});});
  const beforeRecent=await page.evaluate(()=>S.transactions.length);
+ await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeRecent);
+ await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeRecent);
+ assert.equal(await page.evaluate(()=>SanadBankInbox.smsReviewEvents.filter(r=>r.id==='qa-after-scan').length),1,'Repeated import retains one unresolved review');
+ await page.evaluate(()=>SanadBankInbox.openCorrection('qa-after-scan'));
+ await page.locator('#bankFixExternalIncome').check();
+ await page.locator('[data-sanad-act="bank-fix-save"]').click();
+ await page.waitForFunction(n=>S.transactions.length===n+1&&!_criticalMutationInFlight,beforeRecent);
+ await page.evaluate(()=>closeSheet());
+
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeRecent+1);
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeRecent+1);
- record('New message after successful checkpoint is imported once despite 200 stale pending events');
+ record('New unresolved inbound remains one review across repeats, then posts once after origin confirmation');
  await page.evaluate(()=>go('settings'));
  const diagnosticDownload=page.waitForEvent('download');await page.locator('[data-sanad-act="bank-support-export"]').click();
  const diagnostic=await diagnosticDownload,diagnosticPath=path.join(output,'synthetic-diagnostic-backup.json');await diagnostic.saveAs(diagnosticPath);

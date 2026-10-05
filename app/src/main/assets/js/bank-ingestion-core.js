@@ -206,9 +206,11 @@
   }
   function validateManualImportChanges(candidate,before){
     const previous=new Map(arr(before&&before.transactions).map(t=>[t.id,t]));
+    const financialFields=['type','accountId','fromAccountId','toAccountId','amount','walletAmount','fromAmount','toAmount','currency','fromCurrency','toCurrency','fee','created','date','transactionTime'];
     for(const t of arr(candidate&&candidate.transactions)){
       const old=previous.get(t.id);
-      if(hasImportEvidence(t)||(old&&JSON.stringify(old)===JSON.stringify(t)))continue;
+      if(old&&hasImportEvidence(old)&&!hasImportEvidence(t))return {reason:'import-evidence-loss',transactionId:t.id};
+      if(hasImportEvidence(t)||(old&&financialFields.every(k=>old[k]===t[k])&&JSON.stringify(old.manualImportResolution)===JSON.stringify(t.manualImportResolution)))continue;
       const ids=manualImportCandidates(t,candidate).map(x=>x.id).sort();
       if(!ids.length)continue;
       const approval=t.manualImportResolution;
@@ -1044,6 +1046,15 @@
     const decisions=state&&state.settings&&state.settings.bankEventDecisions;
     return decisions&&Object.prototype.hasOwnProperty.call(decisions,String(id))?decisions[String(id)]:null;
   }
+  function auditWithDurableDecisions(audit,state){
+    const old=audit||{},rows=new Map(arr(old.rows).filter(r=>r&&r.id).map(r=>[String(r.id),clone(r)]));
+    for(const [id,d] of Object.entries((state&&state.settings&&state.settings.bankEventDecisions)||{})){
+      const row=rows.get(id)||{id};
+      rows.set(id,Object.assign({},row,d,{durable:true,reason:row.action===d.action?row.reason:'durable-'+d.action}));
+    }
+    const combined=Array.from(rows.values()).sort((a,b)=>Number(a.at||0)-Number(b.at||0)),drop=Math.max(0,combined.length-1000);
+    return Object.assign({},old,{version:2,limit:1000,rows:combined.slice(drop),omitted:Number(old.omitted||0)+drop,authority:'finance.settings.bankEventDecisions'});
+  }
   function rememberEventDecision(state,id,action,at,transactionId,options){
     if(!state||!state.settings||typeof id!=='string'||!id||id.length>240||['__proto__','constructor','prototype'].includes(id))throw Error('invalid-event-identity');
     if(!['saved','observed','ignored','duplicate','dismissed'].includes(action)||!Number.isFinite(Number(at))||Number(at)<=0)throw Error('invalid-event-decision');
@@ -1103,7 +1114,7 @@
     return {ok:true,transaction:tx,replacesTransactionId:old.id,before:clone(old),observationAccountId:outgoing?from.id:receiver.id};
   }
   return Object.freeze({
-    manualImportCandidates,manualDuplicateCandidates,linkManualConfirmation,validateManualImportChanges,preserveImportAudit,
+    manualImportCandidates,manualDuplicateCandidates,linkManualConfirmation,validateManualImportChanges,preserveImportAudit,auditWithDurableDecisions,
     recentScanStart,compatibleScanCheckpoint,eventDecision,rememberEventDecision,EVENT_DECISION_LIMIT,transferCounterparts,pairOwnTransfer,
     autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
   });
