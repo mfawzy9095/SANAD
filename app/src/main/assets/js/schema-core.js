@@ -759,7 +759,14 @@
       if (saving.targetDate && !isValidIsoDate(saving.targetDate)) push('تاريخ هدف الادخار غير صالح');
     }
     if (st.lastFx && typeof st.lastFx === 'object'){
-      Object.entries(st.lastFx).forEach(([k,v]) => { if (!isFiniteNumberLike(v) || Number(v) <= 0) push('سعر صرف محفوظ غير صالح: ' + k); });
+      Object.entries(st.lastFx).forEach(([k,v]) => {
+        const structured=v && typeof v==='object' && !Array.isArray(v);
+        const valid=structured
+          ? isFiniteNumberLike(v.rate) && Number(v.rate)>0 &&
+            v.source==='user-entry' && isFiniteNumberLike(v.recordedAt) && Number(v.recordedAt)>0
+          : isFiniteNumberLike(v) && Number(v)>0;
+        if(!valid) push('سعر صرف محفوظ غير صالح: ' + k);
+      });
     }
     const validateAccountMap = (m,label,assetOnly) => {
       if (!m || typeof m !== 'object') return;

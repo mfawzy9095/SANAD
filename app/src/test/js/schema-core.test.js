@@ -135,3 +135,27 @@ console.log('schema-core regression tests: PASS');
  assert(!html.includes('migrate:Schema.migrate,'),'finance/full imports must preserve the receiver');
  console.log('Runtime full-backup export/restore with real Schema migration: PASS');
 }
+
+(function documentedFxRoundTrip(){
+  const s=Schema.migrate(emptyState());
+  s.settings.lastFx={
+    USD_AED:{rate:1.5,source:'user-entry',recordedAt:1000},
+    AED_USD:{rate:1/1.5,source:'user-entry',recordedAt:1000},
+    EUR_AED:4 // Legacy data stays recoverable; runtime does not trust an unsourced suggestion.
+  };
+  assert.deepStrictEqual(Schema.validateStateStrict(s),[]);
+  const restored=Schema.migrate(JSON.parse(JSON.stringify(s)));
+  assert.deepStrictEqual(Schema.validateStateStrict(restored),[]);
+  assert.deepStrictEqual(restored.settings.lastFx,s.settings.lastFx);
+  for(const invalid of [
+    {rate:1.5,recordedAt:1000},
+    {rate:1.5,source:'unknown',recordedAt:1000},
+    {rate:0,source:'user-entry',recordedAt:1000},
+    {rate:1.5,source:'user-entry',recordedAt:0}
+  ]){
+    const candidate=deepClone(s);
+    candidate.settings.lastFx.USD_AED=invalid;
+    assert.ok(Schema.validateStateStrict(candidate).some(x=>x.includes('سعر صرف محفوظ غير صالح')));
+  }
+  console.log('Documented FX validation and restore: PASS');
+})();
