@@ -32,3 +32,10 @@ function fixture(){
  assert.strictEqual(I.plan(p,s).action,'duplicate','same evidence must not re-create an edited posting');
 }
 console.log('Reference semantics, scope and corrected-evidence replay: PASS');
+
+{
+ const {p,s}=fixture();
+ delete s.transactions[0].created;
+ delete s.transactions[0].smsReceivedAt;
+ assert.strictEqual(I.plan({...p,eventId:'other-evidence'},s).action,'review','a timeless reference cannot prove duplicate identity');
+}

@@ -196,7 +196,7 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   const s=empty();
   s.institutions.push({id:'du',name:'du Pay',country:'UAE',providerRegistryId:'du-pay'});
   s.accounts.push({id:'wallet',institutionId:'du',type:'ewallet',currency:'AED',country:'UAE'});
-  s.transactions.push({id:'old',accountId:'wallet',type:'income',amount:9,currency:'AED',providerId:'du-pay',bankTransactionRef:'DG148RKIXI'});
+  s.transactions.push({id:'old',accountId:'wallet',type:'income',amount:9,currency:'AED',providerId:'du-pay',bankTransactionRef:'DG148RKIXI',created:7000,bankImportEventId:'original-channel',bankImportEvidence:{kind:p.kind}});
   const plan=I.plan(p,s,{uid});
   assert.strictEqual(plan.action,'duplicate');
   assert.strictEqual(plan.existingTransactionId,'old');

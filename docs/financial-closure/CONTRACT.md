@@ -39,3 +39,10 @@ Foreign-currency writes use declared user rates or explicit user-reported source
 
 
 Historical generic imported income/outgoing principal with unconfirmed ownership contributes an unknown report total, with its unchanged recorded amount and transaction ID available for review. This is a presentation of uncertainty, not a silent ledger reclassification. Explicit per-event user confirmation adds provenance without changing the principal or transaction identity. Imported purchase refunds retain their separate meaning.
+
+
+## Reference identity and historical certainty
+
+An identical captured evidence ID is idempotent even after the user corrects its posting. Cross-evidence reference matching requires the same source, actual routed account, financial kind, currency, principal and valid capture timestamps within 24 hours. This bound defines the present QA reference rule; it is not a universal bank uniqueness guarantee. A reused reference outside that scope, differing financial kind or conflicting amount remains `possible-duplicate` review. Reference reuse cannot silently discard another month's salary or treat a refund as the original income. Uncertain evidence is retained; user review may resolve it.
+
+Confirming an opening balance does not resolve the ownership of historical imported deposits or outgoing transfers. Such a record keeps the final account balance unknown until its own source-bound user confirmation; the recorded movement remains available separately. A later unresolved event does not change an earlier as-of balance. Unknown liability debt never becomes zero available-credit arithmetic.
