@@ -104,6 +104,10 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  const scan=await page.evaluate(()=>SanadBankInbox.lastRecentImport);assert(scan.fromDate>0&&scan.throughDate>=scan.fromDate);
  pass('Bounded direct native SMS scan imports a just-arrived message once after earlier checkpoint');
 
+ // The explicit rescan opens its review sheet. Close it through the real UI
+ // before asserting an unobscured home screenshot; preserve the opacity gate.
+ assert.equal(await page.evaluate(()=>document.getElementById('sheet').classList.contains('on')),true);
+ await page.locator('#sheet [data-act="close-sheet"]').click();
  await page.waitForFunction(()=>Number(getComputedStyle(document.getElementById('toast')).opacity)<0.01&&Number(getComputedStyle(document.getElementById('backdrop')).opacity)<0.01&&Number(getComputedStyle(document.querySelector('#view .wallet-hero')||document.getElementById('view')).opacity)>0.99);
  await page.screenshot({path:path.join(out,'android-home.png')});assert.deepEqual(errors,[]);
  fs.writeFileSync(path.join(out,'results.json'),JSON.stringify({status:'PASS',environment:'Android emulator API 35; real APK and AndroidBridge; synthetic SMS',webview:adb('shell','dumpsys','webviewupdate').split('\n').filter(s=>s.includes('Current WebView package')).join('\n'),results,errors},null,2));
