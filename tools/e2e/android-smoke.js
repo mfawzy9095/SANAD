@@ -7,6 +7,13 @@ const fs=require('fs'),path=require('path'),assert=require('assert/strict');
 const pkg=process.env.SANAD_QA_PACKAGE||'com.sanad.v9test.forensicqa.stable',out=process.env.SANAD_QA_OUTPUT||'/tmp/sanad-android-qa';fs.mkdirSync(out,{recursive:true});
 const results=[],errors=[];let browser,page;
 const adb=(...args)=>execFileSync('adb',args,{encoding:'utf8'}).trim();
+// Update only synthetic rows explicitly carrying the trusted-source fixture marker.
+const trustFixtureRows=()=>{
+ const rows=adb('shell','content','query','--uri','content://sms/inbox','--projection','_id:body');
+ const ids=rows.split('\n').filter(row=>row.includes('QANATIVE')).map(row=>row.match(/_id=(\d+)/)?.[1]).filter(Boolean);
+ assert(ids.length>=2,'Trusted fixture rows must exist in the native provider');
+ ids.forEach(id=>adb('shell','content','update','--uri','content://sms/'+id,'--bind','address:s:EmiratesNBD'));
+};
 const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);};
 (async()=>{
  adb('shell','am','start','-n',pkg+'/com.sanad.v9test.MainActivity');
@@ -41,12 +48,12 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  assert.equal(await page.evaluate(()=>S.transactions.length),0);
  assert(await page.evaluate(()=>SanadBankInbox.items.length>=2));
  pass('Unknown numeric SMS sender cannot impersonate bank body');
- // Use fresh native evidence after the previous scan checkpoint. Changing an old
+ // Use fresh native evidence after the previous scan. Changing an old
  // provider row must not silently reinterpret the already retained review evidence.
  adb('emu','sms','send','15557654321','تم ايداع الراتب AED 9,000.00 في حسابك .012XXX50XXX01 OBP TR REF QANATIVESALARY01. الرصيد المتوفر هو AED 9,001.66');
  adb('emu','sms','send','15557654321','تم ايداع AED 100.00 في حسابك 012XXX50XXX01 OBP TR REF QANATIVEDEPOSIT01. الرصيد المتوفر هو AED 9,101.66');
  for(let n=0;n<30;n++){const rows=adb('shell','content','query','--uri','content://sms/inbox','--projection','_id:body');if(rows.includes('QANATIVESALARY01')&&rows.includes('QANATIVEDEPOSIT01'))break;await new Promise(r=>setTimeout(r,1000));}
- adb('shell','content','update','--uri','content://sms','--bind','address:s:EmiratesNBD');
+ trustFixtureRows();
  assert(adb('shell','content','query','--uri','content://sms/inbox','--projection','address:body').includes('address=EmiratesNBD'),'Controlled provider sender metadata must be updated');
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
  const result=await page.evaluate(()=>({last:SanadBankInbox.lastRecentImport,transactions:S.transactions,accounts:S.accounts}));
@@ -63,7 +70,7 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  const beforeFresh=await page.evaluate(()=>S.transactions.length);
  adb('emu','sms','send','15551234567','لقد تم ايداع AED 10.00 في رقم حسابك 012XXX50XXX01 OBP TR REF QANATIVEFRESH01. الرصيد المتوفر هو AED 9,086.66');
  for(let n=0;n<30;n++){if(adb('shell','content','query','--uri','content://sms/inbox','--projection','_id:body').includes('QANATIVEFRESH01'))break;await new Promise(r=>setTimeout(r,1000));}
- adb('shell','content','update','--uri','content://sms','--bind','address:s:EmiratesNBD');
+ trustFixtureRows();
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeFresh+1);
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeFresh+1);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bank.id),9086.66);
