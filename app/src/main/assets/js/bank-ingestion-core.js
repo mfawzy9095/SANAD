@@ -1113,7 +1113,7 @@
     const decisions=state.settings.bankEventDecisions||(state.settings.bankEventDecisions={});
     // Never evict decisions: an eviction could resurrect an old transaction.
     if(!Object.prototype.hasOwnProperty.call(decisions,id)&&Object.keys(decisions).length>=EVENT_DECISION_LIMIT)throw Error('event-decision-capacity');
-    decisions[id]={action,at:Number(at),transactionId:transactionId||null,parserVersion:'9.2.7-financial-contract',decisionSource};
+    decisions[id]={action,at:Number(at),transactionId:transactionId||null,parserVersion:'9.2.8-financial-contract',decisionSource};
     if(reviewHold(state,id))delete state.settings.bankReviewHolds[id];
     return true;
   }

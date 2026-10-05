@@ -71,5 +71,17 @@ const scan=(h,events)=>h.inbox.syncImpl({events,minPostedAt:h.ctx.S.settings.ban
  assert.throws(()=>I.rememberEventDecision(full,'one-more','dismissed',1),/capacity/);assert.equal(Object.keys(full.settings.bankEventDecisions).length,I.EVENT_DECISION_LIMIT);
  I.rememberEventDecision(full,'event-1','ignored',2);assert.equal(full.settings.bankEventDecisions['event-1'].action,'ignored');
  const invalid=empty();invalid.settings.bankEventDecisions={bad:{action:'saved',at:-1}};assert(Schema.validateStateStrict(invalid).length);
+ // An observation-only event must update its matching snapshot atomically too.
+ const obs=harness();
+ const wallet={id:'wallet',type:'ewallet',country:'EGY',currency:'EGP',openingBalance:0,openingBalanceKnown:false,observedBalance:200,observedBalanceAt:obs.now-2000,bankReconciliation:{kind:'balance',observed:200,at:obs.now-2000,status:'observed-only'}};
+ obs.ctx.S.accounts.push(wallet);obs.ctx.S=Schema.migrate(obs.ctx.S);assert.equal((await obs.persist()).ok,true);
+ const parsed={eventId:'observation-only',kind:'balance_observation',availableBalance:75,postedAt:obs.now-1000};
+ const plan={action:'observe',observations:[{accountId:'wallet',field:'observedBalance',value:75,at:parsed.postedAt}]};
+ assert.equal((await obs.inbox.commitPlan(parsed,plan)).ok,true);
+ assert.equal(obs.ctx.S.accounts[0].bankReconciliation.observed,75,'observation-only reconciliation must not retain old balance');
+ obs.restart();assert.equal(obs.ctx.S.accounts[0].bankReconciliation.at,parsed.postedAt);
+ const available=harness();available.ctx.S.accounts.push({...wallet,openingBalanceKnown:true,openingBalance:300});available.ctx.S=Schema.migrate(available.ctx.S);await available.persist();
+ assert.equal((await available.inbox.commitPlan(parsed,plan)).ok,true);
+ assert.equal(available.ctx.S.accounts[0].bankReconciliation.difference,null,'available balance is not comparable with ledger balance');
  console.log('Durable financial decisions, dismissal/restart/backup, write failures, frozen starts and compatible checkpoints: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});

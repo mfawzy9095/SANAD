@@ -178,3 +178,9 @@ console.log('schema-core regression tests: PASS');
  s.settings.bankReviewHolds.repair.reason='unknown';assert(Schema.validateStateStrict(s).some(e=>e.includes('مراجعة إصلاح')));
  console.log('Repair review holds survive strict backup migration: PASS');
 }
+{
+ const s=Schema.migrate(emptyState());s.settings.bankReviewHolds={'atm-review':{reason:'repair-destination-unconfirmed',at:1000,parserVersion:'9.2.8-financial-contract',decisionSource:'deterministic-contract',quarantinedTransactionId:'original-atm',evidence:{kind:'cash_withdrawal',currency:'EGP',amount:350,postedAt:1682261238844,bankId:'nbe-egypt'}}};
+ assert.deepStrictEqual(Schema.validateStateStrict(s),[],'ATM review evidence must survive restore');
+ assert.deepStrictEqual(Schema.validateStateStrict(Schema.migrate(JSON.parse(JSON.stringify(s)))),[]);
+ s.settings.bankReviewHolds['atm-review'].evidence.kind='made-up';assert(Schema.validateStateStrict(s).length);
+}

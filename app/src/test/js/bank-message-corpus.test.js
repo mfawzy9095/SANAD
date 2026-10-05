@@ -100,3 +100,32 @@ for(const [title,text,kind,amount,currency] of [
 }
 const gold=fixtureParse({title:'eandmoney',text:'Hey! You’ve just sold 0.0351 gm of gold. Your transaction ID is 81283 and you have 1.0E-4 gm balance remaining.'});
 assert.strictEqual(gold.kind,'investment_sale');assert.strictEqual(gold.amount,null);
+
+// ATM terminal numbers may be adjacent to ATM. A cash debit is not consumption.
+{
+ const M=require('../../main/assets/js/bank-message-core');
+ for(const terminal of ['NBE ATM987','NBE ATM 987','NBE ATM-987']){
+  const p=M.parse({id:'atm-terminal-'+terminal,title:'BanK-AlAhly',text:`تم خصم 350.00EGP من بطاقة الخصم المباشر رقم 8234 عند ${terminal} يوم 23/04 الساعه 16:47 المتاح 486.81 جم للمزيد اتصل ب 19623`,postedAt:1682261238844});
+  assert.equal(p.kind,'cash_withdrawal',terminal+' must not be a purchase');
+ }
+}
+
+{
+ const M=require('../../main/assets/js/bank-message-core'),I=require('../../main/assets/js/bank-ingestion-core');
+ const state={institutions:[{id:'nbe',bankRegistryId:'nbe-egypt',country:'EGY'}],accounts:[{id:'bank',institutionId:'nbe',type:'bank',currency:'EGP',country:'EGY',openingBalance:1000},{id:'cash',type:'cash',currency:'EGP',country:'EGY',openingBalance:0}],paymentInstruments:[{id:'debit',accountId:'bank',institutionId:'nbe',type:'debit_card',last4:'8234'}],transactions:[]};
+ const p=M.parse({id:'atm-route',title:'BanK-AlAhly',text:'تم خصم 350.00EGP من بطاقة الخصم المباشر رقم 8234 عند NBE ATM987 يوم 23/04 الساعه 16:47 المتاح 650.00 جم للمزيد اتصل ب 19623',postedAt:1682261238844});
+ const plan=I.plan(p,state);
+ assert.equal(plan.action,'auto-save','Known debit source and one cash destination must route');
+ assert.equal(plan.transaction.type,'transfer');assert.equal(plan.transaction.fromAccountId,'bank');assert.equal(plan.transaction.toAccountId,'cash');
+ I.applyPlan(state,plan);
+ const F=require('../../main/assets/js/finance-core');assert.equal(F.accountBalance(state,'bank'),650);assert.equal(F.accountBalance(state,'cash'),350);
+ assert.equal(I.plan(p,state).action,'duplicate');
+ const unresolved={...state,transactions:[],accounts:state.accounts.filter(a=>a.id!=='cash')};
+ assert.equal(I.plan(p,unresolved).action,'review');
+}
+{
+ const M=require('../../main/assets/js/bank-message-core');
+ const e={title:'BanK-AlAhly',postedAt:1764672720000,text:'تم إضافة تحويل لحظي لحسابكم المنتهي ب 7771 بمبلغ 650.00 ج.م يوم 01/12/2025 الساعة 10:52. الرقم المرجعي SYNTH1234'};
+ const p=M.parse(e);assert.equal(p.transactionDate,'2025-12-01','Egypt bank day/month contract must extract a valid explicit date');assert.notEqual(p.reviewReason,'invalid-operation-date');
+ assert.equal(M.parse({...e,text:e.text.replace('01/12/2025','31/02/2025')}).reviewReason,'invalid-operation-date');
+}

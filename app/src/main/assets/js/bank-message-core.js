@@ -246,7 +246,7 @@
     m=x.match(/Your\s+Card\s*\*+\s*(\d{4})\s+was\s+debited\s+with\s+(EGP|USD|EUR|SAR|MAD|AED)\s*([\d,]+(?:\.\d+)?)\s+at\s+(.+?)\s+on\s+[\d/ :]+\.\s*Available\s+limit\s+is\s+(EGP|USD)\s*([\d,]+(?:\.\d+)?)/i);
     if(m)return result(Object.assign(base,{kind:'purchase',direction:'debit',cardLast4:m[1],cardType:'credit_card',currency:m[2],amount:amount(m[3]),merchant:m[4].trim(),category:categoryForMerchant(m[4]),availableCredit:amount(m[6]),availableCreditCurrency:m[5]}),input,raw);
     m=x.match(new RegExp('تم\\s+خصم\\s*(?:مبلغ\\s*)?(?:([A-Za-z]{3})\\s*)?'+value+'\\s*(?:([A-Za-z]{3})|'+local+')?\\s+من\\s+(بطاقة\\s+الائتمان|بطاقة\\s+الخصم\\s+المباشر|البطاقه|البطاقة).*?(\\d{4})\\s+عند\\s+(.+?)\\s+يوم[\\s\\S]*?المتاح\\s*'+value+'\\s*'+local,'i'));
-    if(m){const credit=m[4].includes('الائتمان'),debit=m[4].includes('المباشر');const b=Object.assign(base,{kind:/\bATM\b/i.test(m[6])?'cash_withdrawal':'purchase',direction:'debit',currency:m[1]||m[3]||'EGP',amount:amount(m[2]),cardLast4:m[5],cardType:credit?'credit_card':debit?'debit_card':null,merchant:m[6].trim(),category:categoryForMerchant(m[6])});if(credit){b.availableCredit=amount(m[7]);b.availableCreditCurrency='EGP';}else if(debit){b.availableBalance=amount(m[7]);b.availableBalanceCurrency='EGP';}return result(b,input,raw);}
+    if(m){const credit=m[4].includes('الائتمان'),debit=m[4].includes('المباشر');const b=Object.assign(base,{kind:/\bATM(?:\b|(?=\d))/i.test(m[6])?'cash_withdrawal':'purchase',direction:'debit',currency:m[1]||m[3]||'EGP',amount:amount(m[2]),cardLast4:m[5],cardType:credit?'credit_card':debit?'debit_card':null,merchant:m[6].trim(),category:categoryForMerchant(m[6])});if(credit){b.availableCredit=amount(m[7]);b.availableCreditCurrency='EGP';}else if(debit){b.availableBalance=amount(m[7]);b.availableBalanceCurrency='EGP';}return result(b,input,raw);}
     m=x.match(new RegExp('تم\\s+(تنفيذ|اضافة)\\s+تحويل\\s+لحظي\\s+(?:من\\s+حسابكم\\s+(?:رقم|المنتهي\\s+ب)|لحسابكم\\s+(?:رقم|المنتهي\\s+ب))\\s*(\\d+)\\s+بمبلغ\\s*'+value+'\\s*'+local,'i'));
     if(m){const ref=(x.match(/(?:رقم\s+مرجعي|الرقم\s+المرجعي)\s*([A-Za-z0-9-]+)/)||[])[1]||null;return result(Object.assign(base,{kind:m[1]==='اضافة'?'incoming_transfer':'outgoing_transfer',direction:m[1]==='اضافة'?'credit':'debit',accountRef:m[2],amount:amount(m[3]),transactionRef:ref}),input,raw);}
     m=x.match(new RegExp('نشكركم\\s+عل[يى]\\s+سداد\\s+مبلغ\\s*'+value+'\\s*'+local+'\\s+لبطاقة\\s+رقم\\s*(\\d{4})','i'));
@@ -345,11 +345,15 @@
     }
     if(!parsed)return review('unrecognized');
     if(!parsed.transactionRef){const ref=normalized.match(/\b(?:TR\s+REF|transaction\s+(?:id|reference)|reference|TID|ref)\s*[:#-]?\s*([A-Za-z0-9_-]{4,40})/i);if(ref)parsed.transactionRef=ref[1];}
-    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.7-financial-contract';parsed.executionStatus='completed';
+    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.8-financial-contract';parsed.executionStatus='completed';
     if(parsed.kind==='investment_sale'){parsed.reviewReason='investment-non-money-review';return parsed;}
     const monetary=Money.ledgerValue(parsed.kind==='balance_observation'?parsed.availableBalance:parsed.amount,parsed.currency);
     if(!monetary.ok||parsed.amount<=0&&parsed.kind!=='balance_observation')return review(monetary.reason||'invalid-amount');
     parsed.money={currency:monetary.currency,scale:monetary.scale,minorUnits:monetary.minorUnits};
+    if(family==='egypt-bank'&&!parsed.transactionDate){
+      const dated=normalized.match(/يوم\s+(\d{1,2}\/\d{1,2}\/\d{4})(?!\d)/);
+      if(dated)parsed.transactionDate=isoDateFromDmy(dated[1]);
+    }
     // Generic slash dates have no authoritative source-specific day/month contract.
     if(/\d{1,2}\/\d{1,2}\/\d{4}/.test(normalized)){if(!parsed.transactionDate)parsed.reviewReason='invalid-operation-date';else if(family==='generic')parsed.reviewReason='ambiguous-date';}
     return parsed;
@@ -417,6 +421,9 @@
       return {status:'needs-review',reason:'transfer-source-not-found',confidence:0};
     }
     if(parsed.kind==='cash_withdrawal'){
+      // A uniquely matched issuer/card identifies the debit source, not the cash destination.
+      if(account&&fromAccount&&account.id!==fromAccount.id)return {status:'needs-review',reason:'withdrawal-source-conflict',confidence:0};
+      fromAccount=fromAccount||account;
       if(!fromAccount)return {status:'needs-review',reason:'withdrawal-source-not-found',confidence:0};
       const cash=accounts.filter(a=>a&&!a.archived&&a.country===fromAccount.country&&a.currency===parsed.currency&&a.type==='cash');
       if(cash.length===1)return {status:'routed',fromAccount,targetAccount:cash[0],confidence:0.98};

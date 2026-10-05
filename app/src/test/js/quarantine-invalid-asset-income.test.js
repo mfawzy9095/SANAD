@@ -32,3 +32,15 @@ const invalidHolds=JSON.parse(bytes);invalidHolds.finance.settings.bankReviewHol
 const invalidBytes=Buffer.from(JSON.stringify(invalidHolds));assert.throws(()=>R.apply(invalidBytes,R.dryRun(invalidBytes)),/invalid-review-holds/);
 const userCorrected=JSON.parse(bytes);userCorrected.finance.transactions[0].userFinancialOverride={source:'user-confirmation'};userCorrected.finance.integrity.fingerprint=S.stateFingerprint(userCorrected.finance);const preserved=R.dryRun(Buffer.from(JSON.stringify(userCorrected)));assert.equal(preserved.proposals.length,0);assert.equal(preserved.unresolved[0].reason,'user-correction-preserved');
 console.log('PASS copy-only liability quarantine, review evidence preservation, immutable source and exact rollback');
+// A confirmed ATM classification error is quarantined without inventing a cash account.
+{
+ const Q=require('../../../../tools/quarantine-atm-purchases');
+ const original=JSON.parse(bytes);original.finance.accounts[1].currency='EGP';
+ const atm={id:'atm-debit',type:'expense',accountId:'bank',amount:350,walletAmount:350,currency:'EGP',created:1682261238844,bankId:'nbe-egypt',bankImportEventId:'atm-e',bankImportKey:'atm-key',bankImportEvidence:{kind:'purchase',text:'تم خصم 350.00EGP من بطاقة الخصم المباشر رقم 8234 عند NBE ATM987 يوم 23/04 الساعه 16:47 المتاح 650.00 جم للمزيد اتصل ب 19623',sourceHint:'BanK-AlAhly'}};
+ original.finance.transactions=[atm];original.finance.settings.bankEventDecisions={'atm-e':{action:'saved',transactionId:'atm-debit'}};original.finance.integrity.fingerprint=S.stateFingerprint(original.finance);
+ const input=Buffer.from(JSON.stringify(original)),plan=Q.dryRun(input);assert.equal(plan.proposals.length,1);
+ const fixed=Q.apply(input,plan),copy=JSON.parse(fixed.repaired);assert.equal(copy.finance.transactions.length,0);assert.equal(copy.features.bankImportAudit.smsReviewEvents.length,1);
+ const p=require('../../main/assets/js/bank-message-core').parse(copy.features.bankImportAudit.smsReviewEvents[0]);assert.equal(p.kind,'cash_withdrawal');assert.equal(I.plan(p,copy.finance).action,'review');assert.equal(copy.finance.settings.bankReviewHolds['atm-e'].quarantinedTransactionId,'atm-debit');
+ assert.deepEqual(Q.rollback(fixed.repaired,fixed.journal),input);assert.equal(Q.dryRun(fixed.repaired).proposals.length,0);
+ original.finance.transactions[0].userFinancialOverride={source:'user-confirmation'};original.finance.integrity.fingerprint=S.stateFingerprint(original.finance);assert.equal(Q.dryRun(Buffer.from(JSON.stringify(original))).proposals.length,0);
+}

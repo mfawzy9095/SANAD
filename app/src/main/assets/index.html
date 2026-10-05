@@ -914,7 +914,7 @@ const ACCOUNT_ICONS = ['🏦','💵','💰','🪙','🏛️','📱','💼','🏧
 const CARD_ICONS = ['💳','🪪','💠','🎴','🏦','📱','💎'];
 const DEBT_ICONS = ['📋','🧾','📉','💸','📝','🏷️'];
 
-const APP_VERSION = '9.2.7';
+const APP_VERSION = '9.2.8';
 const APP_CHANNEL = 'local-rc';
 const SCHEMA_VERSION = 16;
 const DB_NAME = 'masareef_v8';
@@ -8634,7 +8634,7 @@ const SanadFullBackup = {
       family:SanadFamily.state,
       syncMeta:Object.assign({},SanadCloud.meta,{dirty:true}),
       firebaseConfig:SanadCloud.config||null,
-      bankImportAudit:{version:1,parserVersion:'9.2.7-financial-contract',configuredStartAt:SanadBankInbox.configuredSmsStart(),decisions:BankIngestionCore.auditWithDurableDecisions(await SanadExtStorage.get('bankDecisionAudit',null),S),smsReviewEvents:SanadBankInbox.smsReviewEvents,pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
+      bankImportAudit:{version:1,parserVersion:'9.2.8-financial-contract',configuredStartAt:SanadBankInbox.configuredSmsStart(),decisions:BankIngestionCore.auditWithDurableDecisions(await SanadExtStorage.get('bankDecisionAudit',null),S),smsReviewEvents:SanadBankInbox.smsReviewEvents,pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
     };
     if(diagnostic)features.diagnosticReport={version:1,generatedAt:new Date().toISOString(),appVersion:APP_VERSION,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,clock:Date.now(),smsPermission:SanadBankInbox.historicalPermission(),native:SanadBankInbox.diagnostics(),import:features.bankImportAudit,counts:{accounts:state.accounts.length,transactions:state.transactions.length,receipts:packed.length},note:'Local export; financial source messages included. Decision log retains the latest 1000 records; omitted count is explicit. Operation time and SMS arrival time are separate.'};
     delete features.syncMeta.receiptDirty;
@@ -8936,15 +8936,15 @@ const SanadBankInbox = {
     return (r.instrument?esc(r.instrument.name)+' · ':'')+esc((r.account||{}).name||'');
   },
   applyReconciliation(parsed,plan){
-    if(!plan||!plan.transaction)return {warning:false};
-    const tx=plan.transaction;
+    if(!plan)return {warning:false};
+    const tx=plan.transaction||{};
     const ts=Number(parsed.postedAt)||Date.now();
-    let accountId=plan.observationAccountId||tx.accountId||tx.fromAccountId||null;
+    let accountId=plan.observationAccountId||tx.accountId||tx.fromAccountId||(plan.observations||[]).find(o=>o.field==='observedBalance')?.accountId||null;
     const account=accountId?Finance.getAccount(accountId):null;
     let warning=false;
     if(account&&isFiniteNumberLike(parsed.availableBalance)){
       const observed=Math.round(Number(parsed.availableBalance)*100)/100;
-      const balanceAt=FinanceCore.accountBalanceAt(S,account.id,ts);
+      const balanceAt=parsed.balanceType==='ledger_balance'?FinanceCore.accountBalanceAt(S,account.id,ts):null;
       const calculated=balanceAt==null?null:Math.round(balanceAt*100)/100;
       const difference=calculated==null?null:Math.round((observed-calculated)*100)/100;
       const existingObservedAt=Number(account.observedBalanceAt)||0;
