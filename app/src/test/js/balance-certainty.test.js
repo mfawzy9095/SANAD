@@ -53,5 +53,10 @@ test('FX conversion uses exact rational rates and explicit rounding',()=>{
  assert.equal(M.convert(100,'USD','AED','3.67').value,367);
  assert.equal(M.convert(100,'USD','AED',null).ok,false);
 });
+test('certifying opening cannot certify unresolved historical imported money',()=>{
+ const s=state(asset({openingBalance:0,openingBalanceKnown:true}),[{type:'income',accountId:'a',amount:5000,bankImportKey:'event|bank|deposit|AED',bankImportEvidence:{kind:'deposit'}}]);
+ assert.equal(F.accountBalance(s,'a'),null);assert.equal(F.accountMovement(s,'a'),5000);
+ s.transactions[0].economicOrigin={kind:'external-income',source:'user-confirmation'};assert.equal(F.accountBalance(s,'a'),5000);
+});
 let failed=0;for(const [name,fn]of cases){try{fn();console.log('PASS '+name);}catch(e){failed++;console.error('FAIL '+name+': '+e.message);}}
 if(failed)process.exitCode=1;

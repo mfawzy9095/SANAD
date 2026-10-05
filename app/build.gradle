@@ -11,8 +11,8 @@ android {
         applicationId 'com.sanad.v9test'
         minSdk 26
         targetSdk 35
-        versionCode 92006
-        versionName '9.2.6-financial-qa'
+        versionCode 92007
+        versionName '9.2.7-financial-qa'
     }
 
     signingConfigs {

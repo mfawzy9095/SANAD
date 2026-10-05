@@ -914,7 +914,7 @@ const ACCOUNT_ICONS = ['🏦','💵','💰','🪙','🏛️','📱','💼','🏧
 const CARD_ICONS = ['💳','🪪','💠','🎴','🏦','📱','💎'];
 const DEBT_ICONS = ['📋','🧾','📉','💸','📝','🏷️'];
 
-const APP_VERSION = '9.2.6';
+const APP_VERSION = '9.2.7';
 const APP_CHANNEL = 'local-rc';
 const SCHEMA_VERSION = 16;
 const DB_NAME = 'masareef_v8';
@@ -1365,7 +1365,7 @@ const Finance = {
     const out = {};
     this.getCountryAccounts(country).forEach(a => {
       if (!isAssetAccount(a)) return;
-      const bal = this.accountBalancePresentation(a.id).display;
+      const bal = this.accountBalance(a.id);
       if(out[a.currency]===null||bal===null)out[a.currency]=null;
       else {const total=SanadMoneyCore.sum([out[a.currency]||0,bal],a.currency);out[a.currency]=total.ok?total.value:null;}
     });
@@ -1378,6 +1378,7 @@ const Finance = {
     if (rate > 0) S.settings.lastFx[toCur + '_' + fromCur] = {rate:Number((1/rate).toFixed(10)),source:'user-entry',recordedAt:Date.now(),derivedFrom:fromCur+'_'+toCur};
   },
   getCat(type,id){
+    if(type==='expense'&&id==='bankFee')return {id,n:'رسوم بنكية',i:'🏦',c:'#E65100'};
     if(type==='expense'&&id==='purchaseRefund')return {id,n:'استردادات مشتريات',i:'↩️',c:'#008577'};
     const all = (S.categories[type]||[]).concat(DEFAULT_CATS[type]||[]);
     const seen = new Set(); const uniq = [];
@@ -2616,7 +2617,7 @@ function viewRep(){
         '<div class="cs-row"><span class="lbl">الحد الائتماني</span><span class="val amt-val">' + amtFull(limit, repAcc.currency) + '</span></div>' +
         '<div class="cs-row"><span class="lbl">المتاح</span><span class="val pos amt-val">' + (avail !== null ? amtFull(avail, repAcc.currency) : '—') + '</span></div>' +
         '<div style="border-top:1px solid var(--outline);margin:8px 0 4px"></div>' +
-        '<div class="cs-row"><span class="lbl">مشتريات الفترة</span><span class="val amt-val">' + amtFull(purchases, repAcc.currency) + '</span></div>' +
+        '<div class="cs-row"><span class="lbl">مشتريات الفترة ورسومها</span><span class="val amt-val">' + amtFull(purchases, repAcc.currency) + '</span></div>' +
         '<div class="cs-row"><span class="lbl">سداد الفترة (أصل)</span><span class="val info amt-val">' + amtFull(repaymentPrincipal, repAcc.currency) + '</span></div>' +
       '</div>';
   })();
@@ -3465,7 +3466,7 @@ function renderTxSheet(){
       '</details>' +
     '</div>' +
     '<div class="sheet-footer tx-footer">' +
-      (f.id&&f.kind==='income'&&['deposit','incoming_transfer'].includes((S.transactions.find(t=>t.id===f.id)||{}).bankImportEvidence?.kind)?'<div class="help-box"><span class="hi">⚠️</span><div class="ht">رسالة الوصول لا تثبت مصدر المال. اترك الحركة للمراجعة إن كانت من حساب آخر تملكه.<label><input type="checkbox" id="txExternalOriginConfirmed"> أؤكد أن هذه الحركة دخل من خارج حساباتي</label></div></div>':'')+
+      (f.id&&f.kind==='income'&&FinanceCore.hasUnconfirmedEvidence(S.transactions.find(t=>t.id===f.id),Finance.getAccount(f.source?.accountId))?'<div class="help-box"><span class="hi">⚠️</span><div class="ht">رسالة الوصول لا تثبت مصدر المال. اترك الحركة للمراجعة إن كانت من حساب آخر تملكه.<label><input type="checkbox" id="txExternalOriginConfirmed"> أؤكد أن هذه الحركة دخل من خارج حساباتي</label></div></div>':'')+
       '<button type="button" class="btn primary tx-save-btn" data-act="save-tx">' +
         '<span class="tx-save-icon">✓</span><span>' + (f.id ? 'حفظ التعديلات' : (isIncome ? 'إضافة الدخل' : 'إضافة المصروف')) + '</span>' +
       '</button>' +
@@ -8633,7 +8634,7 @@ const SanadFullBackup = {
       family:SanadFamily.state,
       syncMeta:Object.assign({},SanadCloud.meta,{dirty:true}),
       firebaseConfig:SanadCloud.config||null,
-      bankImportAudit:{version:1,parserVersion:'9.2.6-financial-contract',configuredStartAt:SanadBankInbox.configuredSmsStart(),decisions:BankIngestionCore.auditWithDurableDecisions(await SanadExtStorage.get('bankDecisionAudit',null),S),smsReviewEvents:SanadBankInbox.smsReviewEvents,pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
+      bankImportAudit:{version:1,parserVersion:'9.2.7-financial-contract',configuredStartAt:SanadBankInbox.configuredSmsStart(),decisions:BankIngestionCore.auditWithDurableDecisions(await SanadExtStorage.get('bankDecisionAudit',null),S),smsReviewEvents:SanadBankInbox.smsReviewEvents,pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
     };
     if(diagnostic)features.diagnosticReport={version:1,generatedAt:new Date().toISOString(),appVersion:APP_VERSION,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,clock:Date.now(),smsPermission:SanadBankInbox.historicalPermission(),native:SanadBankInbox.diagnostics(),import:features.bankImportAudit,counts:{accounts:state.accounts.length,transactions:state.transactions.length,receipts:packed.length},note:'Local export; financial source messages included. Decision log retains the latest 1000 records; omitted count is explicit. Operation time and SMS arrival time are separate.'};
     delete features.syncMeta.receiptDirty;

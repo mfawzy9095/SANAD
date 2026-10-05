@@ -29,6 +29,12 @@ function sum(values,currency){
  if(total>MAX||total< -MAX)return {ok:false,reason:'money-out-of-range'};
  return {ok:true,currency:String(currency).toUpperCase(),scale,minorUnits:String(total),value:Number(total)/10**scale};
 }
+function sumMinor(values,currency){
+ const scale=digits[String(currency||'').toUpperCase()];if(scale==null)return {ok:false,reason:'currency-precision-unsupported'};
+ let total=0n;for(const value of values){if(typeof value!=='bigint'||value>MAX||value< -MAX)return {ok:false,reason:'money-out-of-range'};total+=value;}
+ if(total>MAX||total< -MAX)return {ok:false,reason:'money-out-of-range'};
+ return {ok:true,currency:String(currency).toUpperCase(),scale,minorUnits:String(total),value:Number(total)/10**scale};
+}
 function convert(value,fromCurrency,toCurrency,rate){
  const source=decimal(value,fromCurrency),scale=digits[String(toCurrency||'').toUpperCase()];
  if(!source.ok)return source;if(scale==null)return {ok:false,reason:'currency-precision-unsupported'};
@@ -41,5 +47,5 @@ function convert(value,fromCurrency,toCurrency,rate){
  if(minor>MAX||minor< -MAX)return {ok:false,reason:'money-out-of-range'};
  return {ok:true,currency:String(toCurrency).toUpperCase(),minorUnits:String(minor),scale,value:Number(minor)/10**scale,rounding:'half-away-from-zero',rate:text};
 }
-return Object.freeze({decimal,ledgerValue,sum,convert,digits});
+return Object.freeze({decimal,ledgerValue,sum,sumMinor,convert,digits});
 });

@@ -135,6 +135,16 @@ console.log('schema-core regression tests: PASS');
  assert(!html.includes('migrate:Schema.migrate,'),'finance/full imports must preserve the receiver');
  console.log('Runtime full-backup export/restore with real Schema migration: PASS');
 }
+{
+ const fullState=Schema.migrate({schemaVersion:16,accounts:[],transactions:[],settings:{lastFx:{USD_AED:{rate:1.5,source:'user-entry',recordedAt:1000}}}});
+ assert.deepStrictEqual(Schema.validateStateStrict(fullState),[],'declared rate provenance must persist');
+ const Backup=require('../../main/assets/js/backup-core');const envelope=Backup.makeFullBackup({state:fullState,fingerprint:StateCore.stateFingerprint});
+ const restored=Schema.migrate(envelope.finance);assert.deepStrictEqual(restored.settings.lastFx,fullState.settings.lastFx);assert.strictEqual(Finance.suggestRate('USD','AED',restored.settings.lastFx),1.5);
+ fullState.settings.lastFx.USD_AED.source='unverified';assert(Schema.validateStateStrict(fullState).some(e=>e.includes('سعر صرف')));
+ const missing=Schema.migrate({schemaVersion:16,accounts:[{id:'missing',type:'bank',country:'UAE',currency:'AED',name:'Missing',archived:false}],transactions:[],settings:{}});assert.strictEqual(missing.accounts[0].openingBalanceKnown,false);assert.strictEqual(Finance.accountBalance(missing,'missing'),null);
+ const unsupported=Schema.migrate({schemaVersion:16,accounts:[{id:'unsupported',type:'bank',country:'UAE',currency:'JPY',name:'JPY',openingBalance:10,archived:false}],transactions:[],settings:{}});assert.strictEqual(unsupported.accounts[0].currency,'JPY');assert(Schema.validateStateStrict(unsupported).some(e=>e.includes('عملة')));
+ console.log('Rate provenance round-trip and unknown currency/opening preservation: PASS');
+}
 
 (function documentedFxRoundTrip(){
   const s=Schema.migrate(emptyState());
@@ -151,7 +161,8 @@ console.log('schema-core regression tests: PASS');
     {rate:1.5,recordedAt:1000},
     {rate:1.5,source:'unknown',recordedAt:1000},
     {rate:0,source:'user-entry',recordedAt:1000},
-    {rate:1.5,source:'user-entry',recordedAt:0}
+    {rate:1.5,source:'user-entry',recordedAt:0},
+    [1.5]
   ]){
     const candidate=deepClone(s);
     candidate.settings.lastFx.USD_AED=invalid;
@@ -159,3 +170,4 @@ console.log('schema-core regression tests: PASS');
   }
   console.log('Documented FX validation and restore: PASS');
 })();
+

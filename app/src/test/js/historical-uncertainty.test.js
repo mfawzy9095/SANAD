@@ -15,3 +15,4 @@ a.type='credit';a.openingDebt=0;a.openingDebtKnown=true;a.creditLimit=10000;
 assert.strictEqual(F.accountDebt(s,'wallet'),null);
 assert.strictEqual(F.creditAvailableCalculated(s,'wallet'),null,'unknown debt cannot coerce to zero');
 console.log('Historical uncertainty and as-of balance contract: PASS');
+

@@ -18,13 +18,19 @@
   function isRefund(t){return !!(t&&(t.financialEvent==='purchase-refund'||t.bankImportEvidence&&t.bankImportEvidence.kind==='refund'));}
   function reportUncertainty(t,account){
     if(!account)return 'account-unresolved';
+    const kind=(t.bankImportEvidence||{}).kind||String(t.bankImportKey||'').split('|')[2]||null;
+    const imported=!!(t.bankImportKey||t.bankImportEventId||t.bankImportEvidence);
+    const origin=t.economicOrigin||{};
+    const confirmed=origin.source==='user-confirmation'&&(!t.bankImportEventId||origin.eventId===t.bankImportEventId);
     if(t.accountId&&t.currency&&t.currency!==account.currency&&t.walletAmount==null)return 'currency-unresolved';
-    if(t.type==='income'&&!isRefund(t)){
-      const kind=t.bankImportEvidence&&t.bankImportEvidence.kind;
-      if(['credit','debt'].includes(account.type))return 'liability-income-review';
-      if(['deposit','incoming_transfer'].includes(kind)&&!(t.economicOrigin&&t.economicOrigin.kind==='external-income'&&t.economicOrigin.source==='user-confirmation'))return 'historical-incoming-origin-unconfirmed';
+    if(t.type==='expense'&&t.bankPrincipalAmount!=null&&t.bankFeeEvidence&&t.bankFeeEvidence.confirmed){
+      if(t.bankFeeEvidence.currency!==account.currency||exactTotal([t.bankPrincipalAmount,t.bankFeeEvidence.amount],account.currency)!==reportMoney(t.walletAmount!=null?t.walletAmount:t.amount,account.currency))return 'fee-components-unresolved';
     }
-    if(t.type==='external_transfer'&&t.bankImportEvidence&&t.bankImportEvidence.kind==='outgoing_transfer'&&!(t.economicOrigin&&t.economicOrigin.kind==='external-destination'&&t.economicOrigin.source==='user-confirmation'))return 'historical-outgoing-destination-unconfirmed';
+    if(t.type==='income'&&!isRefund(t)){
+      if(['credit','debt'].includes(account.type))return 'liability-income-review';
+      if(imported&&kind!=='salary'&&!(confirmed&&origin.kind==='external-income'))return 'historical-incoming-origin-unconfirmed';
+    }
+    if(t.type==='external_transfer'&&imported&&!(confirmed&&origin.kind==='external-destination'))return 'historical-outgoing-destination-unconfirmed';
     return null;
   }
 
@@ -78,13 +84,16 @@
       if(t.type==='expense'){
         const acc=getAccount(state,t.accountId);
         if(!acc||acc.country!==o.country)continue;
-        const amount=reportMoney(t.walletAmount!=null?t.walletAmount:t.amount,acc.currency);
+        const gross=reportMoney(t.walletAmount!=null?t.walletAmount:t.amount,acc.currency);
+        const splitFee=t.bankPrincipalAmount!=null&&t.bankFeeEvidence&&t.bankFeeEvidence.confirmed&&t.bankFeeEvidence.currency===acc.currency&&exactTotal([t.bankPrincipalAmount,t.bankFeeEvidence.amount],acc.currency)===gross;
+        const amount=splitFee?reportMoney(t.bankPrincipalAmount,acc.currency):gross;
         if(amount!==null&&amount<=0)continue;
         push({
           id:t.id+':exp',sourceTxId:t.id,sourceType:'expense',
           amount,currency:acc.currency,category:t.cat||'other',
           date:t.date,accountId:t.accountId,instrumentId:t.instrumentId||null,note:t.note||''
         });
+        if(splitFee&&Number(t.bankFeeEvidence.amount)>0)push({id:t.id+':bank-fee',sourceTxId:t.id,sourceType:'purchase_fee',amount:reportMoney(t.bankFeeEvidence.amount,acc.currency),currency:acc.currency,category:'bankFee',date:t.date,accountId:t.accountId,note:t.note||''});
       }
       if(t.type==='income'&&isRefund(t)){
         const acc=getAccount(state,t.accountId);if(!acc||acc.country!==o.country)continue;

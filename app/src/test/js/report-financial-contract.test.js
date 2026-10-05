@@ -17,4 +17,14 @@ test('legacy imported incoming origin remains uncertain without rewriting ledger
  const s={accounts:[{id:'a',country:'UAE',currency:'AED',type:'bank'}],transactions:[{id:'old',type:'income',accountId:'a',amount:500,date:'2026-10-01',bankImportEvidence:{kind:'deposit'}}]},original=JSON.stringify(s);
  const ds=R.buildReportDataset(s,o);assert.equal(ds.incomeByCur.AED,null);assert.equal(ds.incomes[0].recordedAmount,500);assert.equal(ds.financialReviews[0].sourceTxId,'old');assert.equal(JSON.stringify(s),original);
 });
+test('confirmed purchase principal and fees stay separate without double-counting',()=>{
+ const s={accounts:[{id:'a',country:'UAE',currency:'AED'}],transactions:[{id:'fee',type:'expense',accountId:'a',amount:12.1,walletAmount:12.1,bankPrincipalAmount:10,bankFeeEvidence:{amount:2.1,currency:'AED',confirmed:true},date:'2026-10-01',cat:'food'}]};
+ const ds=R.buildReportDataset(s,o);assert.equal(ds.spendingByCur.AED,12.1);assert.equal(ds.categoryByCur.AED.food,10);assert.equal(ds.categoryByCur.AED.bankFee,2.1);assert.equal(R.distinctSourceTransactionCount(ds.expenses),1);
+});
+test('report confirmation binds to the evidence and legacy keys preserve uncertainty',()=>{
+ const s={accounts:[{id:'a',country:'UAE',currency:'AED',type:'bank'}],transactions:[{id:'old',type:'income',accountId:'a',amount:500,date:'2026-10-01',bankImportEventId:'this-evidence',bankImportKey:'event:this-evidence|du-pay|deposit|AED|500.00|wallet|',economicOrigin:{kind:'external-income',source:'user-confirmation',eventId:'another-evidence'}}]};
+ assert.equal(R.buildReportDataset(s,o).incomeByCur.AED,null);
+ s.transactions[0].economicOrigin.eventId='this-evidence';assert.equal(R.buildReportDataset(s,o).incomeByCur.AED,500);
+ delete s.transactions[0].economicOrigin;assert.equal(R.buildReportDataset(s,o).incomeByCur.AED,null);
+});
 if(failed)process.exitCode=1;

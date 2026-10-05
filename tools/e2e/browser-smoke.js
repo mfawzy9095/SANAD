@@ -228,6 +228,21 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.waitForFunction(n=>S.transactions.length===n+1&&!_criticalMutationInFlight,beforeFx);
  const fxSaved=await page.evaluate(()=>S.transactions.at(-1));assert.equal(fxSaved.walletAmount,0.02);assert.equal(fxSaved.fxRateSource,'user-entry');assert.equal(fxSaved.currency,'USD');
  record('Actual foreign-currency expense uses exact declared FX and target minor-unit rounding');
+ const perfContext=await browser.newContext(),perfPage=await perfContext.newPage();perfPage.on('pageerror',e=>errors.push(e.message));
+ await perfPage.goto(process.env.SANAD_QA_URL||'http://127.0.0.1:8765');await perfPage.waitForFunction(()=>typeof S!=='undefined'&&S.ready&&SanadV9.initialized);
+ if(await perfPage.locator('#onboard').isVisible())await perfPage.locator('[onclick="onboardSkip()"]').click();await perfPage.waitForFunction(()=>!document.getElementById('app').hidden&&!_criticalMutationInFlight);
+ const financialPerformance=await perfPage.evaluate(async()=>{
+   const seed=snapshotState(),day=isoToday(),now=Date.now();seed.accounts=[{id:'perf',type:'bank',country:'UAE',currency:'AED',name:'Synthetic performance',institutionId:null,openingBalance:10000,openingBalanceKnown:true,openingDebt:0,creditLimit:0,archived:false,created:day}];seed.paymentInstruments=[];seed.institutions=[];seed.transactions=Array.from({length:22934},(_,n)=>({id:'perf-'+n,type:n%2?'income':'expense',accountId:'perf',currency:'AED',amount:0.01,walletAmount:0.01,fxRate:1,cat:'other',date:day,created:now+n}));seed.settings.defaultAccountByCountry={UAE:'perf'};seed.settings.primaryAccountByCountry={UAE:'perf'};seed.settings.defaultInstrumentByCountry={};
+   const loadStart=performance.now();let seedResult;await withExclusiveDataOperation(async()=>{seedResult=await _commitCriticalMutationImpl(()=>{loadStateInto(seed);return true;});});if(!seedResult.ok)throw Error('large synthetic seed rejected '+seedResult.reason);
+   const initialWriteMs=performance.now()-loadStart;S.activeCountry='UAE';
+   let last=performance.now(),maxHeartbeatGapMs=0;const pulse=setInterval(()=>{const now=performance.now();maxHeartbeatGapMs=Math.max(maxHeartbeatGapMs,now-last);last=now;},16);
+   const start=performance.now();const result=await commitCriticalMutation(()=>{S.transactions.push({id:'perf-new',type:'expense',accountId:'perf',currency:'AED',amount:0.01,walletAmount:0.01,fxRate:1,cat:'other',date:day,created:now+30000});return true;});const mutationMs=performance.now()-start;
+   const renderStart=performance.now();render();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));const renderAndTwoFramesMs=performance.now()-renderStart;clearInterval(pulse);
+   const disk=await Storage.readState();return {transactions:S.transactions.length,initialWriteMs,mutationMs,renderAndTwoFramesMs,maxHeartbeatGapMs,heapUsedBytes:performance.memory?.usedJSHeapSize||null,balance:Finance.accountBalance('perf'),diskMatches:disk.ok&&stateFingerprint(disk.state)===stateFingerprint(snapshotState()),result};
+ });
+ assert.equal(financialPerformance.result.ok,true);assert.equal(financialPerformance.balance,9999.99);assert.equal(financialPerformance.diskMatches,true);assert.equal(financialPerformance.transactions,22935);
+ fs.writeFileSync(path.join(output,'financial-performance.json'),JSON.stringify({browser:browser.version(),scope:'Synthetic 22934-row history, real browser IndexedDB and application mutation/render; after only, no mobile performance claim.',...financialPerformance},null,2));
+ await perfContext.close();record('Large synthetic ledger: exact balance, verified IndexedDB, mutation and frame-delay measurements');
  assert.deepEqual(errors,[]);record('No JavaScript runtime or console errors');
  fs.writeFileSync(path.join(output,'results.json'),JSON.stringify({status:'PASS',environment:'Chromium/Linux; Android bridge simulated; synthetic data only',results,errors},null,2));
 })().catch(async e=>{

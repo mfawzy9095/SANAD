@@ -38,25 +38,25 @@
         const amount=hasWallet?t.walletAmount:t.amount;
         const parsed=Money.decimal(amount,a.currency);if(!parsed.ok)return null;
         if(t.type!=='adjustment'&&parsed.value<0)return null;
-        terms.push(t.type==='expense'?-parsed.value:parsed.value);
+        terms.push(t.type==='expense'?-BigInt(parsed.minorUnits):BigInt(parsed.minorUnits));
       }
       if((t.type==='transfer'||t.type==='external_transfer')&&t.fromAccountId===accountId){
         if(t.fromCurrency&&t.fromCurrency!==a.currency)return null;
         const principal=Money.decimal(t.fromAmount,a.currency),fee=Money.decimal(t.fee==null?0:t.fee,a.currency);
         if(!principal.ok||!fee.ok||principal.value<0||fee.value<0)return null;
-        terms.push(-principal.value,-fee.value);
+        terms.push(-BigInt(principal.minorUnits),-BigInt(fee.minorUnits));
       }
       if(t.type==='transfer'&&t.toAccountId===accountId){
         if(t.toCurrency&&t.toCurrency!==a.currency)return null;
         const principal=Money.decimal(t.toAmount,a.currency);if(!principal.ok||principal.value<0)return null;
-        terms.push(principal.value);
+        terms.push(BigInt(principal.minorUnits));
       }
     }
     return terms;
   }
   function accountMovement(state,accountId,asOf){
     const a=getAccount(state,accountId),terms=balanceTerms(state,accountId,asOf);if(!a||!terms)return null;
-    const total=Money.sum(terms,a.currency);return total.ok?total.value:null;
+    const total=Money.sumMinor(terms,a.currency);return total.ok?total.value:null;
   }
   function hasUnconfirmedEvidence(t,account){
     if(!t)return false;
@@ -80,8 +80,9 @@
       if(hasUnconfirmedEvidence(t,a))return null;
     }
     const terms=balanceTerms(state,accountId,asOf);if(!terms)return null;
-    terms.unshift(isLiabilityAccount(a)?-Number(a.openingDebt):a.openingBalance);
-    const total=Money.sum(terms,a.currency);return total.ok?total.value:null;
+    const opening=Money.decimal(isLiabilityAccount(a)?a.openingDebt:a.openingBalance,a.currency);if(!opening.ok)return null;
+    terms.unshift(isLiabilityAccount(a)?-BigInt(opening.minorUnits):BigInt(opening.minorUnits));
+    const total=Money.sumMinor(terms,a.currency);return total.ok?total.value:null;
   }
   function setOpeningBalance(account,value){
     const parsed=Money.decimal(value,account.currency);if(!parsed.ok)return false;
@@ -95,7 +96,9 @@
     const reject=reason=>({reason});
     const check=(value,currency)=>{const x=Money.decimal(value,currency);return x.ok?null:reject(x.reason);};
     for(const t of (candidate&&candidate.transactions)||[]){
-      const old=previous.get(t.id);if(old&&JSON.stringify(old)===JSON.stringify(t))continue;
+      const old=previous.get(t.id);
+      const fields=['type','amount','currency','walletAmount','walletCurrency','accountId','fromAccountId','toAccountId','fromAmount','toAmount','fromCurrency','toCurrency','fee','fxRate','fxRateSource','bankPrincipalAmount','financialEvent'];
+      if(old&&fields.every(k=>old[k]===t[k])&&old.bankImportEvidence?.kind===t.bankImportEvidence?.kind&&old.economicOrigin?.kind===t.economicOrigin?.kind&&old.economicOrigin?.source===t.economicOrigin?.source&&old.economicOrigin?.eventId===t.economicOrigin?.eventId&&JSON.stringify(old.bankFeeEvidence)===JSON.stringify(t.bankFeeEvidence))continue;
       const ids=[t.accountId,t.fromAccountId,t.toAccountId].filter(Boolean);ids.forEach(id=>touched.add(id));
       if(t.accountId){
         const a=getAccount(candidate,t.accountId);if(!a)return reject('transaction-account-required');
@@ -104,6 +107,10 @@
         if((t.walletCurrency&&t.walletCurrency!==a.currency)||(!wallet&&t.currency&&t.currency!==a.currency))return reject('transaction-currency-mismatch');
         let error=check(wallet?t.walletAmount:t.amount,a.currency);if(error)return error;
         if(t.amount!=null){error=check(t.amount,t.currency||a.currency);if(error)return error;}
+        if(t.type==='expense'&&t.bankPrincipalAmount!=null&&t.bankFeeEvidence&&t.bankFeeEvidence.confirmed){
+          const feeTotal=Money.sum([t.bankPrincipalAmount,t.bankFeeEvidence.amount],a.currency);
+          if(t.bankFeeEvidence.currency!==a.currency||!feeTotal.ok||feeTotal.minorUnits!==Money.decimal(wallet?t.walletAmount:t.amount,a.currency).minorUnits)return reject('fee-components-unresolved');
+        }
         if(t.currency&&t.currency!==a.currency){
           if(!wallet||!(Number(t.fxRate)>0)||t.fxRateSource!=='user-entry')return reject('transaction-fx-required');
           const converted=Money.convert(t.amount,t.currency,a.currency,t.fxRate);if(!converted.ok)return reject(converted.reason);
@@ -128,14 +135,14 @@
     const oldAccounts=new Map(((before&&before.accounts)||[]).map(a=>[a.id,a]));
     for(const a of (candidate&&candidate.accounts)||[]){
       const old=oldAccounts.get(a.id);
-      if(!old||a.currency!==old.currency||a.openingBalance!==old.openingBalance||a.openingDebt!==old.openingDebt){
+      if(!old||a.currency!==old.currency||a.openingBalance!==old.openingBalance||a.openingDebt!==old.openingDebt||a.openingBalanceKnown!==old.openingBalanceKnown||a.openingDebtKnown!==old.openingDebtKnown||a.baselinePartial!==old.baselinePartial||a.type!==old.type){
         touched.add(a.id);const error=check(isLiabilityAccount(a)?a.openingDebt:a.openingBalance,a.currency);if(error)return error;
       }
     }
     for(const id of touched){
       const a=getAccount(candidate,id),terms=balanceTerms(candidate,id);if(!a||!terms)return reject('ledger-fields-unresolved');
-      if(openingKnown(a))terms.unshift(isLiabilityAccount(a)?-Number(a.openingDebt):a.openingBalance);
-      const total=Money.sum(terms,a.currency);if(!total.ok)return reject(total.reason);
+      if(openingKnown(a)){const opening=Money.decimal(isLiabilityAccount(a)?a.openingDebt:a.openingBalance,a.currency);if(!opening.ok)return reject(opening.reason);terms.unshift(isLiabilityAccount(a)?-BigInt(opening.minorUnits):BigInt(opening.minorUnits));}
+      const total=Money.sumMinor(terms,a.currency);if(!total.ok)return reject(total.reason);
     }
     return null;
   }
@@ -175,7 +182,7 @@
       observed,
       display:calculated,
       openingKnown:openingKnown(a),
-      movement:accountMovement(state,accountId),
+      movement:calculated!==null?Money.sum([calculated,isLiabilityAccount(a)?Number(a.openingDebt):-Number(a.openingBalance)],a.currency).value:accountMovement(state,accountId),
       observedType,
       projected,
       observedAt,

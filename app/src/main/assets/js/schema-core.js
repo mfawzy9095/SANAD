@@ -764,7 +764,7 @@
         const valid=structured
           ? isFiniteNumberLike(v.rate) && Number(v.rate)>0 &&
             v.source==='user-entry' && isFiniteNumberLike(v.recordedAt) && Number(v.recordedAt)>0
-          : isFiniteNumberLike(v) && Number(v)>0;
+          : (typeof v==='number'||typeof v==='string') && isFiniteNumberLike(v) && Number(v)>0;
         if(!valid) push('سعر صرف محفوظ غير صالح: ' + k);
       });
     }

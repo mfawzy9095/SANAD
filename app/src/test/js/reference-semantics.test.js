@@ -50,3 +50,4 @@ console.log('Reference semantics, scope and corrected-evidence replay: PASS');
  assert.strictEqual(I.plan(later,s).action,'review');
  assert.strictEqual(I.plan({...p,eventId:'other-delayed-channel',postedAt:p.postedAt+6000},s).action,'duplicate');
 }
+
