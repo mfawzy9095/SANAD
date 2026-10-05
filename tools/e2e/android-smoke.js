@@ -12,7 +12,12 @@ const trustFixtureRows=()=>{
  const rows=adb('shell','content','query','--uri','content://sms/inbox','--projection','_id:body');
  const ids=rows.split('\n').filter(row=>row.includes('QANATIVE')).map(row=>row.match(/_id=(\d+)/)?.[1]).filter(Boolean);
  assert(ids.length>=2,'Trusted fixture rows must exist in the native provider');
- ids.forEach(id=>adb('shell','content','update','--uri','content://sms/'+id,'--bind','address:s:EmiratesNBD'));
+ // Android's SMS provider gates shell writes through WRITE_SMS app-op.
+ adb('shell','appops','set','com.android.shell','WRITE_SMS','allow');
+ ids.forEach(id=>{const response=adb('shell','content','update','--uri','content://sms/'+id,'--bind','address:s:EmiratesNBD');console.log('Trusted provider fixture update:',id,response);assert(!/Error|Exception|denied/i.test(response),'Provider fixture write must succeed: '+response);});
+ const updated=adb('shell','content','query','--uri','content://sms/inbox','--projection','_id:address:body');
+ console.log('Synthetic provider rows after fixture update:',updated);
+ ids.forEach(id=>assert(updated.split('\n').some(row=>row.includes('_id='+id+',')&&row.includes('EmiratesNBD')),'Provider address must match trusted fixture id '+id));
 };
 const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);};
 (async()=>{
