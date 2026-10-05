@@ -345,7 +345,7 @@
     }
     if(!parsed)return review('unrecognized');
     if(!parsed.transactionRef){const ref=normalized.match(/\b(?:TR\s+REF|transaction\s+(?:id|reference)|reference|TID|ref)\s*[:#-]?\s*([A-Za-z0-9_-]{4,40})/i);if(ref)parsed.transactionRef=ref[1];}
-    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.5-financial-contract';parsed.executionStatus='completed';
+    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.6-financial-contract';parsed.executionStatus='completed';
     if(parsed.kind==='investment_sale'){parsed.reviewReason='investment-non-money-review';return parsed;}
     const monetary=Money.ledgerValue(parsed.kind==='balance_observation'?parsed.availableBalance:parsed.amount,parsed.currency);
     if(!monetary.ok||parsed.amount<=0&&parsed.kind!=='balance_observation')return review(monetary.reason||'invalid-amount');

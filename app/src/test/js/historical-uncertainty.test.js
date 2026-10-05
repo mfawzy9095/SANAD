@@ -1,0 +1,17 @@
+'use strict';
+const assert=require('assert'),F=require('../../main/assets/js/finance-core.js');
+const a={id:'wallet',type:'ewallet',currency:'AED',openingBalance:0,openingBalanceKnown:true};
+const t={id:'legacy',type:'income',accountId:'wallet',amount:5000,currency:'AED',created:2000,bankImportKey:'event:legacy|dupay|deposit|AED|5000.00|wallet|',bankImportEventId:'legacy',bankImportEvidence:{kind:'deposit'}};
+const s={accounts:[a],transactions:[t]};
+assert.strictEqual(F.accountMovement(s,'wallet'),5000);
+assert.strictEqual(F.accountBalance(s,'wallet'),null,'certified opening cannot certify an unresolved imported income');
+assert.strictEqual(F.accountBalanceAt(s,'wallet',1000),0,'a later uncertain event must not corrupt earlier balance');
+t.economicOrigin={kind:'external-income',source:'user-confirmation',eventId:'different-event'};
+assert.strictEqual(F.accountBalance(s,'wallet'),null,'origin confirmation must be bound to this evidence');
+t.economicOrigin.eventId='legacy';
+assert.strictEqual(F.accountBalance(s,'wallet'),5000);
+delete t.economicOrigin;
+a.type='credit';a.openingDebt=0;a.openingDebtKnown=true;a.creditLimit=10000;
+assert.strictEqual(F.accountDebt(s,'wallet'),null);
+assert.strictEqual(F.creditAvailableCalculated(s,'wallet'),null,'unknown debt cannot coerce to zero');
+console.log('Historical uncertainty and as-of balance contract: PASS');

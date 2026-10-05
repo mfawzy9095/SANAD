@@ -225,31 +225,50 @@
     out.userFinancialOverride={source:'user-edit',at:Number(at)||Date.now(),previous:{type:old.type,accountId:old.accountId||null,fromAccountId:old.fromAccountId||null,toAccountId:old.toAccountId||null,amount:old.amount==null?null:old.amount,walletAmount:old.walletAmount==null?null:old.walletAmount,fromAmount:old.fromAmount==null?null:old.fromAmount,toAmount:old.toAmount==null?null:old.toAmount,currency:old.currency||null,fromCurrency:old.fromCurrency||null,toCurrency:old.toCurrency||null},prior:old.userFinancialOverride||null};
     return out;
   }
+  // A source reference is scoped evidence, not a globally unique posting ID.
+  const REFERENCE_WINDOW_MS=24*60*60*1000;
+  function sourceMatches(parsed,e){
+    return e.bankId===(parsed.bankId||null)&&e.providerId===(parsed.providerId||null);
+  }
+  function referenceCompatible(parsed,e,accountId){
+    if(!sourceMatches(parsed,e)||!accountId||e.accountId!==accountId||e.kind!==parsed.kind)return false;
+    if(e.currency!==parsed.currency||round2(e.amount)!==round2(parsed.amount))return false;
+    const a=Number(parsed.postedAt),b=Number(e.postedAt);
+    return Number.isFinite(a)&&a>0&&Number.isFinite(b)&&b>0&&Math.abs(a-b)<=REFERENCE_WINDOW_MS;
+  }
+  function primaryEvidence(t){
+    return {
+      bankId:t.bankId||null,providerId:t.providerId||null,
+      eventId:t.bankImportEventId||null,key:t.bankImportKey||null,ref:t.bankTransactionRef||null,
+      kind:(t.bankImportEvidence||{}).kind||String(t.bankImportKey||'').split('|')[2]||null,
+      currency:t.currency||t.fromCurrency,amount:t.amount==null?t.fromAmount:t.amount,
+      accountId:t.accountId||t.fromAccountId,postedAt:t.smsReceivedAt||t.created
+    };
+  }
+  function evidenceRows(t){
+    return [primaryEvidence(t)].concat(arr(t.bankLinkedImportEvents).map(e=>Object.assign({},e,{
+      accountId:e.accountId||(t.type==='transfer'?(['deposit','incoming_transfer'].includes(e.kind)?t.toAccountId:t.fromAccountId):(t.accountId||t.fromAccountId))
+    })));
+  }
   function duplicateOf(parsed,state){
-    const key=MessageCore.dedupeKey(parsed);
-    const identityRoute=MessageCore.resolveRoute(parsed,state||{});
-    const identityAccount=identityRoute&&(identityRoute.account||identityRoute.fromAccount||{}).id;
-    const linked=arr(state&&state.transactions).find(t=>t&&arr(t.bankLinkedImportEvents).some(e=>{
-      if(e.bankId!==(parsed.bankId||null)||e.providerId!==(parsed.providerId||null)||e.currency!==parsed.currency||round2(e.amount)!==round2(parsed.amount))return false;
+    const route=MessageCore.resolveRoute(parsed,state||{});
+    const accountId=route&&(route.account||route.fromAccount||{}).id,key=MessageCore.dedupeKey(parsed);
+    return arr(state&&state.transactions).find(t=>t&&evidenceRows(t).some(e=>{
+      if(!sourceMatches(parsed,e))return false;
+      // Reprocessing the same evidence preserves user corrections to its financial fields.
       if(parsed.eventId&&e.eventId===parsed.eventId)return true;
-      const legAccount=e.accountId||(t.type==='transfer'?(['deposit','incoming_transfer'].includes(e.kind)?t.toAccountId:t.fromAccountId):(t.accountId||t.fromAccountId));
-      if(!identityAccount||identityAccount!==legAccount)return false;
-      if(key&&e.key===key)return true;
-      if(parsed.transactionRef&&e.ref===parsed.transactionRef&&e.kind===parsed.kind)return true;
-      return false; // Text/balance similarity is not an economic identity.
-    }));
-    if(linked)return linked;
-    const hasReference=!!parsed.transactionRef;
-    const route=hasReference?MessageCore.resolveRoute(parsed,state||{}):null,routedId=route&&((route.account||route.fromAccount||{}).id);
-    const exact=arr(state&&state.transactions).find(t=>
-      (routedId&&(t.accountId||t.fromAccountId)===routedId&&parsed.transactionRef&&t.bankTransactionRef===parsed.transactionRef&&
-        (!parsed.bankId||t.bankId===parsed.bankId)&&(!parsed.providerId||t.providerId===parsed.providerId)&&
-        String(t.currency||t.fromCurrency||'').toUpperCase()===String(parsed.currency||'').toUpperCase()&&
-        round2(t.amount==null?t.fromAmount:t.amount)===round2(parsed.amount)&&t.type===expectedTxType(parsed.kind)) ||
-      (parsed.eventId&&t.bankImportEventId===parsed.eventId) ||
-      (key&&t.bankImportKey===key&&(!parsed.transactionRef||(identityAccount&&(t.accountId||t.fromAccountId)===identityAccount)))
-    )||null;
-    return exact;
+      if(!referenceCompatible(parsed,e,accountId))return false;
+      return !!((parsed.transactionRef&&e.ref===parsed.transactionRef)||(key&&e.key===key));
+    }))||null;
+  }
+  function conflictingReferenceOf(parsed,state){
+    if(!parsed.transactionRef)return null;
+    const route=MessageCore.resolveRoute(parsed,state||{});
+    const accountId=route&&(route.account||route.fromAccount||{}).id;
+    if(!accountId)return null;
+    return arr(state&&state.transactions).find(t=>t&&evidenceRows(t).some(e=>
+      sourceMatches(parsed,e)&&e.accountId===accountId&&e.ref===parsed.transactionRef
+    ))||null;
   }
   function observedAfter(parsed){
     if(num(parsed.availableBalance)!=null)return round2(parsed.availableBalance);
@@ -878,6 +897,8 @@
     }
     const dup=duplicateOf(parsed,state);
     if(dup)return {action:'duplicate',reason:'already-imported',existingTransactionId:dup.id,confidence:1};
+    const referenceConflict=conflictingReferenceOf(parsed,state);
+    if(referenceConflict)return {action:'review',reason:'possible-duplicate',existingTransactionId:referenceConflict.id,confidence:0};
     const probable=semanticDuplicateOf(parsed,state,true);
     if(probable)return {action:'review',reason:'possible-duplicate',existingTransactionId:probable.id,confidence:0};
     const counterparts=transferCounterparts(parsed,state);
@@ -1120,6 +1141,6 @@
   return Object.freeze({
     manualImportCandidates,manualDuplicateCandidates,linkManualConfirmation,validateManualImportChanges,preserveImportAudit,auditWithDurableDecisions,
     recentScanStart,compatibleScanCheckpoint,eventDecision,rememberEventDecision,EVENT_DECISION_LIMIT,transferCounterparts,pairOwnTransfer,
-    autoEligible,duplicateOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
+    autoEligible,duplicateOf,conflictingReferenceOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
   });
 });

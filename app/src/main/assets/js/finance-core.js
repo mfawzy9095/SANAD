@@ -58,8 +58,27 @@
     const a=getAccount(state,accountId),terms=balanceTerms(state,accountId,asOf);if(!a||!terms)return null;
     const total=Money.sum(terms,a.currency);return total.ok?total.value:null;
   }
+  function hasUnconfirmedEvidence(t,account){
+    if(!t)return false;
+    const kind=(t.bankImportEvidence||{}).kind||String(t.bankImportKey||'').split('|')[2]||null;
+    if(t.type==='income'&&isLiabilityAccount(account)&&kind!=='refund'&&t.financialEvent!=='purchase-refund')return true;
+    if(!t.bankImportKey&&!t.bankImportEventId&&!t.bankImportEvidence)return false;
+    const origin=t.economicOrigin||{};
+    const userConfirmed=origin.source==='user-confirmation'&&(!t.bankImportEventId||origin.eventId===t.bankImportEventId);
+    if(t.type==='income'&&!['salary','refund'].includes(kind))return !(userConfirmed&&origin.kind==='external-income');
+    if(t.type==='external_transfer')return !(userConfirmed&&origin.kind==='external-destination');
+    return false;
+  }
   function accountBalance(state,accountId,asOf){
     const a=getAccount(state,accountId);if(!openingKnown(a))return null;
+    const cutoff=asOf==null?Infinity:Number(asOf);
+    for(const t of (state&&state.transactions)||[]){
+      if(!t||!(t.accountId===accountId||t.fromAccountId===accountId||t.toAccountId===accountId))continue;
+      const side=t.type==='transfer'?(t.fromAccountId===accountId?'from':'to'):null;
+      const posting=side&&t.bankPostingTimes&&Number(t.bankPostingTimes[side]);
+      if((posting>0?posting:Number(t.created)||0)>cutoff)continue;
+      if(hasUnconfirmedEvidence(t,a))return null;
+    }
     const terms=balanceTerms(state,accountId,asOf);if(!terms)return null;
     terms.unshift(isLiabilityAccount(a)?-Number(a.openingDebt):a.openingBalance);
     const total=Money.sum(terms,a.currency);return total.ok?total.value:null;
@@ -177,7 +196,8 @@
     if(!a||a.type!=='credit'||!openingKnown(a))return null;
     const limit=num(a.creditLimit);
     if(limit<=0)return null;
-    const total=Money.sum([limit,-accountDebt(state,accountId)],a.currency);return total.ok?Math.max(0,total.value):null;
+    const debt=accountDebt(state,accountId);if(debt===null)return null;
+    const total=Money.sum([limit,-debt],a.currency);return total.ok?Math.max(0,total.value):null;
   }
 
   function creditAvailable(state,accountId){
@@ -234,6 +254,7 @@
     accountBalance,
     accountMovement,
     openingKnown,
+    hasUnconfirmedEvidence,
     validateMoneyChanges,
     accountBalanceAt,
     setOpeningBalance,
