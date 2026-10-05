@@ -753,7 +753,7 @@
     if(!parsed||!parsed.recognized)return {ok:false,reason:'unrecognized'};
     if(parsed.ignored)return {ok:false,reason:parsed.reason||'ignored'};
     if(parsed.reviewReason)return {ok:false,reason:parsed.reviewReason};
-    if(['salary','deposit','incoming_transfer'].includes(parsed.kind)&&route&&route.account&&route.account.type==='credit')return {ok:false,reason:'asset-account-required'};
+    if(['salary','deposit','incoming_transfer'].includes(parsed.kind)&&route&&route.account&&['credit','debt'].includes(route.account.type))return {ok:false,reason:'asset-account-required'};
     if(parsed.feeFormula)return {ok:false,reason:'fee-review-required'};
     if(parsed.kind==='refund'&&route&&route.account){
       const a=route.account,credit=a.type==='credit',value=num(credit?parsed.availableCredit:parsed.availableBalance);

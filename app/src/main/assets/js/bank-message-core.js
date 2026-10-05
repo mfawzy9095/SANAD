@@ -28,7 +28,6 @@
   }
   function bankIdFrom(input,raw){
     if(input&&input._sourceResolved)return input._resolvedBank||null;
-    if(input&&input.bankId&&Banks.get(input.bankId))return input.bankId;
     const metadata=((input&&input.title)||'')+' '+((input&&input.sender)||'');
     if(/^(?:\s*EI\s*SMS\s*)$/i.test(metadata))return 'emirates-islamic';
     const hit=Banks.detect(metadata);
@@ -42,7 +41,6 @@
   }
   function providerIdFrom(input,raw){
     if(input&&input._sourceResolved)return input._resolvedProvider||null;
-    if(input&&input.providerId&&Banks.getProvider&&Banks.getProvider(input.providerId))return input.providerId;
     if(/^\s*e&\s*money\s*$/i.test((input&&input.title)||'')&&/ج\.?\s*م|جنيه|ج\./.test(raw))return 'e-cash-egypt';
     const hit=Banks.detectProvider?Banks.detectProvider(((input&&input.title)||'')+' '+((input&&input.sender)||'')):null;
     if(hit)return hit.provider.id;
@@ -58,6 +56,8 @@
     if(!m)return null;
     const d=Number(m[1]),mo=Number(m[2]),y=Number(m[3]);
     if(y<2000||mo<1||mo>12||d<1||d>31)return null;
+    const verified=new Date(Date.UTC(y,mo-1,d));
+    if(verified.getUTCFullYear()!==y||verified.getUTCMonth()!==mo-1||verified.getUTCDate()!==d)return null;
     return String(y)+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
   }
   function categoryForMerchant(value){
@@ -339,16 +339,19 @@
       return c1?currency+' '+v.decimal+punctuation:v.decimal+' '+currency;
     });
     if(numericError)return review(numericError);
-    const parsed=parseWalletFamilies(obj,normalized)||parseEgyptBank(obj,normalized)||(bank==='emirates-nbd'?parseEnbd(obj,normalized):null)||parseArabicCreditCard(obj,normalized)||(provider==='du-pay'?parseDuPay(obj,normalized):null)||parseGeneric(obj,normalized);
+    let parsed=null,family=null;
+    for(const [name,fn,enabled] of [['wallet',parseWalletFamilies,true],['egypt-bank',parseEgyptBank,true],['enbd',parseEnbd,bank==='emirates-nbd'],['arabic-credit',parseArabicCreditCard,true],['du-pay',parseDuPay,provider==='du-pay'],['generic',parseGeneric,true]]){
+      if(enabled){parsed=fn(obj,normalized);if(parsed){family=name;break;}}
+    }
     if(!parsed)return review('unrecognized');
     if(!parsed.transactionRef){const ref=normalized.match(/\b(?:TR\s+REF|transaction\s+(?:id|reference)|reference|TID|ref)\s*[:#-]?\s*([A-Za-z0-9_-]{4,40})/i);if(ref)parsed.transactionRef=ref[1];}
-    parsed.raw=raw;parsed.parserVersion='9.2.4-financial-contract';parsed.executionStatus='completed';
+    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.4-financial-contract';parsed.executionStatus='completed';
     if(parsed.kind==='investment_sale'){parsed.reviewReason='investment-non-money-review';return parsed;}
     const monetary=Money.ledgerValue(parsed.kind==='balance_observation'?parsed.availableBalance:parsed.amount,parsed.currency);
     if(!monetary.ok||parsed.amount<=0&&parsed.kind!=='balance_observation')return review(monetary.reason||'invalid-amount');
     parsed.money={currency:monetary.currency,scale:monetary.scale,minorUnits:monetary.minorUnits};
     // Generic slash dates have no authoritative source-specific day/month contract.
-    if(/\d{1,2}\/\d{1,2}\/\d{4}/.test(normalized)&&parsed.confidence<0.95)parsed.reviewReason='ambiguous-date';
+    if(/\d{1,2}\/\d{1,2}\/\d{4}/.test(normalized)){if(!parsed.transactionDate)parsed.reviewReason='invalid-operation-date';else if(family==='generic')parsed.reviewReason='ambiguous-date';}
     return parsed;
   }
   function institutionBankId(inst){if(!inst)return null;if(inst.bankRegistryId&&Banks.get(inst.bankRegistryId))return inst.bankRegistryId;const hit=Banks.detect(inst.name||'');return hit?hit.bank.id:null;}
@@ -434,7 +437,7 @@
     const d=new Date(parsed.postedAt||Date.now()),localDate=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     const opts=options||{},date=opts.date||parsed.transactionDate||localDate,id=typeof opts.uid==='function'?opts.uid('t'):('bank_'+Date.now()),key=dedupeKey(parsed);
     if(!route||route.status!=='routed')return {ok:false,reason:(route&&route.reason)||'route-required'};
-    if(['salary','deposit','incoming_transfer'].includes(parsed.kind)&&route.account&&route.account.type==='credit')return {ok:false,reason:'asset-account-required'};
+    if(['salary','deposit','incoming_transfer'].includes(parsed.kind)&&route.account&&['credit','debt'].includes(route.account.type))return {ok:false,reason:'asset-account-required'};
     if(['purchase','bill_payment','mobile_recharge','deposit','salary','refund','incoming_transfer'].includes(parsed.kind)){
       const account=route.account;if(!account)return {ok:false,reason:'account-required'};if(account.currency!==parsed.currency)return {ok:false,reason:'fx-review-required'};
       const type=['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)?'expense':'income';
@@ -473,7 +476,7 @@
     const fee=feeConfirmed?Number(opts.confirmedFee):0;
     if(!Number.isFinite(fee)||fee<0)return {ok:false,reason:'invalid-confirmed-fee'};
     if(fee>0&&!['purchase','bill_payment','mobile_recharge','outgoing_transfer','internal_transfer','card_repayment','cash_withdrawal'].includes(parsed.kind))return {ok:false,reason:'fee-direction-review-required'};
-    if(parsed.reviewReason)return {ok:false,reason:parsed.reviewReason};
+    if(parsed.reviewReason&&!(parsed.reviewReason==='ambiguous-date'&&/^\d{4}-\d{2}-\d{2}$/.test(opts.date||'')))return {ok:false,reason:parsed.reviewReason};
     const money=Money.ledgerValue(parsed.amount,parsed.currency);if(!money.ok||Number(parsed.amount)<=0)return {ok:false,reason:money.reason||'invalid-amount'};
     const built=buildTransactionBase(parsed,route,options);
     if(built.ok&&built.transaction&&feeConfirmed){
