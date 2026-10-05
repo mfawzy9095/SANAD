@@ -68,10 +68,23 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  record('Generic inbound stays review until per-event external income confirmation');
  await page.evaluate(()=>closeSheet());
  const bankId=await page.evaluate(()=>S.accounts.find(x=>x.bankRefs?.includes('012XXX50XXX01')).id);
+ assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),null);
+ assert.equal(await page.evaluate(id=>FinanceCore.accountMovement(S,id),bankId),9100);
+ assert.match(await page.locator('#app').innerText(),/غير معروف|غير مؤكد/);
+ await page.evaluate(id=>openAccountSheet(id),bankId);
+ await page.locator('#wBalance').fill('1.66');await page.locator('#wOpeningKnown').check();
+ await page.locator('[data-act="save-account"]').click();await page.waitForFunction(()=>!_criticalMutationInFlight);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),9101.66);
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
  await page.waitForFunction(()=>!SanadBankInbox._recentStarting&&!SanadBankInbox.historicalImporting);
  assert.equal(await page.evaluate(()=>S.transactions.length),2);record('Plus SMS scan, salary/deposit discovery, balance and repeat deduplication');
+ const centralGuard=await page.evaluate(async()=>{
+   const before=stateFingerprint(snapshotState()),old=S.transactions.find(t=>t.bankImportEventId==='qa-deposit');
+   const result=await commitCriticalMutation(()=>{S.transactions.push({id:'qa-direct-duplicate',type:'income',accountId:old.accountId,currency:old.currency,amount:old.amount,walletAmount:old.walletAmount,fxRate:1,cat:'other',date:old.date,transactionTime:old.transactionTime,created:old.created});return true;});
+   return {result,unchanged:stateFingerprint(snapshotState())===before};
+ });
+ assert.equal(centralGuard.result.reason,'possible-bank-duplicate');assert.equal(centralGuard.unchanged,true);
+ record('Application central mutation guard rejects a direct manual duplicate and restores state');
  const guardBefore=await page.evaluate(()=>stateFingerprint(snapshotState()));
  await page.evaluate(id=>{const t=S.transactions.find(t=>t.bankImportEventId==='qa-deposit');openNewTx('income');S.form.source={type:'account',id,accountId:id};S.form.amount='100';S.form.date=t.date;S.form.transactionTime=t.transactionTime||localDateTimeInput(t.created).slice(11);renderTxSheet();},bankId);
  await page.locator('[data-act="save-tx"]').click();
@@ -123,7 +136,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert(await page.evaluate(async id=>!!(await SanadExtStorage.getReceipt(id)),expenseId));record('Full backup export/restore with receipt and fingerprint equality');
  // Add a second account and transfer through the actual forms.
  await page.evaluate(()=>openAccountSheet(null,'bank'));
- await page.locator('#wName').fill('QA Savings');await page.locator('#wBalance').fill('0');
+ await page.locator('#wName').fill('QA Savings');await page.locator('#wBalance').fill('0');await page.locator('#wOpeningKnown').check();
  await page.locator('[data-act="save-account"]').click();
  await page.waitForFunction(()=>S.accounts.some(a=>a.name==='QA Savings')&&!_criticalMutationInFlight);
  const savingsId=await page.evaluate(()=>S.accounts.find(a=>a.name==='QA Savings').id);

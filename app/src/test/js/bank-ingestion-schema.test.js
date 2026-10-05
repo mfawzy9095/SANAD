@@ -95,9 +95,11 @@ function process(text,input,state){
   assert.strictEqual(s.paymentInstruments[0].last4,'7105');
   assert.strictEqual(s.transactions.length,1);
   assert.strictEqual(s.transactions[0].cat,'grocery');
-  assert.strictEqual(Finance.accountBalance(s,s.accounts[0].id),0.53);
+  assert.strictEqual(Finance.accountBalance(s,s.accounts[0].id),null);
+  assert.strictEqual(Finance.accountMovement(s,s.accounts[0].id),-9.75);
+  assert.strictEqual(Finance.accountBalancePresentation(s,s.accounts[0].id).observed,0.53);
   const rec=Ingest.reconciliation(plan.transaction?fixtureParse({id:'du-purchase',postedAt:Date.UTC(2026,9,1,10,0),text:'Hello Test User, Your du Pay Card ending in 7105 has been used for AED 9.75 at FRESH CRAFT MINI MART. Your available balance is now AED 0.53 and your transaction ID is DG108RVT5U. Fee AED 0.00, VAT AED 0.00.'}):null,s,plan,(st,id)=>Finance.accountBalance(st,id));
-  assert.ok(rec&&rec.matched);
+  assert.strictEqual(rec,null);
 })();
 
 (function enbdSalaryAutoCreatesExactOpeningBaseline(){
@@ -109,10 +111,12 @@ function process(text,input,state){
   assert.strictEqual(s.accounts.length,1);
   assert.strictEqual(s.accounts[0].type,'bank');
   assert.deepStrictEqual(s.accounts[0].bankRefs,['012XXX50XXX01']);
-  assert.strictEqual(s.accounts[0].openingBalance,1.66);
+  assert.strictEqual(s.accounts[0].openingBalance,0);
   assert.strictEqual(s.transactions[0].type,'income');
   assert.strictEqual(s.transactions[0].cat,'salary');
-  assert.strictEqual(Finance.accountBalance(s,s.accounts[0].id),9001.66);
+  assert.strictEqual(Finance.accountBalance(s,s.accounts[0].id),null);
+  assert.strictEqual(Finance.accountMovement(s,s.accounts[0].id),9000);
+  assert.strictEqual(Finance.accountBalancePresentation(s,s.accounts[0].id).observed,9001.66);
 })();
 
 (function enbdDebitPurchaseDiscoversBankAndCard(){
@@ -126,7 +130,9 @@ function process(text,input,state){
   assert.strictEqual(s.paymentInstruments[0].type,'debit_card');
   assert.strictEqual(s.paymentInstruments[0].last4,'3993');
   assert.strictEqual(s.transactions[0].cat,'health');
-  assert.strictEqual(Finance.accountBalance(s,s.accounts[0].id),2684.31);
+  assert.strictEqual(Finance.accountBalance(s,s.accounts[0].id),null);
+  assert.strictEqual(Finance.accountMovement(s,s.accounts[0].id),-5.1);
+  assert.strictEqual(Finance.accountBalancePresentation(s,s.accounts[0].id).observed,2684.31);
 })();
 
 (function arabicCreditDiscoveryIsStrictButDoesNotInventLimit(){
@@ -140,7 +146,7 @@ function process(text,input,state){
   assert.strictEqual(a.creditLimit,0);
   assert.strictEqual(a.baselinePartial,true);
   assert.strictEqual(a.observedAvailableCredit,457.04);
-  assert.strictEqual(Finance.accountDebt(s,a.id),2.50);
+  assert.strictEqual(Finance.accountDebt(s,a.id),null);assert.strictEqual(Finance.accountMovement(s,a.id),-2.5);
 })();
 
 (function withdrawalBecomesInternalTransferWhenUniqueCashExists(){
@@ -219,9 +225,11 @@ function process(text,input,state){
   process('Purchase AED 10.00 at TEST STORE using debit card ending 7777. Available balance is AED 90.00',{id:'acme-debit',title:'Acme Bank'},s);
   assert.strictEqual(s.accounts.length,1);
   assert.strictEqual(s.accounts[0].type,'bank');
-  assert.strictEqual(s.accounts[0].openingBalance,100);
+  assert.strictEqual(s.accounts[0].openingBalance,0);
   assert.strictEqual(s.paymentInstruments[0].type,'debit_card');
-  assert.strictEqual(Finance.accountBalance(s,s.accounts[0].id),90);
+  assert.strictEqual(Finance.accountBalance(s,s.accounts[0].id),null);
+  assert.strictEqual(Finance.accountMovement(s,s.accounts[0].id),-10);
+  assert.strictEqual(Finance.accountBalancePresentation(s,s.accounts[0].id).observed,90);
 })();
 
 (function transactionReferencePreventsDuplicate(){
@@ -320,5 +328,7 @@ console.log('bank ingestion schema integration tests: PASS');
  assert.strictEqual(Message.buildTransaction(parsed,route,{uid}).reason,'fee-confirmation-required');
  const built=Message.buildTransaction(parsed,route,{uid,confirmedFee:2.1});assert.strictEqual(built.ok,true,JSON.stringify({built,parsed,route}));
  s.transactions.push(built.transaction);strictOk(s,'gross confirmed fee follows same-currency amount invariant');
- assert.strictEqual(Finance.accountBalance(s,s.accounts[0].id),78.15);
+ assert.strictEqual(Finance.accountBalance(s,s.accounts[0].id),null);
+  assert.strictEqual(Finance.accountMovement(s,s.accounts[0].id),-21.85);
+  assert.strictEqual(Finance.accountBalancePresentation(s,s.accounts[0].id).observed,90.25);
 })();

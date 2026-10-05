@@ -755,6 +755,7 @@ window.__sanadSplashBorn=performance.now();
 <div class="action-menu" id="actionMenu"></div>
 <div class="toast" id="toast"></div>
 
+<script src="js/money-core.js"></script>
 <script src="js/finance-core.js"></script>
 <script src="js/state-core.js"></script>
 <script src="js/storage-core.js"></script>
@@ -773,7 +774,6 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/reminder-core.js"></script>
 <script src="js/report-core.js"></script>
 <script src="js/uae-bank-registry-core.js"></script>
-<script src="js/money-core.js"></script>
 <script src="js/bank-message-core.js"></script>
 <script src="js/bank-ingestion-core.js"></script>
 <script>
@@ -929,7 +929,7 @@ function txTimeValue(t){ return StateCore.txTimeValue(t); }
 function compareTxDesc(a,b){ return StateCore.compareTxDesc(a,b); }
 function ymKey(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1); }
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g,m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-function fmt(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('en-US',{maximumFractionDigits:2}); }
+function fmt(n){ if(n===null||n===undefined||!Number.isFinite(Number(n)))return 'غير معروف'; return (Math.round((Number(n)||0)*100)/100).toLocaleString('en-US',{maximumFractionDigits:2}); }
 function buzz(ms){ if (navigator.vibrate) try { navigator.vibrate(ms||6); } catch(e){} }
 function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
 function monthLabel(key){ const [y,m] = key.split('-').map(Number); return new Date(y,m-1,1).toLocaleDateString('ar-EG-u-nu-latn',{month:'long',year:'numeric'}); }
@@ -1024,7 +1024,6 @@ const Schema = SchemaCore.createSchema({
 const PersistenceService = PersistenceCore.createPersistenceService({
   storage: Storage,
   validateState: st => Schema.validateStateStrict(st),
-  validateChanges: (next,before) => _dataReplacementInFlight ? null : BankIngestionCore.validateManualImportChanges(next,before),
   fingerprint: stateFingerprint,
   onRecovery: enterRecoveryMode,
   logError: (...args) => console.error(...args)
@@ -1163,6 +1162,7 @@ const MutationService = MutationCore.createMutationService({
   captureInvariant: () => FinanceCore.capturePrepaidBalances(S),
   checkInvariant: checkPrepaidInvariant,
   validateState: st => Schema.validateStateStrict(st),
+  validateChanges: (next,before) => _dataReplacementInFlight ? null : (FinanceCore.validateMoneyChanges(next,before)||BankIngestionCore.validateManualImportChanges(next,before)),
   isPreview: () => S.previewMode,
   writeSafetySnapshot: writeRotatedPreCritSnapshot,
   verifiedWrite: verifiedWriteState,
@@ -1366,7 +1366,8 @@ const Finance = {
     this.getCountryAccounts(country).forEach(a => {
       if (!isAssetAccount(a)) return;
       const bal = this.accountBalancePresentation(a.id).display;
-      out[a.currency] = (out[a.currency] || 0) + bal;
+      if(out[a.currency]===null||bal===null)out[a.currency]=null;
+      else {const total=SanadMoneyCore.sum([out[a.currency]||0,bal],a.currency);out[a.currency]=total.ok?total.value:null;}
     });
     return out;
   },
@@ -1860,7 +1861,7 @@ function viewHome(){
           '<div class="wh-cur">' + (inst ? esc(inst.name) + ' · ' : '') + Finance.curInfo(defaultAcc.currency).name + '</div></div>' +
       '</div>' +
       '<div class="wh-balance-row"><div class="wh-bal amt-val">' + amtText(bal) + ' <span style="font-size:14px;opacity:.85">' + Finance.curSymbol(defaultAcc.currency) + '</span></div>' + quickAmountEye + '</div>' +
-      '<div class="wh-sub">الحساب الأساسي في ' + esc(cInfo.name) + (heroBalanceView?' · '+(heroBalanceView.observedIsCurrent?'آخر رصيد وارد من المصدر':heroBalanceView.observedAt?'رصيد تقديري بعد آخر رسالة':'رصيد محسوب من السجل'):'') + '</div>' +
+      '<div class="wh-sub">الحساب الأساسي في ' + esc(cInfo.name) + (heroBalanceView?' · '+(bal===null?'الرصيد الافتتاحي غير مؤكد':'رصيد الحساب من السجل')+(heroBalanceView.observed!==null?' · آخر رصيد متاح بالرسالة '+amtText(heroBalanceView.observed):''):'') + '</div>' +
     '</div>';
   } else {
     heroHtml = '<div class="card" style="text-align:center;padding:20px">' +
@@ -1887,7 +1888,7 @@ function viewHome(){
   ).join('');
   const summaryHtml = '<div class="country-summary">' +
     '<div class="cs-hdr">ملخص ' + esc(countryInfo(country).name) + '</div>' +
-    '<div class="cs-sub">متاح في البلد</div>' + liquidityRows +
+    '<div class="cs-sub">أرصدة الأصول من السجل</div>' + liquidityRows +
     '<div style="border-top:1px solid var(--outline);margin:8px 0 4px"></div>' +
     '<div class="cs-sub">مصروف هذا الشهر</div>' + spendingRows +
     (outboundRows ? '<div style="border-top:1px solid var(--outline);margin:8px 0 4px"></div>' +
@@ -1903,7 +1904,7 @@ function viewHome(){
     const rows = Object.entries(summary).map(([cur,total]) =>
       '<div class="ds-row"><span>عليك</span><span class="amt-val">' + amtText(total) + ' <span class="cur">' + Finance.curSymbol(cur) + '</span></span></div>'
     ).join('');
-    const partialDebt=liabAccounts.some(a=>a.baselinePartial);
+    const partialDebt=liabAccounts.some(a=>Finance.accountDebt(a.id)===null);
     if (rows||partialDebt){
       liabilityHtml = '<div class="debt-summary" data-act="open-liabilities">' +
         '<div class="ds-head"><b>المديونيات — ' + esc(countryInfo(country).name) + '</b><span>' + liabAccounts.length + ' ›</span></div>' +
@@ -2335,22 +2336,22 @@ function accountTileHtml(a, size){
     if (a.type === 'credit'){
       const avail = Finance.creditAvailable(a.id);
       const limit = Number(a.creditLimit) || 0;
-      amountHtml = a.baselinePartial?'المديونية غير مؤكدة':((debt > 0 ? 'عليك ' + amtText(debt) : 'لا يوجد مديونية') + ' <small>' + Finance.curSymbol(a.currency) + '</small>');
+      amountHtml = bal===null?'المديونية غير مؤكدة':((debt > 0 ? 'عليك ' + amtText(debt) : 'لا يوجد مديونية') + ' <small>' + Finance.curSymbol(a.currency) + '</small>');
       extraHtml = '<div class="tile-row"><span>المتاح</span><span class="amt-val">' + (avail !== null ? amtText(avail) : 'غير محدد') + '</span></div>' +
         (limit > 0 ? '<div class="tile-row"><span>الحد</span><span class="amt-val">' + amtText(limit) + '</span></div>' : '');
     } else {
-      amountHtml = (debt > 0 ? 'عليك ' + amtText(debt) : 'لا يوجد') + ' <small>' + Finance.curSymbol(a.currency) + '</small>';
+      amountHtml = bal===null?'المديونية غير مؤكدة':(debt > 0 ? 'عليك ' + amtText(debt) : 'لا يوجد') + ' <small>' + Finance.curSymbol(a.currency) + '</small>';
       if (a.dueDate) extraHtml = '<div class="tile-foot">يستحق ' + a.dueDate + '</div>';
     }
   } else {
     const displayBal=balanceView?balanceView.display:bal;
     amountHtml = amtText(displayBal) + ' <small>' + Finance.curSymbol(a.currency) + '</small>';
-    if(balanceView&&balanceView.projected!==null&&!balanceView.observedIsCurrent){
-      extraHtml='<div class="tile-foot">تقدير بعد آخر رصيد مسجل · '+amtText(balanceView.observed)+'</div>';
+    if(balanceView&&balanceView.observed!==null){
+      extraHtml='<div class="tile-foot">آخر رصيد متاح بالرسالة · '+amtText(balanceView.observed)+'</div>';
     }
     if(balanceView&&balanceView.mismatch){
       extraHtml = '<div class="tile-row"><span>الرصيد المحسوب في SANAD</span><span class="amt-val">' + amtText(balanceView.calculated) + '</span></div>' +
-        '<div class="tile-foot" style="color:var(--warn)">آخر رصيد مؤكد من البنك/المحفظة · فرق ' + amtText(balanceView.difference) + '</div>';
+        '<div class="tile-foot" style="color:var(--warn)">رصيد الحساب الوارد مختلف · فرق ' + amtText(balanceView.difference) + '</div>';
     }
   }
   return '<div class="' + tileCls + '" data-account-edit="' + a.id + '">' +
@@ -2379,16 +2380,17 @@ function instrumentTileHtml(inst, size){
     const debt = Math.abs(bal);
     const avail = Finance.creditAvailable(acc.id);
     const limit = Number(acc.creditLimit) || 0;
-    amountHtml = acc.baselinePartial?'المديونية غير مؤكدة':((debt > 0 ? 'عليك ' + amtText(debt) : 'لا يوجد مديونية') + ' <small>' + Finance.curSymbol(acc.currency) + '</small>');
+    amountHtml = bal===null?'المديونية غير مؤكدة':((debt > 0 ? 'عليك ' + amtText(debt) : 'لا يوجد مديونية') + ' <small>' + Finance.curSymbol(acc.currency) + '</small>');
     extraHtml = '<div class="tile-row"><span>المتاح</span><span class="amt-val">' + (avail !== null ? amtText(avail) : 'غير محدد') + '</span></div>' +
       (limit > 0 ? '<div class="tile-row"><span>الحد</span><span class="amt-val">' + amtText(limit) + '</span></div>' : '');
   } else {
     const displayBal=balanceView?balanceView.display:bal;
     amountHtml = amtText(displayBal) + ' <small>' + Finance.curSymbol(acc.currency) + '</small>';
     extraHtml = '<div class="tile-foot">↳ ' + esc(acc.name) + '</div>' +
+      (balanceView&&balanceView.observed!==null?'<div class="tile-foot">آخر رصيد متاح بالرسالة · '+amtText(balanceView.observed)+'</div>':'') +
       (balanceView&&balanceView.mismatch
         ? '<div class="tile-row"><span>الرصيد المحسوب في SANAD</span><span class="amt-val">' + amtText(balanceView.calculated) + '</span></div>' +
-          '<div class="tile-foot" style="color:var(--warn)">آخر رصيد مؤكد من البنك/المحفظة · فرق ' + amtText(balanceView.difference) + '</div>'
+          '<div class="tile-foot" style="color:var(--warn)">رصيد الحساب الوارد مختلف · فرق ' + amtText(balanceView.difference) + '</div>'
         : '');
   }
   return '<div class="tile' + (size === 'sm' ? ' tile-sm' : '') + '" data-instrument-edit="' + inst.id + '">' +
@@ -4115,7 +4117,7 @@ async function saveTransfer(){
     const existingToAmount = existingTransfer && existingTransfer.toAccountId === targetAcc.id
       ? (Number(existingTransfer.toAmount) || 0) : 0;
     const debtBefore = debt + existingToAmount;
-    if (toAmount > debtBefore + 0.01){
+    if (debt!==null&&toAmount > debtBefore + 0.01){
       await dialog({emoji:'⚠️', title:'المبلغ أكبر من المديونية',
         msg:'أقصى مبلغ للسداد هو ' + amtFull(debtBefore, toCur) + '.',
         okText:'حسناً', primary:true, hideCancel:true});
@@ -4309,7 +4311,7 @@ function renderRepaymentEditor(){
   const rate = Number(f.rate) || (sameCur ? 1 : Finance.suggestRate(fromCur, targetCur));
   const debtPaid = sameCur ? fromAmt : Math.round(fromAmt * rate * 100) / 100;
   const debtBefore = debt + (Number(f._originalToAmount) || 0);
-  const overpay = debtPaid > debtBefore + 0.01;
+  const overpay = debt!==null&&debtPaid > debtBefore + 0.01;
   let fxHtml = '';
   if (!sameCur){
     fxHtml = '<div class="fx-box"><div class="fx-head">💱 تحويل</div>' +
@@ -4408,7 +4410,7 @@ async function saveRepaymentEdit(){
   }
   const debt = Finance.accountDebt(target.id);
   const debtBefore = debt + (Number(t.toAmount) || 0);
-  if (toAmount > debtBefore + 0.01){
+  if (debt!==null&&toAmount > debtBefore + 0.01){
     await dialog({emoji:'⚠️', title:'المبلغ أكبر من المديونية',
       msg:'أقصى مبلغ للسداد هو ' + amtFull(debtBefore, targetCur) + '.',
       okText:'حسناً', primary:true, hideCancel:true});
@@ -5134,6 +5136,7 @@ function openAccountSheet(id, presetType, preserve){
       '<input type="number" inputmode="decimal" id="wBalance" value="' + (data.openingBalance || 0) + '">' +
       '<div class="field-hint">' + (hasTx ? 'يمكن تعديل رصيد البداية؛ SANAD يعيد احتساب الرصيد من كل المعاملات بعد الحفظ. استخدم «تعديل الرصيد الحقيقي» إذا كنت تصحح الرصيد الحالي.' : 'رصيد الحساب عند تاريخ البداية.') + '</div></div>';
   }
+  amountField += '<label class="field-hint"><input type="checkbox" id="wOpeningKnown"'+(isEdit&&FinanceCore.openingKnown(data)?' checked':'')+'> أؤكد قيمة البداية قبل أول عملية مسجلة؛ الصفر يحتاج تأكيداً أيضاً</label>';
   const cashFundingHtml = (isCash && !isEdit) ?
     '<div class="field"><label>مصدر الكاش الأول</label><select id="cashFundingMode"><option value="existing">الكاش موجود عندي بالفعل</option><option value="transfer">سحب / نقل من حساب موجود</option></select><div class="field-hint">لو اخترت حسابًا، SANAD يسجلها كتحويل حتى لا تتضاعف أموالك.</div></div>' +
     '<div class="field" id="cashFundingSourceWrap" hidden><label>حساب التمويل</label><select id="cashFundingSource">' + cashFundingOptions + '</select></div>' : '';
@@ -5267,6 +5270,7 @@ async function saveAccount(id){
   const isDebt = type === 'debt';
   let openingBalance = 0, openingDebt = 0, creditor = '', dueDate = null;
   let cashFundingMode='existing', cashFundingSourceId=null;
+  const openingKnown=!!document.getElementById('wOpeningKnown')?.checked;
   const balEl = document.getElementById('wBalance');
   if (balEl && !balEl.disabled) openingBalance = parseFloat(balEl.value) || 0;
   if(!id && type==='cash'){
@@ -5277,7 +5281,7 @@ async function saveAccount(id){
       if(!src||src.archived||isLiabilityAccount(src)){toast('اختر حساب تمويل صالح');return;}
       if(src.currency!==cur){toast('تمويل الكاش الأول يجب أن يكون من حساب بنفس العملة');return;}
       if(openingBalance<=0){toast('أدخل مبلغ الكاش');return;}
-      if(Finance.accountBalance(src.id)+0.001<openingBalance){toast('رصيد حساب التمويل غير كافٍ');return;}
+      if(Finance.accountBalance(src.id)===null||Finance.accountBalance(src.id)+0.001<openingBalance){toast('رصيد حساب التمويل غير كافٍ');return;}
     }
   }
   const debtEl = document.getElementById('wDebt');
@@ -5342,14 +5346,14 @@ async function saveAccount(id){
       a.bankRefs = bankRefs.slice();
       if (bankRefs.length === 1) a.bankRef = bankRefs[0]; else delete a.bankRef;
       a.icon = i; a.color = c;
-      FinanceCore.setOpeningBalance(a,openingBalance);
-      if (isLiab) a.openingDebt = openingDebt;
+      if(openingKnown){if(!FinanceCore.setOpeningBalance(a,openingBalance))return false;}else a.openingBalanceKnown=false;
+      if (isLiab){a.openingDebt=openingDebt;a.openingDebtKnown=openingKnown;}
       if (isDebt){ a.creditor = creditor; a.dueDate = dueDate; }
     } else {
       savedId = uid('a');
       S.accounts.push({
         id: savedId, institutionId, country, name, type, currency: cur,
-        openingBalance: (type==='cash'&&cashFundingMode==='transfer') ? 0 : openingBalance, openingDebt, creditLimit: 0,
+        openingBalance: (type==='cash'&&cashFundingMode==='transfer') ? 0 : openingBalance, openingBalanceKnown:openingKnown||(type==='cash'&&cashFundingMode==='transfer'), openingDebt, openingDebtKnown:openingKnown, creditLimit: 0,
         defaultRepaymentAccountId: null,
         bankRefs: bankRefs.slice(),
         icon: i, color: c, archived: false,
@@ -5404,6 +5408,7 @@ async function archiveAccount(id){
 
   /* V8.8.4.10 FIX 4: guard against malformed/legacy liability states too. */
   const rawBal = Finance.accountBalance(a.id);
+  if(rawBal===null){toast('الرصيد غير مؤكد؛ راجعه قبل الحذف أو الأرشفة');return;}
   if (isLiabilityAccount(a)){
     if (rawBal < -0.01){
       await dialog({emoji:'⚠️', title:'لا يمكن أرشفة الحساب',
@@ -5500,6 +5505,7 @@ async function delAccount(id){
   /* V8.8.4.10 FIX 4: guard against malformed/legacy liability states too.
      Never delete any account with a non-zero raw balance. */
   const rawBal = Finance.accountBalance(a.id);
+  if(rawBal===null){toast('الرصيد غير مؤكد؛ راجعه قبل الحذف أو الأرشفة');return;}
   if (isLiabilityAccount(a)){
     if (rawBal < -0.01){
       await dialog({emoji:'⚠️', title:'لا يمكن حذف الحساب',
@@ -5565,6 +5571,7 @@ function openEditWalletBalance(walletId){
   const a = Finance.getAccount(walletId);
   if (!a) return;
   const currentBal = Finance.accountBalance(a.id);
+  if(currentBal===null){toast('القيمة غير مؤكدة؛ راجع رصيد البداية والعمليات، لا يمكن إنشاء تسوية');return;}
   openSheet(
     '<div class="sheet-head"><button type="button" class="close" data-act="close-sheet">✕</button>' +
       '<h2>تعديل الرصيد الحقيقي</h2><div style="width:36px"></div></div>' +
@@ -5591,6 +5598,7 @@ async function saveWalletBalance(walletId){
     return;
   }
   const current = Finance.accountBalance(walletId);
+  if(current===null){toast('القيمة غير مؤكدة؛ راجع رصيد البداية والعمليات، لا يمكن إنشاء تسوية');return;}
   const diff = Math.round((realBal - current) * 100) / 100;
   if (Math.abs(diff) < 0.01){ toast('لا يوجد فرق'); closeSheet(); return; }
   const result = await commitCriticalMutation(async () => {
@@ -5610,6 +5618,7 @@ function openReconcileLiability(walletId){
   const a = Finance.getAccount(walletId);
   if (!a || !isLiabilityAccount(a)){ toast('حساب غير صالح'); return; }
   const currentDebt = Finance.accountDebt(a.id);
+  if(currentDebt===null){toast('القيمة غير مؤكدة؛ راجع رصيد البداية والعمليات، لا يمكن إنشاء تسوية');return;}
   openSheet(
     '<div class="sheet-head"><button type="button" class="close" data-act="close-sheet">✕</button>' +
       '<h2>تسوية المديونية</h2><div style="width:36px"></div></div>' +
@@ -5629,6 +5638,7 @@ async function saveReconcileLiability(walletId){
   const realDebt = parseFloat(document.getElementById('realDebt').value);
   if (isNaN(realDebt) || realDebt < 0){ toast('أدخل مبلغاً صحيحاً'); return; }
   const currentDebt = Finance.accountDebt(walletId);
+  if(currentDebt===null){toast('القيمة غير مؤكدة؛ راجع رصيد البداية والعمليات، لا يمكن إنشاء تسوية');return;}
   const diff = Math.round((realDebt - currentDebt) * 100) / 100;
   if (Math.abs(diff) < 0.01){ toast('لا يوجد فرق'); closeSheet(); return; }
   const walletAmount = -diff;
@@ -5674,7 +5684,7 @@ function openPayLiability(walletId){
   const pay = S.form._pay;
   const fromW = Finance.getAccount(pay.fromId);
   pay.rate = Finance.suggestRate(fromW.currency, targetCur);
-  if (fromW.currency === targetCur) pay.sourceAmount = String(debt);
+  if (fromW.currency === targetCur) pay.sourceAmount = debt===null?'':String(debt);
   else {
     const rate = pay.rate || 1;
     pay.sourceAmount = String(Math.round((debt / rate) * 100) / 100);
@@ -5710,7 +5720,7 @@ function renderPaySheet(){
   const fromAmt = parseFloat(pay.sourceAmount) || 0;
   const rate = Number(pay.rate) || (sameCur ? 1 : Finance.suggestRate(fromCur, targetCur));
   const debtPaid = sameCur ? fromAmt : Math.round(fromAmt * rate * 100) / 100;
-  const overpay = debtPaid > debt + 0.01;
+  const overpay = debt!==null&&debtPaid > debt + 0.01;
   const cInfo = countryInfo(target.country);
   const isCredit = target.type === 'credit';
   let fxHtml = '';
@@ -5774,7 +5784,7 @@ async function savePayLiability(){
     // FX memory is persisted inside the critical mutation.
   }
   const debt = Finance.accountDebt(target.id);
-  if (toAmount > debt + 0.01){
+  if (debt!==null&&toAmount > debt + 0.01){
     await dialog({emoji:'⚠️', title:'المبلغ أكبر من المديونية',
       msg:'أقصى مبلغ للسداد هو ' + amtFull(debt, targetCur) + '.',
       okText:'حسناً', primary:true, hideCancel:true});
@@ -6244,6 +6254,7 @@ function openInstrumentSheet(id, presetType, preserve){
       '<div class="field"><label>المديونية عند البداية</label>' +
         '<input type="number" inputmode="decimal" id="cardDebt" value="' + (linkedCreditAcc ? linkedCreditAcc.openingDebt : 0) + '">' +
         '<div class="field-hint">' + (hasTx ? 'يمكن تعديل المديونية الافتتاحية؛ SANAD سيعيد احتساب رصيد البطاقة. استخدم «تسوية المديونية» لتصحيح الوضع الحالي فقط.' : 'قيمة الدين عند البداية.') + '</div></div>' +
+      '<label class="field-hint"><input type="checkbox" id="cardOpeningKnown"'+(linkedCreditAcc&&FinanceCore.openingKnown(linkedCreditAcc)?' checked':'')+'> أؤكد المديونية قبل أول عملية مسجلة؛ ليست المتاح الائتماني</label>' +
       '<div class="field"><label>حد البطاقة</label>' +
         '<input type="number" inputmode="decimal" id="cardLimit" value="' + (linkedCreditAcc ? linkedCreditAcc.creditLimit : 0) + '"></div>' +
       '<div class="field"><label>حساب السداد الافتراضي (اختياري)</label>' +
@@ -6414,7 +6425,7 @@ async function saveCard(id, presetType){
         const fundingAcc=Finance.getAccount(prepaidFundingSourceId);
         if(!fundingAcc||fundingAcc.archived||isLiabilityAccount(fundingAcc)){ toast('اختر حساب تمويل صالح'); return; }
         if(bal>0&&fundingAcc.currency!==cardCur){ toast('الشحن الأول يجب أن يكون من حساب بنفس عملة البطاقة'); return; }
-        if(bal>0&&Finance.accountBalance(fundingAcc.id)+0.001<bal){ toast('رصيد حساب التمويل غير كافٍ'); return; }
+        if(bal>0&&(Finance.accountBalance(fundingAcc.id)===null||Finance.accountBalance(fundingAcc.id)+0.001<bal)){ toast('رصيد حساب التمويل غير كافٍ'); return; }
       }
     }
     const instEl = document.getElementById('cardInst');
@@ -6498,7 +6509,7 @@ async function saveCard(id, presetType){
             const hasTx = cardHasHistory(id);
             acc.name = name;
             if (!hasTx){ acc.country = country; acc.currency = cardCur; }
-            acc.openingDebt = debt;
+            acc.openingDebt = debt;acc.openingDebtKnown=!!document.getElementById('cardOpeningKnown')?.checked;acc.baselinePartial=!acc.openingDebtKnown;
             const relinkInstitution=BankIngestionCore.rebindAccountInstitution(S,acc.id,institutionId);
             if(!relinkInstitution.ok)return false;
             acc.creditLimit = limit;
@@ -6511,7 +6522,7 @@ async function saveCard(id, presetType){
         accountId = uid('a');
         S.accounts.push({
           id: accountId, institutionId, country, name, type:'credit', currency: cardCur,
-          openingBalance: 0, openingDebt: debt, creditLimit: limit,
+          openingBalance: 0, openingDebt: debt, openingDebtKnown:!!document.getElementById('cardOpeningKnown')?.checked, baselinePartial:!document.getElementById('cardOpeningKnown')?.checked, creditLimit: limit,
           defaultRepaymentAccountId: repayId, icon, color, archived: false, created: isoToday()
         });
       }
@@ -6608,6 +6619,7 @@ async function archiveInstrument(id){
     );
     const isLastActive = siblingsActive.length === 0;
     const rawBal = Finance.accountBalance(acc.id);
+    if(isLastActive&&rawBal===null){toast('المديونية غير مؤكدة؛ لا يمكن إخفاء آخر بطاقة');return;}
     if (isLastActive && Math.abs(rawBal) > 0.01){
       const debt = rawBal < 0 ? -rawBal : 0;
       const credit = rawBal > 0 ? rawBal : 0;
@@ -6619,7 +6631,9 @@ async function archiveInstrument(id){
     }
   }
   if (inst.type === 'prepaid_card' && acc){
-    const bal = Math.abs(Finance.accountBalance(acc.id));
+    const rawPrepaid=Finance.accountBalance(acc.id);
+    if(rawPrepaid===null){toast('رصيد البطاقة غير مؤكد');return;}
+    const bal = Math.abs(rawPrepaid);
     if (bal > 0.01){
       await dialog({emoji:'⚠️', title:'لا يمكن أرشفة البطاقة',
         msg:'البطاقة فيها رصيد ' + amtFull(bal, acc.currency) + '. حوّل أو استخدم الرصيد أولاً.',
@@ -6642,7 +6656,7 @@ async function archiveInstrument(id){
   /* V8.8.4.10 FIX 4: do NOT archive the backing account if it still
      holds a non-zero raw balance (legacy/malformed state safety net). */
   const rawBal = Finance.accountBalance(acc.id);
-  if (!anyActive && Math.abs(rawBal) <= 0.01){
+  if (!anyActive && rawBal!==null&&Math.abs(rawBal) <= 0.01){
     acc.archived = true;
   } else {
     acc.archived = false;
@@ -7553,7 +7567,7 @@ document.addEventListener('click', e => {
         const target = Finance.getAccount(S.form._pay.targetId);
         if (fromW && target){
           const debt = Finance.accountDebt(target.id);
-          if (fromW.currency === target.currency) S.form._pay.sourceAmount = String(debt);
+          if (fromW.currency === target.currency) S.form._pay.sourceAmount = debt===null?'':String(debt);
           else {
             S.form._pay.rate = Finance.suggestRate(fromW.currency, target.currency);
             const rate = S.form._pay.rate || 1;

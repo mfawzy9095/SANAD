@@ -88,7 +88,7 @@
           return;
         }
         const rawBal=schemaAccountBalance(state,acc.id);
-        acc.archived=(Math.abs(rawBal)<=0.01);
+        acc.archived=(rawBal!==null&&Math.abs(rawBal)<=0.01);
       });
     }
 

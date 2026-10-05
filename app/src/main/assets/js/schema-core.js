@@ -102,8 +102,8 @@
 
     filled.accounts.forEach(a => {
       if (!a.country) a.country = 'OTHER';
-      if (a.openingBalance === undefined) a.openingBalance = 0;
-      if (a.openingDebt === undefined) a.openingDebt = 0;
+      if (a.openingBalance === undefined){ a.openingBalanceKnown=false; a.openingBalance = 0; }
+      if (a.openingDebt === undefined){ a.openingDebtKnown=false; a.openingDebt = 0; }
       if (a.creditLimit === undefined) a.creditLimit = 0;
       if (a.defaultRepaymentAccountId === undefined) a.defaultRepaymentAccountId = null;
       if (a.archived === undefined) a.archived = false;

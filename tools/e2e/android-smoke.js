@@ -74,6 +74,11 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  const result=await page.evaluate(()=>({last:SanadBankInbox.lastRecentImport,transactions:S.transactions,accounts:S.accounts}));
  assert.equal(result.last.status,'complete');assert.equal(result.transactions.length,2);
  const bank=result.accounts.find(a=>a.bankRefs?.includes('012XXX50XXX01'));assert(bank);
+ assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bank.id),null);
+ assert.equal(await page.evaluate(id=>FinanceCore.accountMovement(S,id),bank.id),9100);
+ await page.evaluate(id=>openAccountSheet(id),bank.id);
+ await page.locator('#wBalance').fill('1.66');await page.evaluate(()=>{document.getElementById('wOpeningKnown').checked=true;});
+ await page.locator('[data-act="save-account"]').click();await page.waitForFunction(()=>!_criticalMutationInFlight);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bank.id),9101.66);
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),2);pass('Native SMS provider, paged bridge callback, salary/deposit import, balance and deduplication');
  const before=await page.evaluate(()=>stateFingerprint(snapshotState()));

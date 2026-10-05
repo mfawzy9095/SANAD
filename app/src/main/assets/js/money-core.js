@@ -5,7 +5,7 @@ const digits={AED:2,EGP:2,USD:2,EUR:2,MAD:2,SAR:2,GBP:2,JPY:0,KRW:0,KWD:3,BHD:3,
 const MAX=1000000000000n; // maximum minor units accepted at the import boundary
 function decimal(token,currency){
  const scale=digits[String(currency||'').toUpperCase()];if(scale==null)return {ok:false,reason:'currency-precision-unsupported'};
- let x=String(token||'').trim().replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\u066b/g,'.').replace(/\u066c/g,',');
+ let x=String(token==null?'':token).trim().replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\u066b/g,'.').replace(/\u066c/g,',');
  if(!/^-?\d[\d.,]*$/.test(x))return {ok:false,reason:'invalid-money'};
  const negative=x.startsWith('-');if(negative)x=x.slice(1);
  if(x.includes('.')&&x.includes(',')){
@@ -23,5 +23,11 @@ function decimal(token,currency){
  return {ok:true,currency:String(currency).toUpperCase(),scale,minorUnits:String(minor),decimal:canonical,value:Number(minor)/10**scale};
 }
 function ledgerValue(value,currency){const v=decimal(String(value),currency);return v.ok&&v.scale===2?v:{ok:false,reason:v.reason||'ledger-currency-review'};}
-return Object.freeze({decimal,ledgerValue,digits});
+function sum(values,currency){
+ const scale=digits[String(currency||'').toUpperCase()];if(scale==null)return {ok:false,reason:'currency-precision-unsupported'};
+ let total=0n;for(const value of values){const parsed=decimal(value,currency);if(!parsed.ok)return parsed;total+=BigInt(parsed.minorUnits);}
+ if(total>MAX||total< -MAX)return {ok:false,reason:'money-out-of-range'};
+ return {ok:true,currency:String(currency).toUpperCase(),scale,minorUnits:String(total),value:Number(total)/10**scale};
+}
+return Object.freeze({decimal,ledgerValue,sum,digits});
 });

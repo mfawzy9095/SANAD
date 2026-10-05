@@ -9,7 +9,7 @@ const R=Core.createSchemaRepairCore({financeCore:Finance,now:()=>1000});
   const s={
     accounts:[
       {id:'bank',type:'bank',currency:'AED',openingBalance:1000},
-      {id:'cc',type:'credit',currency:'AED',openingDebt:100}
+      {id:'cc',currency:'AED',type:'credit',currency:'AED',openingDebt:100}
     ],
     paymentInstruments:[],
     transactions:[
@@ -48,7 +48,7 @@ const R=Core.createSchemaRepairCore({financeCore:Finance,now:()=>1000});
 
 (function creditArchiveConsistency(){
   const active={
-    accounts:[{id:'cc',type:'credit',openingDebt:0,archived:true}],
+    accounts:[{id:'cc',currency:'AED',type:'credit',openingDebt:0,archived:true}],
     paymentInstruments:[{id:'c1',type:'credit_card',accountId:'cc',archived:false}],
     transactions:[]
   };
@@ -56,7 +56,7 @@ const R=Core.createSchemaRepairCore({financeCore:Finance,now:()=>1000});
   assert.strictEqual(active.accounts[0].archived,false);
 
   const zero={
-    accounts:[{id:'cc',type:'credit',openingDebt:0,archived:false}],
+    accounts:[{id:'cc',currency:'AED',type:'credit',openingDebt:0,archived:false}],
     paymentInstruments:[{id:'c1',type:'credit_card',accountId:'cc',archived:true}],
     transactions:[]
   };
@@ -64,7 +64,7 @@ const R=Core.createSchemaRepairCore({financeCore:Finance,now:()=>1000});
   assert.strictEqual(zero.accounts[0].archived,true);
 
   const debt={
-    accounts:[{id:'cc',type:'credit',openingDebt:100,archived:true}],
+    accounts:[{id:'cc',currency:'AED',type:'credit',openingDebt:100,archived:true}],
     paymentInstruments:[{id:'c1',type:'credit_card',accountId:'cc',archived:true}],
     transactions:[]
   };

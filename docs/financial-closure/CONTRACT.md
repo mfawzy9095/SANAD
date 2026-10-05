@@ -18,3 +18,12 @@ Capture evidence → extract fields → interpret financial meaning → resolve 
 
 ## Support boundary and remaining release gates
 Android manifest floor 26 / target 35 is a build boundary, not a validated device matrix. Real Samsung S25 FE, biometric hardware, notification loss under process death, update signature continuity and cross-device restores require actual tests. No worldwide bank/language/device claim. Acceptance labels are independent human-written synthetic expectations, not outputs of the previous parser. Broader independent review is required before stability.
+
+
+## Balance certainty and exact ledger amendment (9.2.6)
+
+An available balance is an observation, never a certified opening ledger balance. Auto-discovered assets carry `openingBalanceKnown:false`; partial liabilities return unknown final debt while recorded movement remains available independently. Legacy manually declared numeric opening values remain compatible; omitted values acquire an explicit unknown flag during migration. Existing auto-discovered or partial records do not acquire certainty from zero defaults.
+
+Opening confirmation means the value immediately before the first recorded transaction. It requires the explicit account/card form checkbox, preserves original bank observations, and does not generate a balancing adjustment. Unknown balances cannot be settled, hidden by archiving, used as sufficient prepaid funds, or summed as zero in country totals. Confirmation is not evidence of complete historical coverage.
+
+Ledger terms and totals use bounded integer minor units with currency-specific precision. Supported precision table is explicit; invalid precision, currency contradictions and cumulative overflow block changed financial writes before safety snapshot/durable write. Mixed currencies have no implicit exchange rate. Unknown FX suggestions return null. UI/manual conversion and full report calculations require their own separate validation and are not certified by this ledger change.

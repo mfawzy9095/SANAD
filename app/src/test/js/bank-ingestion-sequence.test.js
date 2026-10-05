@@ -96,7 +96,7 @@ function ingest(state,event){
 
   for(const row of rows){
     const out=ingest(state,row);
-    if(out.parsed.availableBalance!=null)assert.ok(out.rec&&out.rec.matched,row.id+' reconciliation');
+    if(out.parsed.availableBalance!=null)assert.strictEqual(out.rec,null,row.id+' available balance is separate from ledger');
   }
   const wallet=state.accounts.find(a=>a.type==='ewallet');
   assert.ok(wallet,'user-created wallet with explicitly known opening balance');
@@ -131,8 +131,10 @@ function ingest(state,event){
   const bank=state.accounts.find(a=>a.type==='bank');
   const credit=state.accounts.find(a=>a.type==='credit');
   assert.ok(bank&&credit);
-  assert.strictEqual(Finance.accountBalance(state,bank.id),946.56);
-  assert.strictEqual(Finance.accountDebt(state,credit.id),50);
+  assert.strictEqual(Finance.accountBalance(state,bank.id),null);assert.strictEqual(Finance.accountMovement(state,bank.id),944.9);
+  Finance.setOpeningBalance(bank,1.66);assert.strictEqual(Finance.accountBalance(state,bank.id),946.56);
+  assert.strictEqual(Finance.accountDebt(state,credit.id),null);assert.strictEqual(Finance.accountMovement(state,credit.id),-50);
+  credit.openingDebtKnown=true;credit.baselinePartial=false;assert.strictEqual(Finance.accountDebt(state,credit.id),50);
   assert.strictEqual(state.paymentInstruments.filter(i=>i.last4==='3993').length,1);
   assert.strictEqual(state.paymentInstruments.filter(i=>i.last4==='4021').length,1);
   assert.strictEqual(state.transactions.length,4);

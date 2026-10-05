@@ -295,10 +295,10 @@
     const out={
       id:uid('a'),institutionId:institutionId||null,country:countryForParsed(parsed),name,
       type:accountType,currency:parsed.currency||'AED',
-      openingBalance:opening,bankBalanceBaseline:{at:Number(parsed.postedAt)||Date.now(),balance:opening},openingDebt:0,creditLimit:0,defaultRepaymentAccountId:null,
+      openingBalance:0,openingBalanceKnown:false,openingDebt:0,creditLimit:0,defaultRepaymentAccountId:null,
       icon:provider?'📱':'🏦',color:'#00695C',archived:false,created:new Date(parsed.postedAt||Date.now()).toISOString().slice(0,10),
       autoDiscovered:true,autoDiscoverySource:parsed.bankId||parsed.providerId||(sourceInstitution&&sourceInstitution.id)||null,
-      observedBalance:num(parsed.availableBalance),observedBalanceAt:Number(parsed.postedAt)||Date.now()
+      observedBalance:num(parsed.availableBalance),observedBalanceType:'available_balance',observedBalanceAt:Number(parsed.postedAt)||Date.now()
     };
     if(ref)out.bankRefs=[String(ref)];
     return out;
@@ -613,15 +613,16 @@
     const targetHadHistory=arr(state.transactions).some(t=>t&&(t.accountId===to.id||t.fromAccountId===to.id||t.toAccountId===to.id))||
       arr(state.recurring).some(r=>r&&r.accountId===to.id);
     if(!targetHadHistory&&Math.abs(Number(to.openingBalance)||0)<=0.001&&Math.abs(Number(from.openingBalance)||0)>0.001){
-      to.openingBalance=Number(from.openingBalance)||0;
+      to.openingBalance=Number(from.openingBalance)||0;to.openingBalanceKnown=from.openingBalanceKnown===true||(!from.autoDiscovered&&from.openingBalanceKnown!==false);
     }
     const refs=Array.from(new Set([].concat(to.bankRefs||[],to.bankRef||[],from.bankRefs||[],from.bankRef||[]).filter(Boolean).map(String)));
     if(refs.length)to.bankRefs=refs.slice(0,12);
     const fromObsAt=Number(from.observedBalanceAt)||0,toObsAt=Number(to.observedBalanceAt)||0;
     if(from.observedBalance!=null&&(to.observedBalance==null||fromObsAt>=toObsAt)){
       to.observedBalance=from.observedBalance;
-      to.observedBalanceAt=from.observedBalanceAt||null;
+      to.observedBalanceAt=from.observedBalanceAt||null;to.observedBalanceType=from.observedBalanceType||'unclassified_balance';
     }
+    if(from.autoDiscovered&&from.openingBalanceKnown!==true||from.openingBalanceKnown===false)to.openingBalanceKnown=false;
     let movedTransactions=0,movedRecurring=0,movedInstruments=0;
     for(const tx of arr(state.transactions)){
       if(!tx)continue;
@@ -855,7 +856,7 @@
     let account=accounts[0];
     if(!account){
       account=makeAssetAccount(Object.assign({},parsed,{kind:'deposit',amount:0}),institution.id,uid,'deposit',institution);
-      account.bankBalanceBaseline={at:Number(parsed.postedAt)+1,balance:num(parsed.availableBalance)};
+      account.openingBalanceKnown=false;
       create.accounts.push(account);
     }
     if(Number(account.observedBalanceAt)>Number(parsed.postedAt))return {action:'duplicate',reason:'older-observation',confidence:1};
@@ -1015,11 +1016,12 @@
       if(existingAt>0&&incomingAt>0&&incomingAt<existingAt)continue;
       a[o.field]=o.value;
       a[o.field+'At']=o.at;
+      if(o.field==='observedBalance')a.observedBalanceType='available_balance';
     }
     return true;
   }
   function reconciliation(parsed,state,plan,accountBalanceFn){
-    if(!parsed||!plan||plan.action!=='auto-save'||typeof accountBalanceFn!=='function')return null;
+    if(!parsed||!plan||plan.action!=='auto-save'||typeof accountBalanceFn!=='function'||parsed.balanceType!=='ledger_balance')return null;
     const observed=num(parsed.availableBalance);
     if(observed==null)return null;
     const tx=plan.transaction||{};
@@ -1063,7 +1065,7 @@
     const decisions=state.settings.bankEventDecisions||(state.settings.bankEventDecisions={});
     // Never evict decisions: an eviction could resurrect an old transaction.
     if(!Object.prototype.hasOwnProperty.call(decisions,id)&&Object.keys(decisions).length>=EVENT_DECISION_LIMIT)throw Error('event-decision-capacity');
-    decisions[id]={action,at:Number(at),transactionId:transactionId||null,parserVersion:'9.2.5-financial-contract',decisionSource};
+    decisions[id]={action,at:Number(at),transactionId:transactionId||null,parserVersion:'9.2.6-financial-contract',decisionSource};
     return true;
   }
   function compatibleScanCheckpoint(previous,floor){

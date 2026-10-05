@@ -31,7 +31,7 @@ const scan=(h,events)=>h.inbox.syncImpl({events,minPostedAt:h.ctx.S.settings.ban
 (async()=>{
  // The real parser, planner, financial validator and mutation service share one commit.
  const h=harness();await scan(h,[salary(h)]);assert.equal(h.ctx.S.transactions.length,1);
- assert.equal(I.eventDecision(h.ctx.S,'synthetic-salary').action,'saved');assert.equal(F.accountBalance(h.ctx.S,h.ctx.S.accounts[0].id),9001.66);
+ assert.equal(I.eventDecision(h.ctx.S,'synthetic-salary').action,'saved');assert.equal(F.accountBalance(h.ctx.S,h.ctx.S.accounts[0].id),null);assert.equal(F.accountMovement(h.ctx.S,h.ctx.S.accounts[0].id),9000);assert.equal(F.accountBalancePresentation(h.ctx.S,h.ctx.S.accounts[0].id).observed,9001.66);
  h.restart();await scan(h,[salary(h)]);assert.equal(h.ctx.S.transactions.length,1);
  // An explicit deletion cannot be undone by a later historical SMS replay.
  await h.ctx.commitCriticalMutation(()=>{h.ctx.S.transactions=[];return true;});await scan(h,[salary(h)]);assert.equal(h.ctx.S.transactions.length,0);

@@ -74,7 +74,7 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   const plan=I.plan(p,s,{uid});
   assert.strictEqual(plan.action,'auto-save');
   assert.strictEqual(plan.create.accounts[0].type,'bank');
-  assert.strictEqual(plan.create.accounts[0].openingBalance,100);
+  assert.strictEqual(plan.create.accounts[0].openingBalance,0);
   assert.strictEqual(plan.create.instruments[0].type,'debit_card');
   assert.strictEqual(plan.create.instruments[0].last4,'7777');
 }
@@ -143,7 +143,7 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.action,'auto-save');
   assert.strictEqual(plan.create.institutions[0].providerRegistryId,'du-pay');
   assert.strictEqual(plan.create.accounts[0].type,'ewallet');
-  assert.strictEqual(plan.create.accounts[0].openingBalance,10.28);
+  assert.strictEqual(plan.create.accounts[0].openingBalance,0);
   assert.strictEqual(plan.create.instruments[0].type,'wallet_card');
   I.applyPlan(s,plan);
   assert.strictEqual(s.transactions.length,1);
