@@ -345,7 +345,7 @@
     }
     if(!parsed)return review('unrecognized');
     if(!parsed.transactionRef){const ref=normalized.match(/\b(?:TR\s+REF|transaction\s+(?:id|reference)|reference|TID|ref)\s*[:#-]?\s*([A-Za-z0-9_-]{4,40})/i);if(ref)parsed.transactionRef=ref[1];}
-    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.4-financial-contract';parsed.executionStatus='completed';
+    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.5-financial-contract';parsed.executionStatus='completed';
     if(parsed.kind==='investment_sale'){parsed.reviewReason='investment-non-money-review';return parsed;}
     const monetary=Money.ledgerValue(parsed.kind==='balance_observation'?parsed.availableBalance:parsed.amount,parsed.currency);
     if(!monetary.ok||parsed.amount<=0&&parsed.kind!=='balance_observation')return review(monetary.reason||'invalid-amount');
@@ -470,6 +470,7 @@
   }
   function buildTransaction(parsed,route,options){
     const opts=options||{};
+    if(['deposit','incoming_transfer'].includes(parsed.kind)&&opts.confirmedIncomingOrigin!=='external-income')return {ok:false,reason:'incoming-origin-unconfirmed'};
     const feeEvidence=!!parsed.feeFormula||Number(parsed.fee||0)>0||Number(parsed.vat||0)>0;
     const feeConfirmed=opts.confirmedFee!==null&&opts.confirmedFee!==undefined&&opts.confirmedFee!=='';
     if(feeEvidence&&!feeConfirmed)return {ok:false,reason:'fee-confirmation-required'};
@@ -479,6 +480,7 @@
     if(parsed.reviewReason&&!(parsed.reviewReason==='ambiguous-date'&&/^\d{4}-\d{2}-\d{2}$/.test(opts.date||'')))return {ok:false,reason:parsed.reviewReason};
     const money=Money.ledgerValue(parsed.amount,parsed.currency);if(!money.ok||Number(parsed.amount)<=0)return {ok:false,reason:money.reason||'invalid-amount'};
     const built=buildTransactionBase(parsed,route,options);
+    if(built.ok&&built.transaction&&['deposit','incoming_transfer'].includes(parsed.kind))built.transaction.economicOrigin={kind:'external-income',source:'user-confirmation',eventId:parsed.eventId||null};
     if(built.ok&&built.transaction&&feeConfirmed){
       const tx=built.transaction;
       if(tx.type==='expense'){
@@ -499,4 +501,3 @@
   }
   return Object.freeze({parse,resolveRoute,buildTransaction,dedupeKey,categoryForMerchant,ignoredReason,suffix,normalizeRef,countryForCurrency});
 });
-

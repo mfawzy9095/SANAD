@@ -49,8 +49,11 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   const p=fixtureParse({id:'custom-wallet',postedAt:1800,title:'Acme Wallet',text:'Your account was credited AED 50.00. Available balance is AED 125.00'});
   const s={institutions:[{id:'acme',name:'Acme Wallet',country:'UAE',type:'wallet_provider'}],accounts:[{id:'aw',institutionId:'acme',country:'UAE',name:'Acme Wallet',type:'ewallet',currency:'AED',openingBalance:75,openingDebt:0,creditLimit:0,archived:false}],paymentInstruments:[],transactions:[],beneficiaries:[]};
   const plan=I.plan(p,s,{uid});
-  assert.strictEqual(plan.action,'auto-save');
-  assert.strictEqual(plan.transaction.accountId,'aw');
+  assert.strictEqual(plan.action,'review');
+  assert.strictEqual(plan.reason,'incoming-origin-unconfirmed');
+  const confirmed=P.buildTransaction(p,I.routeFromManualChoice(p,s,{sourceType:'account',sourceId:s.accounts[0].id}),{uid,confirmedIncomingOrigin:'external-income'});
+  assert.strictEqual(confirmed.ok,true);
+  assert.strictEqual(confirmed.transaction.accountId,'aw');
 }
 
 // A custom wallet with no account yet can be created from a trusted package/name match plus reported balance.
@@ -58,10 +61,10 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   const p=fixtureParse({id:'custom-wallet-new',postedAt:1825,packageName:'com.acmewallet.app',text:'Your account was credited AED 50.00. Available balance is AED 125.00'});
   const s={institutions:[{id:'acme-new',name:'Acme Wallet',country:'UAE',type:'wallet_provider'}],accounts:[],paymentInstruments:[],transactions:[],beneficiaries:[]};
   const plan=I.plan(p,s,{uid});
-  assert.strictEqual(plan.action,'auto-save');
-  assert.strictEqual(plan.create.accounts.length,1);
-  assert.strictEqual(plan.create.accounts[0].type,'ewallet');
-  assert.strictEqual(plan.create.accounts[0].openingBalance,75);
+  assert.strictEqual(plan.action,'review');
+  assert.strictEqual(plan.reason,'incoming-origin-unconfirmed');
+  assert.strictEqual(s.accounts.length,0);
+  assert.strictEqual(s.transactions.length,0);
 }
 
 // A custom bank can auto-discover a debit card and reconstruct its balance.
@@ -147,13 +150,15 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(s.accounts[0].observedBalance,0.53);
 }
 
-// du Pay deposit creates a wallet baseline so the resulting ledger equals the bank-reported balance.
+// du Pay inbound origin remains review; no financial wallet baseline is inferred.
 {
   const p=fixtureParse({id:'d2',postedAt:4000,text:"Hello Test User, You've received AED 3,500.00 to your du Pay wallet. Your available balance is now AED 3,500.40, and the transaction ID is: DI24AS0MCM"});
   const s=empty();
   const plan=I.plan(p,s,{uid});
-  assert.strictEqual(plan.action,'auto-save');
-  assert.strictEqual(plan.create.accounts[0].openingBalance,0.40);
+  assert.strictEqual(plan.action,'review');
+  assert.strictEqual(plan.reason,'incoming-origin-unconfirmed');
+  assert.strictEqual(s.accounts.length,0);
+  assert.strictEqual(s.transactions.length,0);
 }
 
 // A new outgoing transfer with no observed balance is not allowed to invent a source balance.
@@ -164,14 +169,17 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   assert.strictEqual(plan.reason,'transfer-source-not-found');
 }
 
-// An exact account reference can safely route a generic credit/deposit message.
+// Exact identity resolves the account; it cannot establish external income.
 {
   const p=fixtureParse({id:'generic2',title:'Another Bank',postedAt:5500,text:'Your account 1234 was credited AED 50.00'});
   assert.strictEqual(p.kind,'deposit');
   const s={institutions:[{id:'custom2',name:'Another Bank',country:'UAE'}],accounts:[{id:'bank1234',institutionId:'custom2',country:'UAE',name:'Current',type:'bank',currency:'AED',openingBalance:100,openingDebt:0,creditLimit:0,bankRefs:['1234'],archived:false}],paymentInstruments:[],transactions:[]};
   const plan=I.plan(p,s,{uid});
-  assert.strictEqual(plan.action,'auto-save');
-  assert.strictEqual(plan.transaction.accountId,'bank1234');
+  assert.strictEqual(plan.action,'review');
+  assert.strictEqual(plan.reason,'incoming-origin-unconfirmed');
+  const confirmed=P.buildTransaction(p,I.routeFromManualChoice(p,s,{sourceType:'account',sourceId:s.accounts[0].id}),{uid,confirmedIncomingOrigin:'external-income'});
+  assert.strictEqual(confirmed.ok,true);
+  assert.strictEqual(confirmed.transaction.accountId,'bank1234');
 }
 
 // Unknown source cannot auto-create a financial account/card.
@@ -216,7 +224,8 @@ const empty=()=>({institutions:[],accounts:[],paymentInstruments:[],transactions
   const parsed=fixtureParse({id:'deposit-amb',postedAt:620000,title:'Emirates NBD',text:'AED 100.00 has been credited. Available balance AED 500.00'});
   const plan=I.plan(parsed,s,{uid});
   assert.strictEqual(plan.action,'review');
-  assert.strictEqual(plan.reason,'ambiguous-existing-accounts');
+  assert.strictEqual(plan.reason,'incoming-origin-unconfirmed');
+  assert.strictEqual(P.resolveRoute(parsed,s).status,'needs-review');
   assert.strictEqual(((plan.create||{}).accounts||[]).length,0);
 }
 
@@ -776,7 +785,7 @@ console.log('bank ingestion core regression tests: PASS');
  const s={institutions:[{id:'en',country:'UAE',name:'Emirates NBD',bankRegistryId:'emirates-nbd'},{id:'du',country:'UAE',name:'du Pay',providerRegistryId:'du-pay'}],accounts:[{id:'from',country:'UAE',currency:'AED',type:'ewallet',institutionId:'du',openingBalance:200},{id:'to',country:'UAE',currency:'AED',type:'bank',institutionId:'en',bankRefs:['012XXX50XXX01'],openingBalance:10}],paymentInstruments:[],transactions:[]};
  const at=1790859000000;
  const incoming=fixtureParse({id:'first-receipt',title:'ENBD',postedAt:at+2000,text:'لقد تم ايداع AED 100.00 في رقم حسابك 012XXX50XXX01 OBP TR REF RECEIPT456.الرصيد المتوفر هو AED 110.00'});
- s.transactions.push(P.buildTransaction(incoming,{status:'routed',account:s.accounts[1]},{uid:()=> 'receipt'}).transaction);
+ s.transactions.push(P.buildTransaction(incoming,{status:'routed',account:s.accounts[1]},{uid:()=> 'receipt',confirmedIncomingOrigin:'external-income'}).transaction);
  const outgoing={recognized:true,kind:'outgoing_transfer',direction:'debit',currency:'AED',country:'UAE',providerId:'du-pay',amount:100,eventId:'second-debit',postedAt:at,raw:'sent 100 AED from wallet',availableBalance:100,confidence:0.99};
  assert.strictEqual(I.plan(outgoing,s,{uid}).reason,'possible-own-transfer');
  const pair=I.pairOwnTransfer(outgoing,s,{counterpartTransactionId:'receipt',fromAccountId:'from',toAccountId:'to'},{uid,confirmedFee:0});

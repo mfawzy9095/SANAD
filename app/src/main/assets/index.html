@@ -914,7 +914,7 @@ const ACCOUNT_ICONS = ['🏦','💵','💰','🪙','🏛️','📱','💼','🏧
 const CARD_ICONS = ['💳','🪪','💠','🎴','🏦','📱','💎'];
 const DEBT_ICONS = ['📋','🧾','📉','💸','📝','🏷️'];
 
-const APP_VERSION = '9.2.4';
+const APP_VERSION = '9.2.5';
 const APP_CHANNEL = 'local-rc';
 const SCHEMA_VERSION = 16;
 const DB_NAME = 'masareef_v8';
@@ -1024,6 +1024,7 @@ const Schema = SchemaCore.createSchema({
 const PersistenceService = PersistenceCore.createPersistenceService({
   storage: Storage,
   validateState: st => Schema.validateStateStrict(st),
+  validateChanges: (next,before) => BankIngestionCore.validateManualImportChanges(next,before),
   fingerprint: stateFingerprint,
   onRecovery: enterRecoveryMode,
   logError: (...args) => console.error(...args)
@@ -3551,6 +3552,14 @@ function setTxDate(d){
     renderTxSheet();
   }
 }
+async function confirmManualImportCandidate(data){
+  const candidates=BankIngestionCore.manualImportCandidates(data,S);
+  if(!candidates.length)return true;
+  const agreed=await dialog({emoji:'⚠️',title:'قد تكون العملية مسجلة بالفعل',msg:'توجد عملية مؤكدة برسالة بنك تطابق الحساب والاتجاه والمبلغ والتوقيت. التشابه لا يثبت التكرار. ارجع لمراجعة السجل إذا كانت نفس الحركة؛ أكّد الإضافة فقط إذا تحققت أنها عملية أخرى مستقلة.',okText:'عملية أخرى مؤكدة',cancelText:'رجوع للمراجعة',primary:true});
+  if(!agreed){_lastMutationError='possible-bank-duplicate';return false;}
+  data.manualImportResolution={decision:'distinct-operation',candidateIds:candidates.map(t=>t.id).sort(),source:'user-confirmation',at:Date.now()};
+  return true;
+}
 async function saveTx(){
   if (!canWrite()){ toast('وضع القراءة فقط'); return; }
   const f = S.form;
@@ -3611,10 +3620,11 @@ async function saveTx(){
       created: origCreated, transactionTime:f.transactionTime||null, timeSource:(f.transactionTime===f._originalTime&&f.date===f._originalDate?f._originalTimeSource:'manual')
     };
     if (origRec) data.rec = origRec;
+    if(!await confirmManualImportCandidate(data))return false;
     if (wasEdit){
       const idx = S.transactions.findIndex(x => x.id === f.id);
       if (idx < 0) return false;
-      S.transactions[idx] = data;
+      S.transactions[idx] = BankIngestionCore.preserveImportAudit(S.transactions[idx],data,Date.now());
     } else {
       if (isExpense){
         S.settings.lastExpenseSourceByCountry[acc.country] = {sourceType: f.source.type, id: f.source.id};
@@ -4138,10 +4148,11 @@ async function saveTransfer(){
         tags: (f.tags || []).slice(), date: f.date,
         created: origCreated, transactionTime:f.transactionTime||null, timeSource:(f.transactionTime===f._originalTime&&f.date===f._originalDate?f._originalTimeSource:'manual')
       };
+      if(!await confirmManualImportCandidate(data))return false;
       if (wasEdit){
         const idx = S.transactions.findIndex(x => x.id === f.id);
         if (idx < 0) return false;
-        S.transactions[idx] = data;
+        S.transactions[idx] = BankIngestionCore.preserveImportAudit(S.transactions[idx],data,Date.now());
       } else {
         S.transactions.push(data);
       }
@@ -4157,10 +4168,11 @@ async function saveTransfer(){
         tags: (f.tags || []).slice(), date: f.date,
         created: origCreated, transactionTime:f.transactionTime||null, timeSource:(f.transactionTime===f._originalTime&&f.date===f._originalDate?f._originalTimeSource:'manual')
       };
+      if(!await confirmManualImportCandidate(data))return false;
       if (wasEdit){
         const idx = S.transactions.findIndex(x => x.id === f.id);
         if (idx < 0) return false;
-        S.transactions[idx] = data;
+        S.transactions[idx] = BankIngestionCore.preserveImportAudit(S.transactions[idx],data,Date.now());
       } else {
         S.transactions.push(data);
       }
@@ -4418,7 +4430,8 @@ async function saveRepaymentEdit(){
     };
     const idx = S.transactions.findIndex(x => x.id === t.id);
     if (idx < 0) return false;
-    S.transactions[idx] = replacement;
+    if(!await confirmManualImportCandidate(replacement))return false;
+    S.transactions[idx] = BankIngestionCore.preserveImportAudit(S.transactions[idx],replacement,Date.now());
     syncLinkedRepaymentFee(t.id, fee, fromW, t.date);
     return true;
   });
@@ -5775,14 +5788,16 @@ async function savePayLiability(){
   const today = isoToday();
   const result = await commitCriticalMutation(async () => {
     if (!sameCur) Finance.rememberRate(fromCur, targetCur, rate);
-    S.transactions.push({
+    const payment = {
       id: newTransferId, type:'transfer',
       fromAccountId: fromW.id, fromAmount: fromAmt, fromCurrency: fromCur, fromCountry: fromW.country,
       toAccountId: target.id, toAmount, toCurrency: targetCur, toCountry: target.country,
       fxRate: rate, fee: 0,
       note: note || ('سداد ' + (target.type === 'credit' ? 'بطاقة' : 'دين')),
       tags: ['سداد'], date: S.form.date||today, transactionTime:S.form.transactionTime||null, timeSource:'manual', created: Date.now()
-    });
+    };
+    if(!await confirmManualImportCandidate(payment))return false;
+    S.transactions.push(payment);
     syncLinkedRepaymentFee(newTransferId, fee, fromW, today);
     /* V8.8.4.9 FIX 4: prepaid source must not go negative. */
     if (fromW && fromW.type === 'prepaid'){
@@ -8597,7 +8612,7 @@ const SanadFullBackup = {
       family:SanadFamily.state,
       syncMeta:Object.assign({},SanadCloud.meta,{dirty:true}),
       firebaseConfig:SanadCloud.config||null,
-      bankImportAudit:{version:1,parserVersion:'9.2.4-financial-contract',configuredStartAt:SanadBankInbox.configuredSmsStart(),decisions:await SanadExtStorage.get('bankDecisionAudit',null),smsReviewEvents:SanadBankInbox.smsReviewEvents,pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
+      bankImportAudit:{version:1,parserVersion:'9.2.5-financial-contract',configuredStartAt:SanadBankInbox.configuredSmsStart(),decisions:await SanadExtStorage.get('bankDecisionAudit',null),smsReviewEvents:SanadBankInbox.smsReviewEvents,pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
     };
     if(diagnostic)features.diagnosticReport={version:1,generatedAt:new Date().toISOString(),appVersion:APP_VERSION,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,clock:Date.now(),smsPermission:SanadBankInbox.historicalPermission(),native:SanadBankInbox.diagnostics(),import:features.bankImportAudit,counts:{accounts:state.accounts.length,transactions:state.transactions.length,receipts:packed.length},note:'Local export; financial source messages included. Decision log retains the latest 1000 records; omitted count is explicit. Operation time and SMS arrival time are separate.'};
     delete features.syncMeta.receiptDirty;
@@ -8840,6 +8855,8 @@ const SanadBankInbox = {
   reasonLabel(reason){
     return {
       'unrecognized':'صيغة الرسالة غير معروفة',
+      'incoming-origin-unconfirmed':'وصول المبلغ لا يثبت أنه دخل خارجي — حدّد إن كان من حساباتك أو دخلاً من خارجها',
+      'possible-bank-duplicate':'قد تكون العملية مؤكدة بالفعل برسالة — راجع السجل قبل إضافة حركة أخرى',
       'possible-manual-duplicate':'قد تؤكد الرسالة عملية يدوية أو طرف تحويل موجود — راجع السجل قبل الإضافة',
       'account-identity-required':'البنك معروف لكن هوية الحساب لا تطابق حسابًا مؤكدًا',
       'card-account-link-required':'وجود حساب واحد لا يثبت أن بطاقة الخصم تتبعه — أكد الربط',
@@ -9329,7 +9346,7 @@ const SanadBankInbox = {
   },
   canManualApprove(item){
     if(!item||!item.parsed||!item.parsed.recognized)return false;
-    if(item.plan&&item.plan.reason==='possible-own-transfer')return false;
+    if(item.plan&&['possible-own-transfer','possible-manual-duplicate','possible-duplicate','incoming-origin-unconfirmed'].includes(item.plan.reason))return false;
     if(item.plan&&item.plan.action==='auto-save')return true;
     const r=BankMessageCore.resolveRoute(item.parsed,S);
     if(!r||r.status!=='routed')return false;
@@ -9374,6 +9391,8 @@ const SanadBankInbox = {
     const curOpts=Object.values(CURRENCIES).map(c=>'<option value="'+c.code+'"'+(p.currency===c.code?' selected':'')+'>'+esc(c.flag+' '+c.name+' ('+c.code+')')+'</option>').join('');
     const counterparty=p.merchant||p.beneficiaryName||'';
     const pairs=BankIngestionCore.transferCounterparts(p,S);
+    const manualCandidates=BankIngestionCore.manualDuplicateCandidates(p,S);
+    const manualLinkHtml=manualCandidates.length?'<div class="field"><label>هل تؤكد الرسالة عملية يدوية موجودة؟</label><select id="bankFixManualLink"><option value="">— لم أحسم أنها نفس العملية —</option>'+manualCandidates.map(t=>'<option value="'+esc(t.id)+'">'+esc(t.date||'')+' · '+esc(t.note||'عملية يدوية')+' · '+esc(String(t.amount==null?t.fromAmount:t.amount))+'</option>').join('')+'</select><label><input id="bankFixConfirmSame" type="checkbox"> أؤكد أن الرسالة لنفس الحركة المختارة؛ اربط الدليل فقط دون إضافة مال</label><label><input id="bankFixDistinctOperation" type="checkbox"> أو أؤكد أنها حركة أخرى مستقلة بعد مراجعة السجل اليدوي</label></div>':'';
     const pairHtml=pairs.length?'<div class="field"><label>ربط بطرف خصم محفوظ (اختياري)</label><select id="bankFixPair"><option value="">— لا تربط؛ سجلها مستقلة إذا كانت عملية أخرى —</option>'+pairs.map(t=>'<option value="'+esc(t.id)+'">'+esc((Finance.getAccount(t.fromAccountId||t.accountId)||{}).name||t.fromAccountId||t.accountId)+' · '+esc(t.date)+' · '+esc(String(t.fromAmount==null?t.amount:t.fromAmount))+' '+esc(t.fromCurrency||t.currency)+'</option>').join('')+'</select><div class="field-hint">المبلغ والتوقيت يشيران لاحتمال فقط. اربط إذا تأكدت أن الحسابين ملكك وأن الرسالتين لنفس التحويل؛ اختر نوع تحويل بين حساباتي، وحساب الخصم مصدرًا وحساب الاستلام وجهة. سيُحفظ التحويل مرة واحدة وتبقى أدلة الطرفين.</div></div>':'';
     openSheet(
       '<div class="sheet-head"><button type="button" class="close" data-sanad-act="bank-inbox"><span>‹</span></button><h2>تعديل وربط العملية</h2><div style="width:36px"></div></div>'+
@@ -9381,6 +9400,8 @@ const SanadBankInbox = {
         '<div class="help-box"><span class="hi">🧠</span><div class="ht"><b>صححها مرة</b>SANAD سيحفظ ربطًا محليًا لنفس مصدر وشكل الرسالة، بدون إرسال SMS لأي خادم.</div></div>'+
         '<div class="field"><label>نوع العملية</label><select id="bankFixKind">'+kindOpts+'</select></div>'+
         pairHtml+
+        manualLinkHtml+
+        (['deposit','incoming_transfer'].includes(p.kind)?'<div class="field"><label><input id="bankFixExternalIncome" type="checkbox"> أؤكد أن هذه الحركة دخل من خارج حساباتي، وليست تحويلًا بين أموالي</label><div class="field-hint">إذا كانت من حساب آخر تملكه، اختر تحويل بين حساباتي وحدد المصدر والوجهة. هذا التأكيد لهذه الحركة فقط.</div></div>':'')+
         '<div class="field"><label>المبلغ</label><input id="bankFixAmount" type="number" inputmode="decimal" step="0.01" value="'+esc(String(p.amount||''))+'"></div>'+
         '<div class="field"><label>عملة المبلغ المسجل في الحساب</label><select id="bankFixCurrency">'+curOpts+'</select><div class="field-hint">للشراء بعملة أجنبية: أدخل مبلغ الخصم المؤكد وعملته من كشف الحساب؛ لا تحول العملة بالاسم فقط أو تستنتج سعر الصرف من فرق الرصيد.</div></div>'+
         '<div class="field"><label>رسوم إضافية تخصم من حساب المصدر، شاملة الضريبة</label><input id="bankFixFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="اتركها فارغة إذا لم تتأكد"><div class="field-hint">بنفس عملة العملية. أدخل صفرًا فقط إذا تأكدت أن العملية بلا رسوم إضافية؛ لا تستنتج الرسوم من صيغة نسبة أو فرق الرصيد.</div></div>'+
@@ -9410,6 +9431,23 @@ const SanadBankInbox = {
   async saveCorrection(id){
     const item=this.items.find(x=>String(x.native.id)===String(id));
     if(!item||!item.parsed||!item.parsed.recognized){toast('تعذر العثور على العملية');return;}
+    const manualLinkId=String((document.getElementById('bankFixManualLink')||{}).value||'');
+    if(manualLinkId){
+      if(!(document.getElementById('bankFixConfirmSame')||{}).checked){toast('أكد أن الرسالة لنفس العملية المختارة');return;}
+      const linked=BankIngestionCore.linkManualConfirmation(item.parsed,S,{transactionId:manualLinkId,confirmedSameOperation:true});
+      if(!linked.ok){toast('تغيرت العملية؛ أعد المراجعة');return;}
+      const result=await commitCriticalMutation(async()=>{
+        const index=S.transactions.findIndex(t=>t.id===linked.replacesTransactionId);
+        if(index<0||JSON.stringify(S.transactions[index])!==JSON.stringify(linked.before))return false;
+        S.transactions[index]=linked.transaction;
+        BankIngestionCore.rememberEventDecision(S,String(item.native.id),'duplicate',Date.now(),linked.transaction.id,{decisionSource:'user-confirmation'});
+        return true;
+      });
+      if(!result.ok){toast('تعذر حفظ الربط؛ الدليل ما زال للمراجعة');return;}
+      await this.ack([item.native.id]);await this.open();toast('ارتبط الدليل بالعملية الموجودة دون إضافة مالية');return;
+    }
+    const manualCandidates=BankIngestionCore.manualDuplicateCandidates(item.parsed,S);
+    if(manualCandidates.length&&!(document.getElementById('bankFixDistinctOperation')||{}).checked){toast('اربط العملية الموجودة أو أكد أنها حركة أخرى مستقلة');return;}
     const kind=((document.getElementById('bankFixKind')||{}).value||item.parsed.kind);
     const amount=Number((document.getElementById('bankFixAmount')||{}).value);
     const currency=((document.getElementById('bankFixCurrency')||{}).value||item.parsed.currency);
@@ -9435,10 +9473,15 @@ const SanadBankInbox = {
     if(!route||route.status!=='routed'){toast(this.reasonLabel((route&&route.reason)||'manual-route-invalid'));return;}
     const feeInput=String((document.getElementById('bankFixFee')||{}).value||'').trim();
     const buildOptions={uid};
+    if(['deposit','incoming_transfer'].includes(kind)){
+      if(!(document.getElementById('bankFixExternalIncome')||{}).checked){toast(this.reasonLabel('incoming-origin-unconfirmed'));return;}
+      buildOptions.confirmedIncomingOrigin='external-income';
+    }
     if(feeInput!=='')buildOptions.confirmedFee=Number(feeInput);
     const pairId=String((document.getElementById('bankFixPair')||{}).value||'');
     if(pairId&&kind!=='internal_transfer'){toast('اختر تحويل بين حساباتي للربط بالطرف المحفوظ');return;}
     const built=pairId?BankIngestionCore.pairOwnTransfer(item.parsed,S,{counterpartTransactionId:pairId,fromAccountId:route.fromAccount&&route.fromAccount.id,toAccountId:route.targetAccount&&route.targetAccount.id},buildOptions):BankMessageCore.buildTransaction(corrected,route,buildOptions);
+    if(built.ok&&manualCandidates.length)built.transaction.manualImportResolution={decision:'distinct-operation',candidateIds:manualCandidates.map(t=>t.id).sort(),source:'user-confirmation',at:Date.now()};
     if(built.ok&&!built.replacesTransactionId){
       const original=item.parsed;
       built.transaction.bankLinkedImportEvents=[{key:BankMessageCore.dedupeKey(original),eventId:original.eventId||null,bankId:original.bankId||null,providerId:original.providerId||null,currency:original.currency,amount:original.amount,ref:original.transactionRef||null,kind:original.kind,postedAt:Number(original.postedAt),text:original.raw||'',availableBalance:original.availableBalance}];
@@ -9454,7 +9497,7 @@ const SanadBankInbox = {
         S.transactions.push(built.transaction);
         BankIngestionCore.learnFromApproval(S,corrected,route,{uid,kind});
       }
-      BankIngestionCore.rememberEventDecision(S,String(item.native.id),'saved',Date.now(),built.transaction.id);
+      BankIngestionCore.rememberEventDecision(S,String(item.native.id),'saved',Date.now(),built.transaction.id,{decisionSource:'user-confirmation'});
       this.learnSourceAlias(item,route);
       this.applyReconciliation(corrected,{transaction:built.transaction,observationAccountId:built.observationAccountId});
       return true;
@@ -9504,7 +9547,7 @@ const SanadBankInbox = {
     const parsed=item.parsed;
     let plan=BankIngestionCore.plan(parsed,S,{uid});
     if(plan.action==='duplicate'){await this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
-    if(plan.reason==='possible-own-transfer'){this.openCorrection(id);return;}
+    if(['possible-own-transfer','possible-manual-duplicate','possible-duplicate','incoming-origin-unconfirmed'].includes(plan.reason)){this.openCorrection(id);return;}
     if(['auto-save','observe'].includes(plan.action)){
       const saved=await this.commitPlan(parsed,plan);
       if(!saved.ok){render();toast('تعذر إضافة العملية — لم يتم تغيير البيانات');return;}
@@ -9516,7 +9559,7 @@ const SanadBankInbox = {
     if(BankIngestionCore.duplicateOf(parsed,S)){await this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
     const result=await commitCriticalMutation(async()=>{
       S.transactions.push(built.transaction);
-      BankIngestionCore.rememberEventDecision(S,String(item.native.id),'saved',Date.now(),built.transaction.id);
+      BankIngestionCore.rememberEventDecision(S,String(item.native.id),'saved',Date.now(),built.transaction.id,{decisionSource:'user-confirmation'});
       BankIngestionCore.learnFromApproval(S,parsed,route,{uid});
       this.applyReconciliation(parsed,{transaction:built.transaction});
       return true;
@@ -9611,4 +9654,3 @@ SanadV9.bootstrap().then(() => boot()).catch(e => {
 
 </body>
 </html>
-

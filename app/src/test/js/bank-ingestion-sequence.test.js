@@ -61,7 +61,12 @@ function strict(state,label){
 function ingest(state,event){
   const parsed=fixtureParse(event);
   assert.strictEqual(parsed.recognized,true,event.id+' parsed');
-  const plan=Ingest.plan(parsed,state,{uid});
+  let plan=Ingest.plan(parsed,state,{uid});
+  if(['deposit','incoming_transfer'].includes(parsed.kind)){
+    assert.strictEqual(plan.action,'review');assert.strictEqual(plan.reason,'incoming-origin-unconfirmed');
+    const built=Message.buildTransaction(parsed,Message.resolveRoute(parsed,state),{uid,confirmedIncomingOrigin:'external-income'});
+    assert.strictEqual(built.ok,true);plan={action:'auto-save',transaction:built.transaction,observations:[{accountId:built.transaction.accountId,observedBalance:parsed.availableBalance,observedBalanceAt:parsed.postedAt}]};
+  }
   assert.strictEqual(plan.action,'auto-save',event.id+' plan '+plan.reason);
   assert.strictEqual(Ingest.applyPlan(state,plan),true,event.id+' apply');
   strict(state,event.id+' strict');
@@ -76,6 +81,8 @@ function ingest(state,event){
     openingBalance:0,openingDebt:0,creditLimit:0,defaultRepaymentAccountId:null,
     icon:'💵',color:'#00695C',archived:false,created:'2026-10-02'
   });
+  state.institutions.push({id:'du-inst',type:'wallet_provider',providerRegistryId:'du-pay',name:'du Pay',country:'UAE'});
+  state.accounts.push({id:'du-wallet',type:'ewallet',institutionId:'du-inst',currency:'AED',country:'UAE',name:'du Pay',openingBalance:0.4,openingDebt:0,creditLimit:0,archived:false});
   strict(state,'du initial');
 
   const rows=Ingest.sortNotifications([
@@ -92,7 +99,7 @@ function ingest(state,event){
     if(out.parsed.availableBalance!=null)assert.ok(out.rec&&out.rec.matched,row.id+' reconciliation');
   }
   const wallet=state.accounts.find(a=>a.type==='ewallet');
-  assert.ok(wallet,'du wallet discovered');
+  assert.ok(wallet,'user-created wallet with explicitly known opening balance');
   assert.strictEqual(Finance.accountBalance(state,wallet.id),650.40);
   assert.strictEqual(Finance.accountBalance(state,'cash'),100);
   assert.strictEqual(state.transactions.length,5);

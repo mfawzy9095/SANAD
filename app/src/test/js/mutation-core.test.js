@@ -19,6 +19,7 @@ function harness(options){
     captureInvariant:()=>o.invariantBefore||null,
     checkInvariant:()=>o.invariantResult||null,
     validateState:()=>o.validationErrors||[],
+    validateChanges:o.validateChanges,
     isPreview:()=>!!o.preview,
     writeSafetySnapshot:async()=>{snapshotCalls++;return o.snapshotResult||{ok:true};},
     verifiedWrite:async()=>{verifiedCalls++;if(o.verifiedThrow)throw new Error('write boom');return o.verifiedResult||{ok:true};},
@@ -116,5 +117,12 @@ function harness(options){
     assert.strictEqual(h.recovery.length,1);
   }
 
+  {
+    const I=require('../../main/assets/js/bank-ingestion-core');
+    const original={accounts:[{id:'a',currency:'AED'},{id:'b',currency:'AED'}],transactions:[{id:'sms',type:'income',accountId:'a',currency:'AED',amount:25,created:1000,bankImportEventId:'e'}]};
+    const h=harness({state:original,validateChanges:I.validateManualImportChanges});
+    const result=await h.service.run(()=>{const next=h.getState();next.transactions.push({id:'new',type:'transfer',fromAccountId:'b',toAccountId:'a',fromCurrency:'AED',toCurrency:'AED',fromAmount:25,toAmount:25,created:7000});h.setState(next);return true;});
+    assert.strictEqual(result.reason,'possible-bank-duplicate');assert.deepStrictEqual(h.getState(),original);assert.strictEqual(h.getSnapshotCalls(),0);assert.strictEqual(h.getVerifiedCalls(),0);
+  }
   console.log('mutation-core regression tests: PASS');
 })().catch(e=>{console.error(e);process.exit(1);});

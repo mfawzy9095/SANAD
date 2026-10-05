@@ -14,6 +14,7 @@
     const captureInvariant=typeof d.captureInvariant==='function'?d.captureInvariant:function(){return null;};
     const checkInvariant=typeof d.checkInvariant==='function'?d.checkInvariant:function(){return null;};
     const validateState=typeof d.validateState==='function'?d.validateState:function(){return [];};
+    const validateChanges=typeof d.validateChanges==='function'?d.validateChanges:function(){return null;};
     const isPreview=typeof d.isPreview==='function'?d.isPreview:function(){return false;};
     const writeSafetySnapshot=d.writeSafetySnapshot;
     const verifiedWrite=d.verifiedWrite;
@@ -53,6 +54,12 @@
         }
 
         const candidate=snapshotState();
+        const review=validateChanges(candidate,before);
+        if(review){
+          loadState(before);
+          setMutationError(review.reason||'financial-review-required');
+          return {ok:false,reason:review.reason||'financial-review-required',review,restored:true};
+        }
         const integrityErrors=validateState(candidate)||[];
         if(integrityErrors.length){
           setMutationError('invalid-state');

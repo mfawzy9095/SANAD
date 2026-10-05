@@ -61,6 +61,16 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  trustFixtureRows();
  assert(adb('shell','content','query','--uri','content://sms/inbox','--projection','address:body').includes('address=EmiratesNBD'),'Controlled provider sender metadata must be updated');
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
+ assert.equal(await page.evaluate(()=>S.transactions.length),1,'Generic deposit remains review');
+ const depositId=await page.evaluate(()=>SanadBankInbox.items.find(x=>x.parsed.transactionRef==='QANATIVEDEPOSIT01').native.id);
+ await page.evaluate(id=>SanadBankInbox.openCorrection(id),depositId);
+ await page.locator('[data-sanad-act="bank-fix-save"]').click();
+ assert.equal(await page.evaluate(()=>S.transactions.length),1,'Unconfirmed origin cannot post');
+ await page.evaluate(()=>{document.getElementById('bankFixExternalIncome').checked=true;});
+ await page.locator('[data-sanad-act="bank-fix-save"]').click();
+ await page.waitForFunction(()=>S.transactions.length===2&&!_criticalMutationInFlight);
+ await page.evaluate(()=>closeSheet());
+ pass('Generic native inbound requires per-event external origin confirmation');
  const result=await page.evaluate(()=>({last:SanadBankInbox.lastRecentImport,transactions:S.transactions,accounts:S.accounts}));
  assert.equal(result.last.status,'complete');assert.equal(result.transactions.length,2);
  const bank=result.accounts.find(a=>a.bankRefs?.includes('012XXX50XXX01'));assert(bank);
@@ -76,7 +86,14 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  adb('emu','sms','send','15551234567','لقد تم ايداع AED 10.00 في رقم حسابك 012XXX50XXX01 OBP TR REF QANATIVEFRESH01. الرصيد المتوفر هو AED 9,086.66');
  for(let n=0;n<30;n++){if(adb('shell','content','query','--uri','content://sms/inbox','--projection','_id:body').includes('QANATIVEFRESH01'))break;await new Promise(r=>setTimeout(r,1000));}
  trustFixtureRows();
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeFresh+1);
+ await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeFresh);
+ const freshId=await page.evaluate(()=>SanadBankInbox.items.find(x=>x.parsed.transactionRef==='QANATIVEFRESH01').native.id);
+ await page.evaluate(id=>SanadBankInbox.openCorrection(id),freshId);
+ await page.evaluate(()=>{document.getElementById('bankFixExternalIncome').checked=true;});
+ await page.locator('[data-sanad-act="bank-fix-save"]').click();
+ await page.waitForFunction(n=>S.transactions.length===n+1&&!_criticalMutationInFlight,beforeFresh);
+ await page.evaluate(()=>closeSheet());
+
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeFresh+1);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bank.id),9086.66);
  const scan=await page.evaluate(()=>SanadBankInbox.lastRecentImport);assert(scan.fromDate>0&&scan.throughDate>=scan.fromDate);

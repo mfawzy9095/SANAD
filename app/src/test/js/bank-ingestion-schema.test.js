@@ -203,7 +203,10 @@ function process(text,input,state){
   s.institutions.push({id:'acme',name:'Acme Wallet',country:'UAE',type:'wallet_provider'});
   s.accounts.push({id:'acme-wallet',institutionId:'acme',country:'UAE',name:'Acme Wallet',type:'ewallet',currency:'AED',openingBalance:75,openingDebt:0,creditLimit:0,archived:false});
   strictOk(s,'custom wallet before ingest');
-  process('Your account was credited AED 50.00. Available balance is AED 125.00',{id:'acme-dep',title:'Acme Wallet'},s);
+  const parsed=fixtureParse({postedAt:Date.UTC(2026,9,1,10,0),text:'Your account was credited AED 50.00. Available balance is AED 125.00',id:'acme-dep',title:'Acme Wallet'});
+  assert.strictEqual(Ingest.plan(parsed,s).reason,'incoming-origin-unconfirmed');
+  const built=Message.buildTransaction(parsed,Ingest.routeFromManualChoice(parsed,s,{sourceType:'account',sourceId:'acme-wallet'}),{uid,confirmedIncomingOrigin:'external-income'});
+  assert.strictEqual(built.ok,true);s.transactions.push(built.transaction);strictOk(s,'confirmed external income');
   assert.strictEqual(s.transactions.length,1);
   assert.strictEqual(s.transactions[0].accountId,'acme-wallet');
   assert.strictEqual(Finance.accountBalance(s,'acme-wallet'),125);
@@ -224,7 +227,14 @@ function process(text,input,state){
 (function transactionReferencePreventsDuplicate(){
   const s=empty();
   const text="Hello Test User, You've received AED 9.00 to your du Pay wallet. Your available balance is now AED 110.28, and the transaction ID is: DG148RKIXI";
-  const first=process(text,{id:'dep1'},s);
+  s.institutions.push({id:'du-inst',providerRegistryId:'du-pay',type:'wallet_provider',name:'du Pay',country:'UAE'});
+  s.accounts.push({id:'du-wallet',institutionId:'du-inst',type:'ewallet',country:'UAE',currency:'AED',name:'du Pay',openingBalance:101.28,openingDebt:0,creditLimit:0,archived:false});
+  const parsed=fixtureParse({text,id:'dep1',postedAt:Date.UTC(2026,9,1,10,0)});
+  assert.strictEqual(Ingest.plan(parsed,s).reason,'incoming-origin-unconfirmed');
+  const built=Message.buildTransaction(parsed,Message.resolveRoute(parsed,s),{uid,confirmedIncomingOrigin:'external-income'});
+  assert.strictEqual(built.ok,true);s.transactions.push(built.transaction);strictOk(s,'manual confirmed income');
+  assert.strictEqual(Finance.accountBalance(s,'du-wallet'),110.28);
+  const first={plan:{transaction:built.transaction}};
   const parsedAgain=fixtureParse({id:'dep2',postedAt:Date.UTC(2026,9,1,10,1),text});
   const second=Ingest.plan(parsedAgain,s,{uid});
   assert.strictEqual(second.action,'duplicate');

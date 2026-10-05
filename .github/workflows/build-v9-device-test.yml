@@ -520,6 +520,7 @@ jobs:
 
       - name: Financial contract acceptance and exact money
         run: |
+          node app/src/test/js/incoming-origin-manual-guard.test.js
           node app/src/test/js/financial-closure.test.js
           node app/src/test/js/money-core.test.js
           node app/src/test/js/financial-acceptance.test.js
@@ -688,7 +689,7 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.2.4-LOCAL-RC.apk"
+          cp "$APK" "SANAD-V9.2.5-LOCAL-RC.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
@@ -756,7 +757,7 @@ jobs:
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          sha256sum "SANAD-V9.2.4-LOCAL-RC.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.2.5-LOCAL-RC.apk" | tee apk-sha256.txt
 
       - name: Load authorized stable QA signing key
         id: qa-key
@@ -835,9 +836,9 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.2.4-LOCAL-RC
+          name: SANAD-V9.2.5-LOCAL-RC
           path: |
-            SANAD-V9.2.4-LOCAL-RC.apk
+            SANAD-V9.2.5-LOCAL-RC.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
