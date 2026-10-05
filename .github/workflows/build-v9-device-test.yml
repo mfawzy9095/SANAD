@@ -521,10 +521,11 @@ jobs:
       - name: Financial contract acceptance and exact money
         run: |
           python3 - <<'PY'
-          import pathlib, re
+          import pathlib
           workflow=pathlib.Path(".github/workflows/build-v9-device-test.yml").read_text()
           tests=sorted(pathlib.Path("app/src/test/js").glob("*.test.js"))
-          missing=[str(p) for p in tests if not re.search(r"(?m)^\\s+node\\s+"+re.escape(str(p))+r"\\s*$",workflow)]
+          registered={line.strip().split()[1] for line in workflow.splitlines() if line.strip().startswith("node ") and len(line.strip().split())==2}
+          missing=[str(p) for p in tests if str(p) not in registered]
           assert not missing, "Unregistered JS regression tests: "+", ".join(missing)
           print("All",len(tests),"JS test files are registered in CI")
           PY
