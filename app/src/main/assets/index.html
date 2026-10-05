@@ -773,6 +773,7 @@ window.__sanadSplashBorn=performance.now();
 <script src="js/reminder-core.js"></script>
 <script src="js/report-core.js"></script>
 <script src="js/uae-bank-registry-core.js"></script>
+<script src="js/money-core.js"></script>
 <script src="js/bank-message-core.js"></script>
 <script src="js/bank-ingestion-core.js"></script>
 <script>
@@ -913,7 +914,7 @@ const ACCOUNT_ICONS = ['🏦','💵','💰','🪙','🏛️','📱','💼','🏧
 const CARD_ICONS = ['💳','🪪','💠','🎴','🏦','📱','💎'];
 const DEBT_ICONS = ['📋','🧾','📉','💸','📝','🏷️'];
 
-const APP_VERSION = '9.2.3';
+const APP_VERSION = '9.2.4';
 const APP_CHANNEL = 'local-rc';
 const SCHEMA_VERSION = 16;
 const DB_NAME = 'masareef_v8';
@@ -8596,7 +8597,7 @@ const SanadFullBackup = {
       family:SanadFamily.state,
       syncMeta:Object.assign({},SanadCloud.meta,{dirty:true}),
       firebaseConfig:SanadCloud.config||null,
-      bankImportAudit:{version:1,parserVersion:'9.2.3-durable-decisions',configuredStartAt:SanadBankInbox.configuredSmsStart(),decisions:await SanadExtStorage.get('bankDecisionAudit',null),smsReviewEvents:SanadBankInbox.smsReviewEvents,pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
+      bankImportAudit:{version:1,parserVersion:'9.2.4-financial-contract',configuredStartAt:SanadBankInbox.configuredSmsStart(),decisions:await SanadExtStorage.get('bankDecisionAudit',null),smsReviewEvents:SanadBankInbox.smsReviewEvents,pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
     };
     if(diagnostic)features.diagnosticReport={version:1,generatedAt:new Date().toISOString(),appVersion:APP_VERSION,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,clock:Date.now(),smsPermission:SanadBankInbox.historicalPermission(),native:SanadBankInbox.diagnostics(),import:features.bankImportAudit,counts:{accounts:state.accounts.length,transactions:state.transactions.length,receipts:packed.length},note:'Local export; financial source messages included. Decision log retains the latest 1000 records; omitted count is explicit. Operation time and SMS arrival time are separate.'};
     delete features.syncMeta.receiptDirty;
@@ -8839,6 +8840,16 @@ const SanadBankInbox = {
   reasonLabel(reason){
     return {
       'unrecognized':'صيغة الرسالة غير معروفة',
+      'possible-manual-duplicate':'قد تؤكد الرسالة عملية يدوية أو طرف تحويل موجود — راجع السجل قبل الإضافة',
+      'account-identity-required':'البنك معروف لكن هوية الحساب لا تطابق حسابًا مؤكدًا',
+      'card-account-link-required':'وجود حساب واحد لا يثبت أن بطاقة الخصم تتبعه — أكد الربط',
+      'asset-account-required':'هذه عملية حساب بنكي ولا يجوز تسجيلها على الكريدت',
+      'ambiguous-number':'فواصل المبلغ ملتبسة — أدخل المبلغ المؤكد',
+      'money-overprecision':'المبلغ يحتوي دقة غير مدعومة للعملة',
+      'money-out-of-range':'المبلغ خارج حدود الأمان',
+      'ledger-currency-review':'دقة هذه العملة تحتاج مراجعة ولا تُرحّل تلقائيًا',
+      'ambiguous-date':'تاريخ العملية ملتبس بين اليوم والشهر',
+      'reversal-original-required':'عكس العملية يحتاج تحديد العملية الأصلية؛ ليس استردادًا عاديًا',
       'refund-instrument-required':'استرداد يحتاج ربط البطاقة المذكورة بالرسالة',
       'refund-balance-review':'رسالة استرداد برصيد أقل من السابق — تحتاج مراجعة التسوية',
       'balance-source-required':'رصيد مؤكد يحتاج تحديد المحفظة',
@@ -8926,7 +8937,7 @@ const SanadBankInbox = {
     let reconciliation={warning:false};
     const result=await commitCriticalMutation(async()=>{
       if(BankIngestionCore.eventDecision(S,String(parsed.eventId)))return true;
-      if(BankIngestionCore.duplicateOf(parsed,S)){BankIngestionCore.rememberEventDecision(S,String(parsed.eventId),'duplicate',Date.now());return true;}
+      const existing=BankIngestionCore.duplicateOf(parsed,S);if(existing){BankIngestionCore.rememberEventDecision(S,String(parsed.eventId),'duplicate',Date.now(),existing.id);return true;}
       const applied=BankIngestionCore.applyPlan(S,plan);
       if(!applied)return false;
       BankIngestionCore.rememberEventDecision(S,String(parsed.eventId),plan.transaction?'saved':'observed',Date.now(),plan.transaction&&plan.transaction.id);
@@ -8988,7 +8999,7 @@ const SanadBankInbox = {
         summary.parsed++;
         let plan=BankIngestionCore.plan(parsed,S,{uid});
         if(plan.action==='duplicate'){
-          record('duplicate',plan.reason);terminal.push({id:String(n.id),action:'duplicate'});ackIds.push(n.id);summary.duplicates++;continue;
+          record('duplicate',plan.reason,{id:plan.existingTransactionId});terminal.push({id:String(n.id),action:'duplicate',transactionId:plan.existingTransactionId});ackIds.push(n.id);summary.duplicates++;continue;
         }
         if(['auto-save','observe'].includes(plan.action)&&allowAuto){
           const saved=await this.commitPlan(parsed,plan);
@@ -9016,7 +9027,7 @@ const SanadBankInbox = {
       }
       await this.recordAudit(decisions);
       if(terminal.length){
-        const remembered=await commitCriticalMutation(async()=>{for(const row of terminal)BankIngestionCore.rememberEventDecision(S,row.id,row.action,Date.now());return true;});
+        const remembered=await commitCriticalMutation(async()=>{for(const row of terminal)BankIngestionCore.rememberEventDecision(S,row.id,row.action,Date.now(),row.transactionId);return true;});
         if(!remembered.ok)throw Error('event-decision-write-failed');
       }
       if(ackIds.length)await this.ack(ackIds);
@@ -9073,7 +9084,7 @@ const SanadBankInbox = {
         captureDesc +
       '</span></div><div class="li-arrow">›</div></div>' +
       '<div class="list-item"><div class="li-ico">📡</div><div class="li-body"><b>حالة الالتقاط</b><span>' +
-        esc(String(diag.capturedTotal||0))+' إشعار مالي ملتقط · '+esc(lastCapture) +
+        esc(String(diag.capturedTotal||0))+' إشعار مالي ملتقط · '+esc(lastCapture) + (diag.recoveryRequired?' · تنبيه: ضغط أو فشل التقاط ('+esc(String(diag.captureFailures||diag.captureFailuresInProcess||0))+') — زامن ثم أعد فحص الإشعارات المتاحة وSMS؛ الإشعار المفقود بلا SMS يحتاج إدخالًا يدويًا':'') +
       '</span></div></div>' +
       '<div class="list-item" data-sanad-act="bank-auto-toggle"><div class="li-ico">'+(auto?'⚡':'⏸️')+'</div><div class="li-body"><b>الإضافة التلقائية</b><span>' +
         (auto?'مفعّلة · العمليات عالية الثقة تُسجل تلقائيًا':'متوقفة · ستبقى العمليات للمراجعة') +

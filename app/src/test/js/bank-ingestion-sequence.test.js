@@ -6,6 +6,15 @@ const RepairCore=require('../../main/assets/js/schema-repair-core.js');
 const SchemaCore=require('../../main/assets/js/schema-core.js');
 const StateCore=require('../../main/assets/js/state-core.js');
 const Message=require('../../main/assets/js/bank-message-core.js');
+// Synthetic legacy fixtures now include source metadata: production never infers it from body.
+function fixtureParse(input){
+ const e={...input};
+ if(!e.title&&!e.sender&&!e.packageName){
+  if(/du pay|TID:/i.test(e.text||''))e.sender='duPay';
+  else if(/تمت عملية شراء في|تم ايداع الراتب|تم إيداع الراتب|تم خصم(?: مبلغ)?|تم تحويل مبلغ|تمت عملية شراء بقيمة|لقد تم.*(?:تحويل|ايداع)|تم ايداع AED/.test(e.text||''))e.sender='EmiratesNBD';
+ }
+ return Message.parse(e);
+}
 const Ingest=require('../../main/assets/js/bank-ingestion-core.js');
 
 const ACCOUNT_TYPES=[
@@ -50,7 +59,7 @@ function strict(state,label){
   assert.deepStrictEqual(Schema.validateStateStrict(state),[],label);
 }
 function ingest(state,event){
-  const parsed=Message.parse(event);
+  const parsed=fixtureParse(event);
   assert.strictEqual(parsed.recognized,true,event.id+' parsed');
   const plan=Ingest.plan(parsed,state,{uid});
   assert.strictEqual(plan.action,'auto-save',event.id+' plan '+plan.reason);
@@ -71,9 +80,9 @@ function ingest(state,event){
 
   const rows=Ingest.sortNotifications([
     {id:'du5',postedAt:5000,text:'You have successfully withdrawn AED 100.00 from your du Pay wallet. Transaction ID: SEQ-WITHDRAW-1 Available balance: AED 650.40'},
-    {id:'du2',postedAt:2000,text:'Hello Mohamed Abd, Your du Pay Card ending in 7105 has been used for AED 100.00 at FRESH CRAFT MINI MART. Your available balance is now AED 900.40 and your transaction ID is SEQ-PURCHASE-1. Fee AED 0.00, VAT AED 0.00.'},
-    {id:'du4',postedAt:4000,text:"Hello Mohamed Abd, You've received AED 50.00 to your du Pay wallet. Your available balance is now AED 750.40, and the transaction ID is: SEQ-DEPOSIT-2"},
-    {id:'du1',postedAt:1000,text:"Hello Mohamed Abd, You've received AED 1,000.00 to your du Pay wallet. Your available balance is now AED 1,000.40, and the transaction ID is: SEQ-DEPOSIT-1"},
+    {id:'du2',postedAt:2000,text:'Hello Test User, Your du Pay Card ending in 7105 has been used for AED 100.00 at FRESH CRAFT MINI MART. Your available balance is now AED 900.40 and your transaction ID is SEQ-PURCHASE-1. Fee AED 0.00, VAT AED 0.00.'},
+    {id:'du4',postedAt:4000,text:"Hello Test User, You've received AED 50.00 to your du Pay wallet. Your available balance is now AED 750.40, and the transaction ID is: SEQ-DEPOSIT-2"},
+    {id:'du1',postedAt:1000,text:"Hello Test User, You've received AED 1,000.00 to your du Pay wallet. Your available balance is now AED 1,000.40, and the transaction ID is: SEQ-DEPOSIT-1"},
     {id:'du3',postedAt:3000,text:'Your request to transfer AED 200.00 to Ahmed Ali is successfully processed and the amount has been credited in the beneficiary account. TID: SEQ-TRANSFER-1'}
   ]);
   assert.deepStrictEqual(rows.map(x=>x.id),['du1','du2','du3','du4','du5']);
@@ -92,7 +101,7 @@ function ingest(state,event){
   assert.strictEqual(state.beneficiaries.length,1);
   assert.strictEqual(state.beneficiaries[0].name,'Ahmed Ali');
 
-  const duplicate=Message.parse({id:'different-notification-id',postedAt:6000,text:"Hello Mohamed Abd, You've received AED 50.00 to your du Pay wallet. Your available balance is now AED 750.40, and the transaction ID is: SEQ-DEPOSIT-2"});
+  const duplicate=fixtureParse({id:'different-notification-id',postedAt:6000,text:"Hello Test User, You've received AED 50.00 to your du Pay wallet. Your available balance is now AED 750.40, and the transaction ID is: SEQ-DEPOSIT-2"});
   const dupPlan=Ingest.plan(duplicate,state,{uid});
   assert.strictEqual(dupPlan.action,'duplicate');
   assert.strictEqual(state.transactions.length,5);
@@ -106,7 +115,12 @@ function ingest(state,event){
     {id:'e3',postedAt:3000,text:'تمت عملية شراء في AED 100.00 TEST STORE,SHARJAH على البطاقة 4021 الائتمان المتوفر AED4,900.00'},
     {id:'e4',postedAt:4000,text:'تم خصم مبلغ AED 50.00 من حسابك 012XXX50XXX01 لتسديد مستحقات بطاقتك الائتمانية4021.'}
   ];
-  for(const e of events)ingest(state,e);
+  ingest(state,events[0]);
+  const bankBefore=state.accounts.find(a=>a.type==='bank');
+  assert.strictEqual(Ingest.plan(fixtureParse(events[1]),state,{uid}).action,'review');
+  // Explicit user-confirmed card/account link, not inferred from one account.
+  state.paymentInstruments.push({id:'confirmed-debit',accountId:bankBefore.id,institutionId:bankBefore.institutionId,country:'UAE',type:'debit_card',last4:'3993',name:'Confirmed debit',network:'other',archived:false});
+  for(const e of events.slice(1))ingest(state,e);
   const bank=state.accounts.find(a=>a.type==='bank');
   const credit=state.accounts.find(a=>a.type==='credit');
   assert.ok(bank&&credit);

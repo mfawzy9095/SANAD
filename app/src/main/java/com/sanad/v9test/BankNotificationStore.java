@@ -21,6 +21,8 @@ public final class BankNotificationStore {
     private static final String KEY_LAST_PACKAGE = "last_package";
     private static final String KEY_LAST_TITLE = "last_title";
     private static final int MAX_EVENTS = 200;
+    private static final int OVERFLOW_EVENTS = 2000;
+    private static volatile long captureFailuresInProcess;
     private static final int MAX_TEXT = 4000;
     private static final Pattern PAN_CANDIDATE =
             Pattern.compile("(?<!\\d)(?:\\d[ -]?){12,18}\\d(?!\\d)");
@@ -59,7 +61,12 @@ public final class BankNotificationStore {
 
         }
 
-        if (capacityReached(current.length())) return FULL;
+        // Preserve the first bounded queue and use explicit overflow headroom.
+        // Never evict a financial notification to admit a newer one.
+        if (current.length() >= MAX_EVENTS + OVERFLOW_EVENTS) {
+            recordCaptureFailure(context, "FULL", ts);
+            return FULL;
+        }
         JSONArray next = new JSONArray();
         int start = 0;
         for (int i = start; i < current.length(); i++) {
@@ -73,6 +80,7 @@ public final class BankNotificationStore {
             event.put("packageName", safePackage);
             event.put("title", safeTitle);
             event.put("text", safeText);
+            event.put("truncated", (text == null ? "" : text).length() > MAX_TEXT);
             event.put("postedAt", ts);
             event.put("fingerprint", fingerprint);
             event.put("contentFingerprint", contentFingerprint);
@@ -80,7 +88,7 @@ public final class BankNotificationStore {
             return ERROR;
         }
         next.put(event);
-        if (!write(context, next)) return ERROR;
+        if (!write(context, next)) { recordCaptureFailure(context, "WRITE_FAILED", ts); return ERROR; }
         SharedPreferences p = prefs(context);
         p.edit()
                 .putLong(KEY_CAPTURED_TOTAL, p.getLong(KEY_CAPTURED_TOTAL, 0L) + 1L)
@@ -89,6 +97,13 @@ public final class BankNotificationStore {
                 .putString(KEY_LAST_TITLE, safeTitle)
                 .apply();
         return ADDED;
+    }
+
+    private static void recordCaptureFailure(Context context, String reason, long at) {
+        captureFailuresInProcess++;
+        SharedPreferences p = prefs(context);
+        p.edit().putLong("capture_failures", p.getLong("capture_failures", 0L) + 1L)
+                .putString("last_capture_failure", reason).putLong("last_capture_failure_at", at).commit();
     }
 
     // Produces the exact same stable event identity as enqueueStatus, without
@@ -106,6 +121,7 @@ public final class BankNotificationStore {
             event.put("packageName", safePackage);
             event.put("title", safeTitle);
             event.put("text", safeText);
+            event.put("truncated", (body == null ? "" : body).length() > MAX_TEXT);
             event.put("postedAt", ts);
             return event;
         } catch (Exception error) { return null; }
@@ -123,6 +139,7 @@ public final class BankNotificationStore {
                 out.put("packageName", old.optString("packageName", ""));
                 out.put("title", old.optString("title", ""));
                 out.put("text", old.optString("text", ""));
+                out.put("truncated", old.optBoolean("truncated", false));
                 out.put("postedAt", old.optLong("postedAt", 0L));
                 safe.put(out);
             } catch (Exception ignored) {}
@@ -159,7 +176,15 @@ public final class BankNotificationStore {
         if (context == null) return out.toString();
         try {
             SharedPreferences p = prefs(context);
-            out.put("pendingCount", read(context).length());
+            int count = read(context).length();
+            out.put("pendingCount", count);
+            out.put("queueCapacity", MAX_EVENTS + OVERFLOW_EVENTS);
+            out.put("overflowPending", Math.max(0, count - MAX_EVENTS));
+            out.put("captureFailures", p.getLong("capture_failures", 0L));
+            out.put("captureFailuresInProcess", captureFailuresInProcess);
+            out.put("lastCaptureFailure", p.getString("last_capture_failure", ""));
+            out.put("lastCaptureFailureAt", p.getLong("last_capture_failure_at", 0L));
+            out.put("recoveryRequired", count > MAX_EVENTS || p.getLong("capture_failures", 0L) > 0L || captureFailuresInProcess > 0L);
             out.put("capturedTotal", p.getLong(KEY_CAPTURED_TOTAL, 0L));
             out.put("lastCapturedAt", p.getLong(KEY_LAST_CAPTURED_AT, 0L));
             out.put("lastPackage", p.getString(KEY_LAST_PACKAGE, ""));

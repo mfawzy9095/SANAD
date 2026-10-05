@@ -1,0 +1,17 @@
+'use strict';
+const assert=require('assert/strict'),R=require('../../../../tools/quarantine-invalid-asset-income'),S=require('../../main/assets/js/state-core'),B=require('../../main/assets/js/backup-core');
+const t={id:'bad',type:'income',accountId:'credit',amount:7200,currency:'AED',walletAmount:7200,created:1000,bankImportKey:'synthetic',bankImportEventId:'synthetic-event',bankId:'emirates-nbd',bankImportEvidence:{kind:'salary',text:'Salary AED 7200 credited to your bank account',sourceHint:'EmiratesNBD',availableBalance:7201}};
+const good={id:'refund',type:'income',accountId:'credit',amount:20,currency:'AED',created:2000,bankImportKey:'refund',bankImportEventId:'refund-e',bankImportEvidence:{kind:'refund'}};
+const state={schemaVersion:16,institutions:[],accounts:[{id:'credit',type:'credit',country:'UAE',currency:'AED',baselinePartial:true,openingDebt:0,observedBalance:7201,observedBalanceAt:1000},{id:'bank',type:'bank',country:'UAE',currency:'AED',openingBalance:150}],paymentInstruments:[],transactions:[t,good],beneficiaries:[],settings:{bankEventDecisions:{'synthetic-event':{action:'saved',transactionId:'bad'},untouched:{action:'dismissed'}}},categories:{},tags:[],recurring:[]};
+const bytes=Buffer.from(JSON.stringify(B.makeFullBackup({state,fingerprint:S.stateFingerprint,features:{bankImportAudit:{smsReviewEvents:[]}},receipts:[]})));
+const plan=R.dryRun(bytes);assert.equal(plan.proposals.length,1);assert.equal(plan.proposals[0].id,'bad');
+const result=R.apply(bytes,plan),repaired=JSON.parse(result.repaired);
+assert.equal(repaired.finance.transactions.length,1);assert.equal(repaired.finance.transactions[0].id,'refund');
+assert.equal(repaired.features.bankImportAudit.smsReviewEvents[0].id,'synthetic-event');
+assert.equal(repaired.finance.settings.bankEventDecisions['synthetic-event'],undefined);assert.deepEqual(repaired.finance.settings.bankEventDecisions.untouched,{action:'dismissed'});
+assert.equal(repaired.finance.accounts[1].openingBalance,150);assert.equal(repaired.finance.accounts[0].observedBalance,undefined);
+assert.deepEqual(R.rollback(result.repaired,result.journal),bytes);
+assert.throws(()=>R.apply(Buffer.concat([bytes,Buffer.from(' ')]),plan),/source-changed/);
+assert.throws(()=>R.rollback(Buffer.concat([result.repaired,Buffer.from(' ')]),result.journal),/repaired-copy-changed/);
+assert.equal(R.dryRun(result.repaired).proposals.length,0);
+console.log('PASS copy-only liability quarantine, review evidence preservation, immutable source and exact rollback');

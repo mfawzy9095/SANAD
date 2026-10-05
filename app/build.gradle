@@ -11,8 +11,20 @@ android {
         applicationId 'com.sanad.v9test'
         minSdk 26
         targetSdk 35
-        versionCode 92003
-        versionName '9.2.3-local-rc'
+        versionCode 92004
+        versionName '9.2.4-financial-qa'
+    }
+
+    signingConfigs {
+        qaStable {
+            def qaPath = System.getenv('SANAD_QA_KEYSTORE')
+            if (qaPath) {
+                storeFile file(qaPath)
+                storePassword System.getenv('SANAD_QA_STORE_PASSWORD')
+                keyAlias System.getenv('SANAD_QA_KEY_ALIAS')
+                keyPassword System.getenv('SANAD_QA_KEY_PASSWORD')
+            }
+        }
     }
 
     buildTypes {
@@ -21,9 +33,17 @@ android {
         }
         forensicQa {
             initWith debug
+            signingConfig System.getenv('SANAD_QA_KEYSTORE') ? signingConfigs.qaStable : null
             applicationIdSuffix '.forensicqa.stable'
             versionNameSuffix '-forensic-qa'
             resValue 'string', 'app_name', 'SANAD QA — سند'
+            matchingFallbacks = ['debug']
+        }
+        forensicQaCi {
+            initWith debug
+            applicationIdSuffix '.forensicqa.ci'
+            versionNameSuffix '-ci-harness'
+            resValue 'string', 'app_name', 'SANAD CI — سند'
             matchingFallbacks = ['debug']
         }
         release {
@@ -51,3 +71,13 @@ dependencies {
 }
 
 
+
+// QA update continuity is a release gate; a fresh ephemeral debug key is forbidden.
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.name.toLowerCase().contains('forensicqa') && !it.name.toLowerCase().contains('forensicqaci') } && System.getenv('SANAD_QA_UNSIGNED_ONLY') != '1') {
+        def qa = android.signingConfigs.qaStable
+        if (!qa.storeFile || !qa.storeFile.exists() || !qa.storePassword || !qa.keyAlias || !qa.keyPassword) {
+            throw new GradleException('Stable QA signing key unavailable: forensic QA build blocked; no key substitution allowed.')
+        }
+    }
+}

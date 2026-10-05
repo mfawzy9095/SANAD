@@ -22,6 +22,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      qa-key-available: ${{ steps.qa-key.outputs.available }}
 
     steps:
       - name: Checkout
@@ -516,6 +518,13 @@ jobs:
           for i in $(seq 1 10); do node --check /tmp/sanad-v9010.js >/dev/null; done
           echo "V9.0.10 source gates passed 10x"
 
+      - name: Financial contract acceptance and exact money
+        run: |
+          node app/src/test/js/financial-closure.test.js
+          node app/src/test/js/money-core.test.js
+          node app/src/test/js/financial-acceptance.test.js
+          node app/src/test/js/quarantine-invalid-asset-income.test.js
+
       - name: JavaScript core regression tests
         run: |
           node --check app/src/main/assets/js/finance-core.js
@@ -679,7 +688,7 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          cp "$APK" "SANAD-V9.2.3-LOCAL-RC.apk"
+          cp "$APK" "SANAD-V9.2.4-LOCAL-RC.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee apk-permissions.txt
@@ -747,16 +756,44 @@ jobs:
           ! unzip -l "$APK" | grep -Eq 'assets/sanad_(splash|logo|app_icon)\.webp'
           for i in $(seq 1 5); do unzip -t "$APK" >/dev/null; done
           echo "APK archive integrity passed 5x"
-          sha256sum "SANAD-V9.2.3-LOCAL-RC.apk" | tee apk-sha256.txt
+          sha256sum "SANAD-V9.2.4-LOCAL-RC.apk" | tee apk-sha256.txt
+
+      - name: Load authorized stable QA signing key
+        id: qa-key
+        shell: bash
+        env:
+          QA_KEY_B64: ${{ secrets.SANAD_QA_KEYSTORE_B64 }}
+          QA_STORE_PASSWORD: ${{ secrets.SANAD_QA_STORE_PASSWORD }}
+          QA_KEY_ALIAS: ${{ secrets.SANAD_QA_KEY_ALIAS }}
+          QA_KEY_PASSWORD: ${{ secrets.SANAD_QA_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$QA_KEY_B64" ] || [ -z "$QA_STORE_PASSWORD" ] || [ -z "$QA_KEY_ALIAS" ] || [ -z "$QA_KEY_PASSWORD" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Stable QA APK will be unsigned for private final signing. The emulator uses a distinct com.sanad.v9test.forensicqa.ci test package with ephemeral debug signing; it is not the delivered APK." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          QA_KEY_PATH="$RUNNER_TEMP/sanad-stable-qa.jks"
+          printf '%s' "$QA_KEY_B64" | base64 --decode > "$QA_KEY_PATH"
+          chmod 600 "$QA_KEY_PATH"
+          echo "SANAD_QA_KEYSTORE=$QA_KEY_PATH" >> "$GITHUB_ENV"
+          echo "SANAD_QA_STORE_PASSWORD=$QA_STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "SANAD_QA_KEY_ALIAS=$QA_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "SANAD_QA_KEY_PASSWORD=$QA_KEY_PASSWORD" >> "$GITHUB_ENV"
+          echo "available=true" >> "$GITHUB_OUTPUT"
 
       - name: Build isolated forensic QA APK
-        run: gradle --no-daemon --stacktrace :app:assembleForensicQa
+        env:
+          SANAD_QA_UNSIGNED_ONLY: '1'
+        run: gradle --no-daemon --stacktrace :app:assembleForensicQa :app:assembleForensicQaCi
 
-      - name: Verify isolated QA APK
+      - name: Verify isolated QA APK (may be unsigned for private final signing)
         shell: bash
         run: |
           set -euo pipefail
           APK="app/build/outputs/apk/forensicQa/app-forensicQa.apk"
+          if [ ! -s "$APK" ]; then APK="app/build/outputs/apk/forensicQa/app-forensicQa-unsigned.apk"; fi
+          cp app/build/outputs/apk/forensicQaCi/app-forensicQaCi.apk SANAD-CI-HARNESS.apk
           test -s "$APK"
           cp "$APK" "SANAD-V9.2-FORENSIC-QA.apk"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
@@ -766,32 +803,41 @@ jobs:
           grep -q "application-label:'SANAD QA — سند'" qa-apk-badging.txt
           grep -q 'android.permission.READ_SMS' qa-apk-permissions.txt
           ! grep -Eq 'android.permission.(SEND_SMS|WRITE_SMS|CAMERA|RECORD_AUDIO)' qa-apk-permissions.txt
-          for ASSET in index.html js/finance-core.js js/bank-message-core.js js/bank-ingestion-core.js js/schema-core.js js/uae-bank-registry-core.js; do
+          for ASSET in index.html js/money-core.js js/finance-core.js js/bank-message-core.js js/bank-ingestion-core.js js/schema-core.js js/uae-bank-registry-core.js; do
             test "$(unzip -p "$APK" "assets/$ASSET" | sha256sum | awk '{print $1}')" = "$(sha256sum "app/src/main/assets/$ASSET" | awk '{print $1}')"
           done
+          if [ "${{ steps.qa-key.outputs.available }}" = "true" ]; then
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee qa-signature.txt
+          else
+            echo "UNSIGNED: must be signed locally using the existing private QA key before delivery" > qa-signature.txt
+          fi
+          EXPECTED_QA_CERT="d3cf8c03964cee0efd6e474b5ae6f983e87c528b1e2cf6560e25de1c9f5bb377"
+          if [ "${{ steps.qa-key.outputs.available }}" = "true" ]; then grep -Fq "certificate SHA-256 digest: $EXPECTED_QA_CERT" qa-signature.txt; fi
           unzip -t "$APK" >/dev/null
           sha256sum SANAD-V9.2-FORENSIC-QA.apk | tee qa-apk-sha256.txt
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" apksigner.jar
 
-      - name: Upload isolated QA artifact
+      - name: Upload QA signing input and distinct CI harness
         uses: actions/upload-artifact@v4
         with:
           name: SANAD-V9.2-FORENSIC-QA
           path: |
             SANAD-V9.2-FORENSIC-QA.apk
+            SANAD-CI-HARNESS.apk
             qa-apk-sha256.txt
             qa-apk-badging.txt
             qa-apk-permissions.txt
             apksigner.jar
+            qa-signature.txt
           if-no-files-found: error
           retention-days: 30
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SANAD-V9.2.3-LOCAL-RC
+          name: SANAD-V9.2.4-LOCAL-RC
           path: |
-            SANAD-V9.2.3-LOCAL-RC.apk
+            SANAD-V9.2.4-LOCAL-RC.apk
             apk-sha256.txt
             apk-badging.txt
             apk-permissions.txt
@@ -825,8 +871,8 @@ jobs:
           target: google_apis
           disable-animations: true
           script: |
-            adb install device-apk/SANAD-V9.2-FORENSIC-QA.apk
-            SANAD_QA_OUTPUT="${{ runner.temp }}/sanad-android-qa" node tools/e2e/android-smoke.js
+            adb install device-apk/SANAD-CI-HARNESS.apk
+            SANAD_QA_PACKAGE=com.sanad.v9test.forensicqa.ci SANAD_QA_OUTPUT="${{ runner.temp }}/sanad-android-qa" node tools/e2e/android-smoke.js
       - name: Upload Android QA evidence
         if: always()
         uses: actions/upload-artifact@v4

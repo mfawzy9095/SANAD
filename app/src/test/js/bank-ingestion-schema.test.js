@@ -8,6 +8,15 @@ const RepairCore=require('../../main/assets/js/schema-repair-core.js');
 const SchemaCore=require('../../main/assets/js/schema-core.js');
 const StateCore=require('../../main/assets/js/state-core.js');
 const Message=require('../../main/assets/js/bank-message-core.js');
+// Synthetic legacy fixtures now include source metadata: production never infers it from body.
+function fixtureParse(input){
+ const e={...input};
+ if(!e.title&&!e.sender&&!e.packageName){
+  if(/du pay|TID:/i.test(e.text||''))e.sender='duPay';
+  else if(/تمت عملية شراء في|تم ايداع الراتب|تم إيداع الراتب|تم خصم(?: مبلغ)?|تم تحويل مبلغ|تمت عملية شراء بقيمة|لقد تم.*(?:تحويل|ايداع)|تم ايداع AED/.test(e.text||''))e.sender='EmiratesNBD';
+ }
+ return Message.parse(e);
+}
 const Ingest=require('../../main/assets/js/bank-ingestion-core.js');
 
 const ACCOUNT_TYPES=[
@@ -62,7 +71,7 @@ function strictOk(state,label){
   assert.deepStrictEqual(Schema.validateStateStrict(state),[],label);
 }
 function process(text,input,state){
-  const parsed=Message.parse(Object.assign({postedAt:Date.UTC(2026,9,1,10,0),text},input||{}));
+  const parsed=fixtureParse(Object.assign({postedAt:Date.UTC(2026,9,1,10,0),text},input||{}));
   assert.strictEqual(parsed.recognized,true,'parse failed');
   const plan=Ingest.plan(parsed,state,{uid});
   assert.strictEqual(plan.action,'auto-save','not auto-save: '+plan.reason);
@@ -74,7 +83,7 @@ function process(text,input,state){
 (function duPayPurchaseAutoDiscoveryBalancesExactly(){
   const s=empty();
   const {plan}=process(
-    'Hello Mohamed Abd, Your du Pay Card ending in 7105 has been used for AED 9.75 at FRESH CRAFT MINI MART. Your available balance is now AED 0.53 and your transaction ID is DG108RVT5U. Fee AED 0.00, VAT AED 0.00.',
+    'Hello Test User, Your du Pay Card ending in 7105 has been used for AED 9.75 at FRESH CRAFT MINI MART. Your available balance is now AED 0.53 and your transaction ID is DG108RVT5U. Fee AED 0.00, VAT AED 0.00.',
     {id:'du-purchase'},s
   );
   assert.strictEqual(s.institutions.length,1);
@@ -87,7 +96,7 @@ function process(text,input,state){
   assert.strictEqual(s.transactions.length,1);
   assert.strictEqual(s.transactions[0].cat,'grocery');
   assert.strictEqual(Finance.accountBalance(s,s.accounts[0].id),0.53);
-  const rec=Ingest.reconciliation(plan.transaction?Message.parse({id:'du-purchase',postedAt:Date.UTC(2026,9,1,10,0),text:'Hello Mohamed Abd, Your du Pay Card ending in 7105 has been used for AED 9.75 at FRESH CRAFT MINI MART. Your available balance is now AED 0.53 and your transaction ID is DG108RVT5U. Fee AED 0.00, VAT AED 0.00.'}):null,s,plan,(st,id)=>Finance.accountBalance(st,id));
+  const rec=Ingest.reconciliation(plan.transaction?fixtureParse({id:'du-purchase',postedAt:Date.UTC(2026,9,1,10,0),text:'Hello Test User, Your du Pay Card ending in 7105 has been used for AED 9.75 at FRESH CRAFT MINI MART. Your available balance is now AED 0.53 and your transaction ID is DG108RVT5U. Fee AED 0.00, VAT AED 0.00.'}):null,s,plan,(st,id)=>Finance.accountBalance(st,id));
   assert.ok(rec&&rec.matched);
 })();
 
@@ -160,11 +169,11 @@ function process(text,input,state){
   s.accounts.push({id:'wallet2',institutionId:'dui2',country:'UAE',name:'du Pay Wallet',type:'ewallet',currency:'AED',openingBalance:500,openingDebt:0,creditLimit:0,archived:false});
   strictOk(s,'pre person transfer');
   process(
-    'Your request to transfer AED 149.00 to Mohamed Abdelrahman Fawzy is successfully processed and the amount has been credited in the beneficiary account. TID: PERSONLEDGER1',
+    'Your request to transfer AED 149.00 to Test User Name is successfully processed and the amount has been credited in the beneficiary account. TID: PERSONLEDGER1',
     {id:'person-ledger'},s
   );
   assert.strictEqual(s.beneficiaries.length,1);
-  assert.strictEqual(s.beneficiaries[0].name,'Mohamed Abdelrahman Fawzy');
+  assert.strictEqual(s.beneficiaries[0].name,'Test User Name');
   assert.strictEqual(s.transactions[0].type,'external_transfer');
   assert.strictEqual(s.transactions[0].beneficiaryId,s.beneficiaries[0].id);
   assert.strictEqual(Finance.accountBalance(s,'wallet2'),351);
@@ -179,7 +188,7 @@ function process(text,input,state){
   );
   s.paymentInstruments.push({id:'card-ref',accountId:'credit-ref',institutionId:'nbd-ref',country:'UAE',type:'credit_card',last4:'4021',archived:false});
   strictOk(s,'pre refund');
-  const parsed=Message.parse({id:'refund1',postedAt:Date.UTC(2026,9,1,12,0),title:'Emirates NBD',text:'Refund AED 25.00 to credit card 4021'});
+  const parsed=fixtureParse({id:'refund1',postedAt:Date.UTC(2026,9,1,12,0),title:'Emirates NBD',text:'Refund AED 25.00 to credit card 4021'});
   assert.strictEqual(parsed.kind,'refund');
   const plan=Ingest.plan(parsed,s,{uid});
   assert.strictEqual(plan.action,'auto-save');
@@ -214,9 +223,9 @@ function process(text,input,state){
 
 (function transactionReferencePreventsDuplicate(){
   const s=empty();
-  const text="Hello Mohamed Abd, You've received AED 9.00 to your du Pay wallet. Your available balance is now AED 110.28, and the transaction ID is: DG148RKIXI";
+  const text="Hello Test User, You've received AED 9.00 to your du Pay wallet. Your available balance is now AED 110.28, and the transaction ID is: DG148RKIXI";
   const first=process(text,{id:'dep1'},s);
-  const parsedAgain=Message.parse({id:'dep2',postedAt:Date.UTC(2026,9,1,10,1),text});
+  const parsedAgain=fixtureParse({id:'dep2',postedAt:Date.UTC(2026,9,1,10,1),text});
   const second=Ingest.plan(parsedAgain,s,{uid});
   assert.strictEqual(second.action,'duplicate');
   assert.strictEqual(second.existingTransactionId,first.plan.transaction.id);
@@ -295,8 +304,8 @@ console.log('bank ingestion schema integration tests: PASS');
 
 (function manuallyConfirmedFeesKeepSchema16MoneyInvariant(){
  const s=empty();
- process('Hello Mohamed Abd, Your du Pay Card ending in 7105 has been used for AED 9.75 at FRESH CRAFT MINI MART. Your available balance is now AED 90.25 and your transaction ID is VALIDATION1. Fee AED 0.00, VAT AED 0.00.',{id:'fee-setup'},s);
- const parsed=Message.parse({id:'fee-confirmed',title:'duPay',postedAt:Date.UTC(2026,9,1,11),text:'Hello Mohamed Abd, Your du Pay Card ending in 7105 has been used for AED 10.00 at TEST STORE. Your available balance is now AED 78.15 and your transaction ID is VALIDATION2. Fee AED 2.00, VAT AED 0.10.'});
+ process('Hello Test User, Your du Pay Card ending in 7105 has been used for AED 9.75 at FRESH CRAFT MINI MART. Your available balance is now AED 90.25 and your transaction ID is VALIDATION1. Fee AED 0.00, VAT AED 0.00.',{id:'fee-setup'},s);
+ const parsed=fixtureParse({id:'fee-confirmed',title:'duPay',postedAt:Date.UTC(2026,9,1,11),text:'Hello Test User, Your du Pay Card ending in 7105 has been used for AED 10.00 at TEST STORE. Your available balance is now AED 78.15 and your transaction ID is VALIDATION2. Fee AED 2.00, VAT AED 0.10.'});
  const route=Ingest.routeFromManualChoice(parsed,s,{sourceType:'instrument',sourceId:s.paymentInstruments[0].id});
  assert.strictEqual(Message.buildTransaction(parsed,route,{uid}).reason,'fee-confirmation-required');
  const built=Message.buildTransaction(parsed,route,{uid,confirmedFee:2.1});assert.strictEqual(built.ok,true,JSON.stringify({built,parsed,route}));

@@ -1,0 +1,22 @@
+'use strict';
+const assert=require('assert/strict');
+const M=require('../../main/assets/js/bank-message-core');
+const I=require('../../main/assets/js/bank-ingestion-core');
+let failures=0,passed=0;
+function test(name,fn){try{fn();passed++;console.log('PASS '+name);}catch(e){failures++;console.log('FAIL '+name+': '+e.message);}}
+const at=1791000000000;
+const state=()=>({institutions:[{id:'b',name:'Emirates NBD',country:'UAE',type:'bank',bankRegistryId:'emirates-nbd'},{id:'w',name:'du Pay',country:'UAE',type:'wallet_provider',providerRegistryId:'du-pay'}],accounts:[{id:'credit',institutionId:'b',type:'credit',currency:'AED',country:'UAE',baselinePartial:true,openingDebt:0,creditLimit:0},{id:'wallet',institutionId:'w',type:'ewallet',currency:'AED',country:'UAE',openingBalance:0}],paymentInstruments:[{id:'card',accountId:'credit',institutionId:'b',type:'credit_card',last4:'6842'}],transactions:[],beneficiaries:[],settings:{}});
+const parse=(text,sender='EmiratesNBD')=>M.parse({id:'synthetic-'+text,sender,text,postedAt:at});
+test('salary cannot route to only bank credit liability',()=>{const p=parse('تم إيداع الراتب AED 7,400.00 في حسابك .013XXX60XXX02');const s=state();assert.notEqual(M.resolveRoute(p,s).status,'routed');assert.notEqual(I.plan(p,s).action,'auto-save');});
+test('sole unrelated bank asset is not matched by existence',()=>{const s=state();s.accounts=[{id:'asset',institutionId:'b',type:'bank',currency:'AED',country:'UAE',bankRefs:['99123456']}];assert.notEqual(I.plan(parse('تم إيداع الراتب AED 7,400.00 في حسابك .013XXX60XXX02'),s).action,'auto-save');});
+test('incoming Arabic transfer without sender-person',()=>{const p=parse('تم تحويل مبلغ AED 26.00 إلى حسابك رقم 12345678');assert.equal(p.kind,'incoming_transfer');assert.equal(p.direction,'credit');});
+test('European amount never truncates',()=>{const p=parse('Purchase EUR 1.234,56 using credit card ending 6842 at Shop');assert.equal(p.amount,1234.56);});
+test('negative salary cannot post',()=>{const p=parse('Salary AED 7400 failed; no funds were credited to your account 12345678');assert.notEqual(I.plan(p,state()).action,'auto-save');assert.equal(p.ignored,true);});
+test('unknown sender cannot impersonate ENBD template',()=>{const p=parse('تم إيداع الراتب AED 7,400.00 في حسابك .013XXX60XXX02 الرصيد المتوفر هو AED 7,401.00','UnknownBank');assert.equal(p.bankId,null);assert.notEqual(I.plan(p,state()).action,'auto-save');});
+test('manual transfer is an economic duplicate candidate',()=>{const s=state();s.transactions=[{id:'manual',type:'transfer',fromAccountId:'credit',toAccountId:'wallet',fromAmount:4200,toAmount:4200,fromCurrency:'AED',toCurrency:'AED',created:at-6000}];const p=parse("You've received AED 4,200.00 to your du pay wallet. Your available balance is now AED 4,200.00, and the transaction id is: SAMPLE-1",'duPay');const plan=I.plan(p,s);assert.equal(plan.action,'review');assert.equal(plan.reason,'possible-manual-duplicate');assert.equal(plan.existingTransactionId,'manual');assert.equal(s.transactions.length,1);});
+test('identical-looking distinct evidence needs review',()=>{const s=state();const p=parse('تمت عملية شراء في AED 18.00 Shop على البطاقة 6842 الائتمان المتوفر AED 800.00');const plan=I.plan(p,s);assert.equal(plan.action,'auto-save');I.applyPlan(s,plan);assert.equal(I.plan({...p,eventId:'another-event',postedAt:at+1000},s).action,'review');});
+test('same event remains idempotent',()=>{const s=state(),p=parse('تمت عملية شراء في AED 18.00 Shop على البطاقة 6842 الائتمان المتوفر AED 800.00');I.applyPlan(s,I.plan(p,s));assert.equal(I.plan(p,s).action,'duplicate');});
+test('same suffix different card types do not cross-route',()=>{const s=state();const p=parse('تمت عملية شراء بقيمة AED 18.00 لدى Shop باستخدام بطاقة خصم تنتهي ارقامها ب6842 الرصيد المتوفر هو AED 800.00');assert.notEqual(I.plan(p,s).action,'auto-save');});
+test('reversal not silently treated as generic refund',()=>{const p=parse('Purchase reversal AED 18.00 on credit card ending 6842');assert.notEqual(I.plan(p,state()).action,'auto-save');});
+test('unsafe/ambiguous decimal cannot be auto-posted',()=>{for(const token of ['1,234','900719925474099.99','1.234.56']){const p=parse('Purchase AED '+token+' using credit card ending 6842 at Shop');assert.notEqual(I.plan(p,state()).action,'auto-save',token);}});
+console.log(JSON.stringify({passed,failures}));if(failures)process.exitCode=1;

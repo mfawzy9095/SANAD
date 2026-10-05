@@ -146,6 +146,23 @@
       return probable===true;
     })||null;
   }
+  function manualDuplicateCandidate(parsed,state){
+    const route=MessageCore.resolveRoute(parsed,state||{}),account=route&&(route.account||route.fromAccount);
+    if(!account)return null;
+    const ts=Number(parsed.postedAt),currency=parsed.currency,expected=expectedTxType(parsed.kind);
+    return arr(state&&state.transactions).find(t=>{
+      if(!t||t.bankImportKey||!Number.isFinite(Number(t.created))||Math.abs(Number(t.created)-ts)>30*60000)return false;
+      if(t.type===expected){
+        const id=t.accountId||t.fromAccountId;
+        return id===account.id&&(t.currency||t.fromCurrency)===currency&&round2(t.amount==null?t.fromAmount:t.amount)===round2(parsed.amount);
+      }
+      if(t.type!=='transfer')return false;
+      const incoming=['deposit','salary','incoming_transfer'].includes(parsed.kind);
+      const outgoing=['outgoing_transfer','cash_withdrawal','card_repayment'].includes(parsed.kind);
+      return (incoming&&t.toAccountId===account.id&&t.toCurrency===currency&&round2(t.toAmount)===round2(parsed.amount))||
+        (outgoing&&t.fromAccountId===account.id&&t.fromCurrency===currency&&round2(t.fromAmount)===round2(parsed.amount));
+    })||null;
+  }
   function duplicateOf(parsed,state){
     const key=MessageCore.dedupeKey(parsed);
     const linked=arr(state&&state.transactions).find(t=>arr(t.bankLinkedImportEvents).some(e=>{
@@ -153,19 +170,20 @@
       if(parsed.eventId&&e.eventId===parsed.eventId)return true;
       if(key&&e.key===key)return true;
       if(parsed.transactionRef&&e.ref===parsed.transactionRef&&e.kind===parsed.kind)return true;
-      const sameBalance=num(parsed.availableBalance)!=null&&num(parsed.availableBalance)===num(e.availableBalance);
-      return e.kind===parsed.kind&&Math.abs(Number(e.postedAt)-Number(parsed.postedAt))<=300000&&sameBalance&&normalizedText(e.text)===normalizedText(parsed.raw);
+      return false; // Text/balance similarity is not an economic identity.
     }));
     if(linked)return linked;
+    const hasReference=!!parsed.transactionRef;
+    const route=hasReference?MessageCore.resolveRoute(parsed,state||{}):null,routedId=route&&((route.account||route.fromAccount||{}).id);
     const exact=arr(state&&state.transactions).find(t=>
-      (parsed.transactionRef&&t.bankTransactionRef===parsed.transactionRef&&
+      (routedId&&(t.accountId||t.fromAccountId)===routedId&&parsed.transactionRef&&t.bankTransactionRef===parsed.transactionRef&&
         (!parsed.bankId||t.bankId===parsed.bankId)&&(!parsed.providerId||t.providerId===parsed.providerId)&&
         String(t.currency||t.fromCurrency||'').toUpperCase()===String(parsed.currency||'').toUpperCase()&&
         round2(t.amount==null?t.fromAmount:t.amount)===round2(parsed.amount)&&t.type===expectedTxType(parsed.kind)) ||
       (parsed.eventId&&t.bankImportEventId===parsed.eventId) ||
       (key&&t.bankImportKey===key)
     )||null;
-    return exact||semanticDuplicateOf(parsed,state);
+    return exact;
   }
   function observedAfter(parsed){
     if(num(parsed.availableBalance)!=null)return round2(parsed.availableBalance);
@@ -252,14 +270,14 @@
     const accounts=arr(state&&state.accounts).filter(a=>a&&!a.archived&&a.institutionId===inst.id&&a.country===country&&(!parsed.currency||a.currency===parsed.currency));
     const instruments=arr(state&&state.paymentInstruments).filter(i=>i&&!i.archived);
     if(parsed.cardLast4){
-      const cards=instruments.filter(i=>String(i.last4||'')===String(parsed.cardLast4)&&
+      const cards=instruments.filter(i=>(!parsed.cardType||i.type===parsed.cardType)&&String(i.last4||'')===String(parsed.cardLast4)&&
         (i.institutionId===inst.id||accounts.some(a=>a.id===i.accountId)));
       if(cards.length===1){
         const account=arr(state&&state.accounts).find(a=>a.id===cards[0].accountId)||null;
         if(account)return {status:'routed',account,instrument:cards[0],confidence:0.99,customSourceMatch:true,institution:inst};
       }
     }
-    if(accounts.length!==1)return baseRoute;
+    if(accounts.length!==1||inst.type!=='wallet_provider'||parsed.accountRef||parsed.accountSuffix)return baseRoute;
     const account=accounts[0];
     if(['purchase','bill_payment','mobile_recharge'].includes(parsed.kind))
       return {status:'routed',account,instrument:null,confidence:0.96,customSourceMatch:true,institution:inst};
@@ -734,6 +752,8 @@
   function autoEligible(parsed,route){
     if(!parsed||!parsed.recognized)return {ok:false,reason:'unrecognized'};
     if(parsed.ignored)return {ok:false,reason:parsed.reason||'ignored'};
+    if(parsed.reviewReason)return {ok:false,reason:parsed.reviewReason};
+    if(['salary','deposit','incoming_transfer'].includes(parsed.kind)&&route&&route.account&&route.account.type==='credit')return {ok:false,reason:'asset-account-required'};
     if(parsed.feeFormula)return {ok:false,reason:'fee-review-required'};
     if(parsed.kind==='refund'&&route&&route.account){
       const a=route.account,credit=a.type==='credit',value=num(credit?parsed.availableCredit:parsed.availableBalance);
@@ -778,7 +798,11 @@
   function plan(parsed,state,options){
     const uid=idFactory(options);
     if(!parsed||!parsed.recognized)return {action:'review',reason:(parsed&&parsed.reason)||'unrecognized',confidence:0};
+    if(!parsed.bankId&&!parsed.providerId&&!findCustomInstitutionByHint(state,parsed)&&!matchLearnedRule(parsed,state))return {action:'review',reason:'source-not-identified',confidence:0};
     if(parsed.kind==='balance_observation')return planBalanceObservation(parsed,state||{},uid);
+    if(parsed.reviewReason)return {action:'review',reason:parsed.reviewReason,confidence:0};
+    const manual=manualDuplicateCandidate(parsed,state);
+    if(manual)return {action:'review',reason:'possible-manual-duplicate',existingTransactionId:manual.id,confidence:0};
     const learnedRule=matchLearnedRule(parsed,state);
     if(learnedRule&&learnedRule.kind&&learnedRule.kind!==parsed.kind){
       parsed=Object.assign({},parsed,{kind:learnedRule.kind});
@@ -813,7 +837,7 @@
     }
 
     const create={institutions:[],accounts:[],instruments:[],beneficiaries:[]};
-    const customInstitution=findCustomInstitutionByHint(draft,parsed);
+    const customInstitution=parsed.bankId||parsed.providerId?null:findCustomInstitutionByHint(draft,parsed);
     const registeredSource=!!(parsed.bankId||parsed.providerId);
     const discoveryMinConfidence=customInstitution?0.72:(registeredSource?0.86:0.95);
     if(Number(parsed.confidence||0)<discoveryMinConfidence)return {action:'review',reason:'low-confidence',confidence:Number(parsed.confidence||0)};
@@ -830,7 +854,7 @@
       const institutionBank=institutionBankId(institution);
       const institutionProvider=institutionProviderId(institution);
       const equivalentExisting=draft.paymentInstruments.filter(inst=>{
-        if(!inst||inst.archived||String(inst.last4||'')!==String(parsed.cardLast4)||inst.type!==parsed.cardType)return false;
+        if(!inst||inst.archived||String(inst.last4||'')!==String(parsed.cardLast4))return false;
         const linked=draft.accounts.find(a=>a&&a.id===inst.accountId)||null;
         if(linked&&linked.country!==countryForParsed(parsed))return false;
         const sourceInst=draft.institutions.find(i=>i&&i.id===(inst.institutionId||(linked&&linked.institutionId)))||null;
@@ -863,7 +887,7 @@
         const expectedType=parsed.cardType==='wallet_card'?'ewallet':'bank';
         let acc=initialRoute&&initialRoute.account&&initialRoute.account.type===expectedType?draft.accounts.find(a=>a.id===initialRoute.account.id):null;
         const sameSourceAccounts=draft.accounts.filter(a=>a&&!a.archived&&a.type===expectedType&&a.institutionId===institution.id);
-        if(!acc&&sameSourceAccounts.length===1)acc=sameSourceAccounts[0];
+        if(!acc&&sameSourceAccounts.length===1)return {action:'review',reason:'card-account-link-required',confidence:0};
         if(!acc&&sameSourceAccounts.length>1){
           return {action:'review',reason:'ambiguous-existing-accounts',confidence:0,create};
         }
@@ -882,6 +906,7 @@
       const expectedType=(parsed.providerId||institution.type==='wallet_provider')?'ewallet':'bank';
       const sameSourceAccounts=draft.accounts.filter(a=>a&&!a.archived&&a.type===expectedType&&a.institutionId===institution.id&&a.country===countryForParsed(parsed)&&(!parsed.currency||a.currency===parsed.currency));
       if(sameSourceAccounts.length===1){
+        if(!parsed.providerId||parsed.accountRef||parsed.accountSuffix)return {action:'review',reason:'account-identity-required',confidence:0};
         route={status:'routed',account:sameSourceAccounts[0],instrument:null,confidence:0.98,sameSourceUnique:true};
       }else if(sameSourceAccounts.length>1){
         return {action:'review',reason:'ambiguous-existing-accounts',confidence:0,create};
@@ -959,7 +984,7 @@
     const decisions=state.settings.bankEventDecisions||(state.settings.bankEventDecisions={});
     // Never evict decisions: an eviction could resurrect an old transaction.
     if(!Object.prototype.hasOwnProperty.call(decisions,id)&&Object.keys(decisions).length>=EVENT_DECISION_LIMIT)throw Error('event-decision-capacity');
-    decisions[id]={action,at:Number(at),transactionId:transactionId||null};
+    decisions[id]={action,at:Number(at),transactionId:transactionId||null,parserVersion:'9.2.4-financial-contract',decisionSource:'deterministic-contract'};
     return true;
   }
   function compatibleScanCheckpoint(previous,floor){

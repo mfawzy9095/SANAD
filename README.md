@@ -1,7 +1,9 @@
-# SANAD 9.2.1 — Local release candidate
+# SANAD 9.2.4 — Financial repair QA batch
 
 Local Android personal finance app with accounts, cards, income/expenses,
 transfers, receipts, reminders, biometric/device lock and bank-message import.
+
+Financial stability phase remains OPEN. See [financial contract](docs/financial-closure/CONTRACT.md) and [defect register](docs/financial-closure/DEFECTS.md). CI emulator uses a distinct `.forensicqa.ci` debug-signed harness; delivered `.forensicqa.stable` must use the existing private QA certificate.
 
 ## Current delivery
 - Development: `feature-v9.2-ui-features` only.

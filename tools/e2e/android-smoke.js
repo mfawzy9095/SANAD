@@ -4,7 +4,7 @@
 
 const {execFileSync}=require('child_process');
 const fs=require('fs'),path=require('path'),assert=require('assert/strict');
-const pkg='com.sanad.v9test.forensicqa.stable',out=process.env.SANAD_QA_OUTPUT||'/tmp/sanad-android-qa';fs.mkdirSync(out,{recursive:true});
+const pkg=process.env.SANAD_QA_PACKAGE||'com.sanad.v9test.forensicqa.stable',out=process.env.SANAD_QA_OUTPUT||'/tmp/sanad-android-qa';fs.mkdirSync(out,{recursive:true});
 const results=[],errors=[];let browser,page;
 const adb=(...args)=>execFileSync('adb',args,{encoding:'utf8'}).trim();
 const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);};
@@ -38,6 +38,12 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  // Wait for Android's SMS provider to persist both messages before requesting a page.
  for(let n=0;n<30;n++){const rows=adb('shell','content','query','--uri','content://sms/inbox','--projection','_id:body');if(rows.includes('9,000.00')&&rows.includes('100.00'))break;await new Promise(r=>setTimeout(r,1000));}
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
+ assert.equal(await page.evaluate(()=>S.transactions.length),0);
+ assert(await page.evaluate(()=>SanadBankInbox.items.length>=2));
+ pass('Unknown numeric SMS sender cannot impersonate bank body');
+ // The emulator provider is controlled test data: explicitly set sender metadata.
+ adb('shell','content','update','--uri','content://sms','--bind','address:s:EmiratesNBD','--where',"address='15551234567'");
+ await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
  const result=await page.evaluate(()=>({last:SanadBankInbox.lastRecentImport,transactions:S.transactions,accounts:S.accounts}));
  assert.equal(result.last.status,'complete');assert.equal(result.transactions.length,2);
  const bank=result.accounts.find(a=>a.bankRefs?.includes('012XXX50XXX01'));assert(bank);
@@ -52,6 +58,7 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  const beforeFresh=await page.evaluate(()=>S.transactions.length);
  adb('emu','sms','send','15551234567','لقد تم ايداع AED 10.00 في رقم حسابك 012XXX50XXX01 OBP TR REF QANATIVEFRESH01. الرصيد المتوفر هو AED 9,086.66');
  for(let n=0;n<30;n++){if(adb('shell','content','query','--uri','content://sms/inbox','--projection','_id:body').includes('QANATIVEFRESH01'))break;await new Promise(r=>setTimeout(r,1000));}
+ adb('shell','content','update','--uri','content://sms','--bind','address:s:EmiratesNBD','--where',"address='15551234567'");
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeFresh+1);
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeFresh+1);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bank.id),9086.66);
