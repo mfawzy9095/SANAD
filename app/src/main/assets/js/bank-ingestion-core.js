@@ -233,6 +233,7 @@
   function referenceCompatible(parsed,e,accountId){
     if(!sourceMatches(parsed,e)||!accountId||e.accountId!==accountId||e.kind!==parsed.kind)return false;
     if(e.currency!==parsed.currency||round2(e.amount)!==round2(parsed.amount))return false;
+    if(parsed.transactionDate&&e.transactionDate!==parsed.transactionDate)return false;
     const a=Number(parsed.postedAt),b=Number(e.postedAt);
     return Number.isFinite(a)&&a>0&&Number.isFinite(b)&&b>0&&Math.abs(a-b)<=REFERENCE_WINDOW_MS;
   }
@@ -242,11 +243,12 @@
       eventId:t.bankImportEventId||null,key:t.bankImportKey||null,ref:t.bankTransactionRef||null,
       kind:(t.bankImportEvidence||{}).kind||String(t.bankImportKey||'').split('|')[2]||null,
       currency:t.currency||t.fromCurrency,amount:t.amount==null?t.fromAmount:t.amount,
-      accountId:t.accountId||t.fromAccountId,postedAt:t.smsReceivedAt||t.created
+      accountId:t.accountId||t.fromAccountId,postedAt:t.smsReceivedAt||t.created,transactionDate:t.date||null
     };
   }
   function evidenceRows(t){
     return [primaryEvidence(t)].concat(arr(t.bankLinkedImportEvents).map(e=>Object.assign({},e,{
+      transactionDate:e.transactionDate||t.date||null,
       accountId:e.accountId||(t.type==='transfer'?(['deposit','incoming_transfer'].includes(e.kind)?t.toAccountId:t.fromAccountId):(t.accountId||t.fromAccountId))
     })));
   }

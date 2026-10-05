@@ -39,3 +39,14 @@ console.log('Reference semantics, scope and corrected-evidence replay: PASS');
  delete s.transactions[0].smsReceivedAt;
  assert.strictEqual(I.plan({...p,eventId:'other-evidence'},s).action,'review','a timeless reference cannot prove duplicate identity');
 }
+
+{
+ const {p,s}=fixture();
+ p.postedAt=Date.UTC(2026,10,1);p.transactionDate='2026-09-01';
+ const built=P.buildTransaction(p,P.resolveRoute(p,s),{uid:()=> 'delayed-existing'});
+ s.transactions=[built.transaction];
+ const later={...p,eventId:'another-delayed-month',postedAt:p.postedAt+6000,transactionDate:'2026-10-01'};
+ assert.strictEqual(I.duplicateOf(later,s),null,'close arrival times cannot override different operation dates');
+ assert.strictEqual(I.plan(later,s).action,'review');
+ assert.strictEqual(I.plan({...p,eventId:'other-delayed-channel',postedAt:p.postedAt+6000},s).action,'duplicate');
+}
