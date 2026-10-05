@@ -6,13 +6,14 @@ const {validateReferences}=require('./repair-full-backup');
 const clone=v=>JSON.parse(JSON.stringify(v)),sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 function dryRun(bytes){
  const b=JSON.parse(bytes);Backup.validateFullEnvelope(b,State.stateFingerprint);validateReferences(b.finance);
- const proposals=[];
+ const proposals=[],unresolved=[];
  for(const t of b.finance.transactions){
   const a=b.finance.accounts.find(a=>a.id===t.accountId),kind=t.bankImportEvidence&&t.bankImportEvidence.kind;
   if(t.type!=='income'||!t.bankImportKey||!t.bankImportEventId||!a||!['credit','debt'].includes(a.type)||!['salary','deposit','incoming_transfer'].includes(kind))continue;
+  if(t.userFinancialOverride||t.financialEvent==='purchase-refund'){unresolved.push({id:t.id,reason:'user-correction-preserved'});continue;}
   proposals.push({id:t.id,action:'quarantine-invalid-asset-income',confidence:'confirmed',reason:'Imported asset income was routed onto a liability. Financial destination remains unresolved; no bank account is chosen.',before:clone(t),accountId:a.id,eventId:t.bankImportEventId,reportedIncomeChange:{currency:t.currency,amount:-Number(t.walletAmount==null?t.amount:t.walletAmount)}});
  }
- return {sourceSha256:sha(bytes),proposals,copyOnly:true};
+ return {sourceSha256:sha(bytes),proposals,unresolved,copyOnly:true};
 }
 function apply(bytes,plan){
  assert.equal(sha(bytes),plan.sourceSha256,'source-changed');assert(plan.proposals.length,'no-confirmed-repairs');
@@ -31,7 +32,7 @@ function apply(bytes,plan){
   const holds=b.finance.settings.bankReviewHolds||(b.finance.settings.bankReviewHolds={});
   assert(typeof holds==='object'&&!Array.isArray(holds),'invalid-review-holds');
   assert(Object.prototype.hasOwnProperty.call(holds,p.eventId)||Object.keys(holds).length<50000,'review-hold-capacity');
-  holds[p.eventId]={reason:'repair-destination-unconfirmed',at:Date.now(),parserVersion:'9.2.7-financial-contract',decisionSource:'deterministic-contract'};
+  holds[p.eventId]={reason:'repair-destination-unconfirmed',quarantinedTransactionId:p.id,at:Date.now(),parserVersion:'9.2.7-financial-contract',decisionSource:'deterministic-contract',evidence:{bankId:t.bankId||null,providerId:t.providerId||null,kind:t.bankImportEvidence.kind,currency:t.currency,amount:Number(t.amount),postedAt:Number(t.smsReceivedAt||t.created),date:t.date||null,ref:t.bankTransactionRef||null}};
   const native={id:p.eventId,postedAt:Number(t.smsReceivedAt||t.created),text:t.bankImportEvidence.text,packageName:'repair:'+String(t.bankId||t.providerId||'unknown'),title:t.bankImportEvidence.sourceHint||'',repairReason:p.reason,repairTransactionId:p.id};
   if(!audit.smsReviewEvents.some(e=>e.id===native.id))audit.smsReviewEvents.push(native);
   // Remove the misrouted bank-balance observation only if it is proven to come from this evidence.

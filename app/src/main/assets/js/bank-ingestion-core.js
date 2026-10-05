@@ -887,7 +887,7 @@
   }
   function plan(parsed,state,options){
     const uid=idFactory(options);
-    const hold=parsed&&reviewHold(state,parsed.eventId);
+    const hold=parsed&&matchingReviewHold(state,parsed);
     if(hold)return {action:'review',reason:hold.reason,confidence:0};
     if(!parsed||!parsed.recognized)return {action:'review',reason:(parsed&&parsed.reason)||'unrecognized',confidence:0};
     if(!parsed.bankId&&!parsed.providerId&&!findCustomInstitutionByHint(state,parsed)&&!matchLearnedRule(parsed,state))return {action:'review',reason:'source-not-identified',confidence:0};
@@ -1079,6 +1079,19 @@
     const holds=state&&state.settings&&state.settings.bankReviewHolds;
     return holds&&Object.prototype.hasOwnProperty.call(holds,String(id))?holds[String(id)]:null;
   }
+  function matchingReviewHold(state,parsed){
+    const exact=reviewHold(state,parsed&&parsed.eventId);if(exact)return exact;
+    if(!parsed||(!parsed.bankId&&!parsed.providerId))return null;
+    for(const [id,hold] of Object.entries((state&&state.settings&&state.settings.bankReviewHolds)||{})){
+      const e=hold.evidence;if(!e)continue;
+      if((e.bankId||null)!==(parsed.bankId||null)||(e.providerId||null)!==(parsed.providerId||null)||e.kind!==parsed.kind||e.currency!==parsed.currency||round2(e.amount)!==round2(parsed.amount))continue;
+      const close=Number(e.postedAt)>0&&Number(parsed.postedAt)>0&&Math.abs(Number(e.postedAt)-Number(parsed.postedAt))<=30*60000;
+      const reference=!!(e.ref&&parsed.transactionRef&&e.ref===parsed.transactionRef);
+      const date=!!(e.date&&parsed.transactionDate&&e.date===parsed.transactionDate);
+      if(close||reference||date)return Object.assign({},hold,{reason:'repair-evidence-match-review',heldEventId:id});
+    }
+    return null;
+  }
   function auditWithDurableDecisions(audit,state){
     const old=audit||{},rows=new Map(arr(old.rows).filter(r=>r&&r.id).map(r=>[String(r.id),clone(r)]));
     for(const [id,d] of Object.entries((state&&state.settings&&state.settings.bankEventDecisions)||{})){
@@ -1153,7 +1166,7 @@
   }
   return Object.freeze({
     manualImportCandidates,manualDuplicateCandidates,linkManualConfirmation,validateManualImportChanges,preserveImportAudit,auditWithDurableDecisions,
-    recentScanStart,compatibleScanCheckpoint,eventDecision,reviewHold,rememberEventDecision,EVENT_DECISION_LIMIT,transferCounterparts,pairOwnTransfer,
+    recentScanStart,compatibleScanCheckpoint,eventDecision,reviewHold,matchingReviewHold,rememberEventDecision,EVENT_DECISION_LIMIT,transferCounterparts,pairOwnTransfer,
     autoEligible,duplicateOf,conflictingReferenceOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
   });
 });

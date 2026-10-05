@@ -11,8 +11,12 @@ assert.equal(repaired.features.bankImportAudit.smsReviewEvents[0].id,'synthetic-
 assert.equal(repaired.finance.settings.bankEventDecisions['synthetic-event'],undefined);assert.deepEqual(repaired.finance.settings.bankEventDecisions.untouched,{action:'dismissed'});
 const I=require('../../main/assets/js/bank-ingestion-core');
 assert.equal(repaired.finance.settings.bankReviewHolds?.['synthetic-event']?.reason,'repair-destination-unconfirmed');
+assert.equal(repaired.finance.settings.bankReviewHolds['synthetic-event'].quarantinedTransactionId,'bad');
 const parsed={recognized:true,eventId:'synthetic-event',bankId:'emirates-nbd',providerId:null,kind:'salary',direction:'credit',amount:7200,currency:'AED',country:'UAE',accountRef:'SYNTHETIC0001',postedAt:1000,confidence:0.99,availableBalance:7350};
 assert.equal(I.plan(parsed,repaired.finance).reason,'repair-destination-unconfirmed','a rescan must retain the repair review');
+assert.equal(I.plan({...parsed,eventId:'sms-other-channel',postedAt:6000},repaired.finance).reason,'repair-evidence-match-review','another capture channel is a candidate, not an automatic repost');
+assert.notEqual(I.plan({...parsed,eventId:'real-different-principal',amount:7250},repaired.finance).reason,'repair-evidence-match-review');
+assert.notEqual(I.plan({...parsed,eventId:'real-next-month',postedAt:31*86400000},repaired.finance).reason,'repair-evidence-match-review');
 const audit=I.auditWithDurableDecisions({rows:[{id:'synthetic-event',action:'saved'}]},repaired.finance);
 assert.equal(audit.rows.find(r=>r.id==='synthetic-event').action,'review','old audit cannot claim the removed posting remains saved');
 const restored=JSON.parse(JSON.stringify(repaired.finance));assert.equal(I.plan(parsed,restored).reason,'repair-destination-unconfirmed');
@@ -26,4 +30,5 @@ assert.throws(()=>R.rollback(Buffer.concat([result.repaired,Buffer.from(' ')]),r
 assert.equal(R.dryRun(result.repaired).proposals.length,0);
 const invalidHolds=JSON.parse(bytes);invalidHolds.finance.settings.bankReviewHolds=[];invalidHolds.finance.integrity.fingerprint=S.stateFingerprint(invalidHolds.finance);
 const invalidBytes=Buffer.from(JSON.stringify(invalidHolds));assert.throws(()=>R.apply(invalidBytes,R.dryRun(invalidBytes)),/invalid-review-holds/);
+const userCorrected=JSON.parse(bytes);userCorrected.finance.transactions[0].userFinancialOverride={source:'user-confirmation'};userCorrected.finance.integrity.fingerprint=S.stateFingerprint(userCorrected.finance);const preserved=R.dryRun(Buffer.from(JSON.stringify(userCorrected)));assert.equal(preserved.proposals.length,0);assert.equal(preserved.unresolved[0].reason,'user-correction-preserved');
 console.log('PASS copy-only liability quarantine, review evidence preservation, immutable source and exact rollback');

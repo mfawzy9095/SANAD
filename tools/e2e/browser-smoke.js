@@ -230,7 +230,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  record('Actual foreign-currency expense uses exact declared FX and target minor-unit rounding');
  const heldCount=await page.evaluate(()=>S.transactions.length);
  const heldRow={id:'qa-held-repair',title:'Emirates NBD',packageName:'sms:ENBD',postedAt:Date.now()-500,text:'تم ايداع الراتب AED 77.00 في حسابك .012XXX50XXX01 الرصيد المتوفر هو AED 9,001.66'};
- await page.evaluate(async row=>{const result=await commitCriticalMutation(()=>{S.settings.bankReviewHolds={...(S.settings.bankReviewHolds||{}),[row.id]:{reason:'repair-destination-unconfirmed',at:Date.now(),parserVersion:'9.2.7-financial-contract',decisionSource:'deterministic-contract'}};return true;});if(!result.ok)throw Error('review hold fixture rejected');window.__qaRows=[row];},heldRow);
+ await page.evaluate(async row=>{const result=await commitCriticalMutation(()=>{S.settings.bankReviewHolds={...(S.settings.bankReviewHolds||{}),[row.id]:{reason:'repair-destination-unconfirmed',quarantinedTransactionId:'qa-original-quarantined-id',at:Date.now(),parserVersion:'9.2.7-financial-contract',decisionSource:'deterministic-contract'}};return true;});if(!result.ok)throw Error('review hold fixture rejected');window.__qaRows=[row];},heldRow);
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),heldCount);
  await page.reload();await page.waitForFunction(()=>S.ready&&SanadV9.initialized);
  await page.evaluate(row=>{window.__qaRows=[row];},heldRow);await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
@@ -238,6 +238,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.evaluate(()=>SanadBankInbox.openCorrection('qa-held-repair'));await page.locator('#bankFixSource').selectOption('account:'+bankId);await page.locator('[data-sanad-act="bank-fix-save"]').click();
  await page.waitForFunction(n=>S.transactions.length===n+1&&!_criticalMutationInFlight,heldCount);
  assert.equal(await page.evaluate(()=>S.settings.bankReviewHolds['qa-held-repair']),undefined);
+ assert.equal(await page.evaluate(()=>S.transactions.find(t=>t.bankImportEventId==='qa-held-repair').id),'qa-original-quarantined-id');
  await page.evaluate(()=>closeSheet());await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),heldCount+1);
  record('Repair quarantine survives reload/rescan; explicit correction posts once and clears the hold durably');
  const perfContext=await browser.newContext(),perfPage=await perfContext.newPage();perfPage.on('pageerror',e=>errors.push(e.message));

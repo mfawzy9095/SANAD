@@ -8894,6 +8894,7 @@ const SanadBankInbox = {
       'refund-instrument-required':'استرداد يحتاج ربط البطاقة المذكورة بالرسالة',
       'refund-balance-review':'رسالة استرداد برصيد أقل من السابق — تحتاج مراجعة التسوية',
       'balance-source-required':'رصيد مؤكد يحتاج تحديد المحفظة',
+      'repair-evidence-match-review':'رسالة تشابه عملية معزولة — قارن الرسالتين قبل التسجيل',
       'repair-destination-unconfirmed':'عملية معزولة في نسخة الإصلاح — حدد الحساب وأكد التصحيح',
       'possible-duplicate':'عملية مشابهة تحتاج مقارنة مرجع الرسالة والرصيد قبل الحفظ',
       'low-confidence':'يحتاج تأكيد نوع العملية',
@@ -8978,7 +8979,7 @@ const SanadBankInbox = {
     if(!plan||!['auto-save','observe'].includes(plan.action))return {ok:false,reason:(plan&&plan.reason)||'not-auto-save'};
     let reconciliation={warning:false};
     const result=await commitCriticalMutation(async()=>{
-      if(BankIngestionCore.reviewHold(S,parsed.eventId))return false;
+      if(BankIngestionCore.matchingReviewHold(S,parsed))return false;
       if(BankIngestionCore.eventDecision(S,String(parsed.eventId)))return true;
       const existing=BankIngestionCore.duplicateOf(parsed,S);if(existing){BankIngestionCore.rememberEventDecision(S,String(parsed.eventId),'duplicate',Date.now(),existing.id);return true;}
       const applied=BankIngestionCore.applyPlan(S,plan);
@@ -9371,7 +9372,7 @@ const SanadBankInbox = {
   },
   canManualApprove(item){
     if(!item||!item.parsed||!item.parsed.recognized)return false;
-    if(item.plan&&['possible-own-transfer','possible-manual-duplicate','possible-duplicate','incoming-origin-unconfirmed','repair-destination-unconfirmed'].includes(item.plan.reason))return false;
+    if(item.plan&&['possible-own-transfer','possible-manual-duplicate','possible-duplicate','incoming-origin-unconfirmed','repair-destination-unconfirmed','repair-evidence-match-review'].includes(item.plan.reason))return false;
     if(item.plan&&item.plan.action==='auto-save')return true;
     const r=BankMessageCore.resolveRoute(item.parsed,S);
     if(!r||r.status!=='routed')return false;
@@ -9514,7 +9515,13 @@ const SanadBankInbox = {
       built.transaction.bankLinkedImportEvents=[{key:BankMessageCore.dedupeKey(original),eventId:original.eventId||null,bankId:original.bankId||null,providerId:original.providerId||null,currency:original.currency,amount:original.amount,ref:original.transactionRef||null,kind:original.kind,postedAt:Number(original.postedAt),text:original.raw||'',availableBalance:original.availableBalance}];
     }
     if(!built.ok){toast(built.reason==='fee-confirmation-required'?'أكد الرسوم الإضافية أولًا؛ صفر فقط إذا كانت بلا رسوم':built.reason==='invalid-confirmed-fee'?'أدخل رسومًا صحيحة غير سالبة':built.reason==='fee-direction-review-required'?'رسوم الاستلام تحتاج تأكيد صافي المبلغ من المصدر':'الربط غير صالح لهذه العملية');return;}
-    if(BankIngestionCore.duplicateOf(corrected,S)){await this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
+    const repairHold=BankIngestionCore.reviewHold(S,String(item.native.id));
+    if(repairHold&&repairHold.quarantinedTransactionId&&!built.replacesTransactionId){
+      if(S.transactions.some(t=>t.id===repairHold.quarantinedTransactionId)){toast('هوية العملية المعزولة موجودة بالفعل؛ راجع الربط');return;}
+      built.transaction.id=repairHold.quarantinedTransactionId;
+      built.transaction.bankRepairAudit={source:'user-confirmation',reason:repairHold.reason,at:Date.now(),quarantinedTransactionId:repairHold.quarantinedTransactionId};
+    }
+    if(BankIngestionCore.duplicateOf(corrected,S)){await this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل؛ لا تُضف حركة أخرى، راجع الرسالة المعزولة أو تجاهلها إن حُسمت');return;}
     const result=await commitCriticalMutation(async()=>{
       if(built.replacesTransactionId){
         const index=S.transactions.findIndex(t=>t.id===built.replacesTransactionId);
@@ -9574,7 +9581,7 @@ const SanadBankInbox = {
     const parsed=item.parsed;
     let plan=BankIngestionCore.plan(parsed,S,{uid});
     if(plan.action==='duplicate'){await this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
-    if(['possible-own-transfer','possible-manual-duplicate','possible-duplicate','incoming-origin-unconfirmed','repair-destination-unconfirmed'].includes(plan.reason)){this.openCorrection(id);return;}
+    if(['possible-own-transfer','possible-manual-duplicate','possible-duplicate','incoming-origin-unconfirmed','repair-destination-unconfirmed','repair-evidence-match-review'].includes(plan.reason)){this.openCorrection(id);return;}
     if(['auto-save','observe'].includes(plan.action)){
       const saved=await this.commitPlan(parsed,plan);
       if(!saved.ok){render();toast('تعذر إضافة العملية — لم يتم تغيير البيانات');return;}

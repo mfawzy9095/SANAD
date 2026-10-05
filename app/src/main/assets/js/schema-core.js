@@ -605,6 +605,9 @@
         if(typeof holds!=='object'||Array.isArray(holds)||Object.keys(holds).length>50000)push('حالات مراجعة الإصلاح غير صالحة');
         else for(const [id,row] of Object.entries(holds)){
           if(!id||id.length>240||['__proto__','constructor','prototype'].includes(id)||!row||row.reason!=='repair-destination-unconfirmed'||!Number.isSafeInteger(row.at)||row.at<=0||row.decisionSource!=='deterministic-contract'||typeof row.parserVersion!=='string'){push('حالة مراجعة إصلاح غير صالحة');break;}
+          if(row.quarantinedTransactionId!=null&&(typeof row.quarantinedTransactionId!=='string'||state.transactions.some(t=>t.id===row.quarantinedTransactionId))){push('هوية عملية معزولة غير صالحة');break;}
+          const e=row.evidence;
+          if(e!=null&&(typeof e!=='object'||Array.isArray(e)||!['salary','deposit','incoming_transfer'].includes(e.kind)||typeof e.currency!=='string'||!isFiniteNumberLike(e.amount)||Number(e.amount)<=0||!Number.isSafeInteger(e.postedAt)||e.postedAt<=0||(e.date!=null&&!isValidIsoDate(e.date))||(e.ref!=null&&typeof e.ref!=='string')||(e.bankId!=null&&typeof e.bankId!=='string')||(e.providerId!=null&&typeof e.providerId!=='string'))){push('دليل عملية معزولة غير صالح');break;}
         }
       }
     }
