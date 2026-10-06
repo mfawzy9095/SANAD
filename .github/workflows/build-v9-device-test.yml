@@ -646,7 +646,7 @@ jobs:
           grep -q "learnFromApproval" "app/src/main/assets/js/bank-ingestion-core.js"
           grep -q "await this.yieldUi(24)" "app/src/main/assets/index.html"
           grep -q "excludeIds:this._historicalReviewIds" "app/src/main/assets/index.html"
-          grep -q "cancelHistoricalImport('navigation')" "app/src/main/assets/index.html"
+          ! grep -q "cancelHistoricalImport('navigation')" "app/src/main/assets/index.html"
           ! grep -q 'android.service.notification.disabled_filter_types' "app/src/main/AndroidManifest.xml"
           grep -q "bankInboxOk = !!AndroidBridge.clearBankNotifications()" "app/src/main/assets/index.html"
           node --check app/src/main/assets/js/report-core.js
@@ -661,6 +661,10 @@ jobs:
           node app/src/test/js/bank-ingestion-sequence.test.js
           node app/src/test/js/bank-message-corpus.test.js
           node app/src/test/js/backup-repair-tool.test.js
+          node app/src/test/js/payment-context-regression.test.js
+          node app/src/test/js/fx-card-identity.test.js
+          node app/src/test/js/account-identity-binding.test.js
+          node app/src/test/js/import-resume.test.js
           node app/src/test/js/bank-recent-import.test.js
           node app/src/test/js/bank-exact-range.test.js
           node app/src/test/js/bank-durable-import.test.js
@@ -823,6 +827,7 @@ jobs:
           done
           if [ "${{ steps.qa-key.outputs.available }}" = "true" ]; then
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee qa-signature.txt
+            grep -qi "certificate SHA-256 digest: d3cf8c03964cee0efd6e474b5ae6f983e87c528b1e2cf6560e25de1c9f5bb377" qa-signature.txt
           else
             echo "UNSIGNED: must be signed locally using the existing private QA key before delivery" > qa-signature.txt
           fi

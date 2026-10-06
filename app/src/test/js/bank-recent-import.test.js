@@ -26,7 +26,7 @@ async function scenario(status,mode='recent',permission=true,extra={}){
  assert.strictEqual(complete.writes.bankImportLastRecent.scannedThrough,now);
  assert.strictEqual(complete.writes.bankImportLastRecent.total.added,1);
  assert(complete.renders>=2,'home shows running and completed state');
- for(const failure of ['cancelled','review-capacity','query-failed','permission-restricted','processing-failed','cancel-last','navigate-last']){
+ for(const failure of ['cancelled','review-capacity','query-failed','permission-restricted','processing-failed','cancel-last']){
   const x=await scenario(failure);
   assert.strictEqual(x.writes.bankImportLastRecent.scannedThrough,now-3*day,'failed scan cannot skip unprocessed messages');
   assert.strictEqual(x.inbox.historicalImporting,false);
@@ -36,6 +36,8 @@ async function scenario(status,mode='recent',permission=true,extra={}){
   assert.strictEqual(x.inbox.lastRecentImport.scannedThrough,now-3*day);
   assert.strictEqual(x.inbox.lastHistoricalImport.status,'checkpoint-failed');
  }
+ const navigated=await scenario('navigate-last');
+ assert.strictEqual(navigated.writes.bankImportLastRecent.scannedThrough,now,'navigation must not cancel scan');
  const historical=await scenario('complete','historical');
  assert.strictEqual(historical.writes.bankImportLastRecent,undefined,'historical scan does not change recent coverage');
  const pending=await scenario('complete','recent',false);
@@ -69,7 +71,8 @@ async function scenario(status,mode='recent',permission=true,extra={}){
  const p={kind:'purchase',country:'EGY',currency:'MAD',amount:100,cardLast4:'9721'};
  assert(ui.correctionSourceOptions(p,'').includes('instrument:card'));
  assert(ui.correctionSourceOptions(p,'').includes('(EGP)'));
- assert.strictEqual(I.routeFromManualChoice(p,state,{sourceType:'instrument',sourceId:'card'}).status,'needs-review');
+ assert.strictEqual(I.routeFromManualChoice(p,state,{sourceType:'instrument',sourceId:'card'}).status,'routed');
+ assert.strictEqual(require('../../main/assets/js/bank-message-core').buildTransaction(p,I.routeFromManualChoice(p,state,{sourceType:'instrument',sourceId:'card'})).ok,false);
  assert.strictEqual(I.routeFromManualChoice({...p,currency:'EGP',amount:550},state,{sourceType:'instrument',sourceId:'card'}).status,'routed');
 }
 

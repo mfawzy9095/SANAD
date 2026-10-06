@@ -1,0 +1,18 @@
+'use strict';
+const assert=require('assert'),I=require('../../main/assets/js/bank-ingestion-core'),M=require('../../main/assets/js/bank-message-core');
+const now=1791288000000;
+const s={institutions:[{id:'b',bankRegistryId:'emirates-nbd',country:'UAE'}],accounts:[{id:'a',type:'bank',country:'UAE',currency:'AED',institutionId:'b'},{id:'credit',type:'credit',country:'UAE',currency:'AED',institutionId:'b'}],paymentInstruments:[],transactions:[]};
+const p={recognized:true,eventId:'salary-1',bankId:'emirates-nbd',kind:'salary',amount:7000,currency:'AED',country:'UAE',accountRef:'XX5678',accountSuffix:'5678',postedAt:now-1000,confidence:0.99};
+assert.equal(M.resolveRoute(p,s).status,'needs-review');
+assert.equal(I.confirmAccountIdentity(s,p,'credit',{confirmed:true,now}).ok,false);
+assert.equal(I.confirmAccountIdentity(s,p,'a',{confirmed:false,now}).ok,false);
+assert.equal(I.confirmAccountIdentity(s,p,'a',{confirmed:true,now}).ok,true);
+const restored=JSON.parse(JSON.stringify(s));
+assert.equal(M.resolveRoute({...p,eventId:'salary-2',postedAt:now+86400000},restored).account.id,'a');
+assert.equal(I.plan({...p,eventId:'old-salary'},restored).reason,'account-identity-history-review');
+assert.equal(I.plan({...p,kind:'deposit',eventId:'deposit',postedAt:now+86400000},restored).reason,'incoming-origin-unconfirmed');
+restored.accounts.push({id:'other',type:'bank',currency:'AED',country:'UAE',institutionId:'b'});
+assert.equal(I.confirmAccountIdentity(restored,p,'other',{confirmed:true,now}).ok,false);
+restored.accounts[0].bankIdentityBindings[0].enabled=false;
+assert.equal(M.resolveRoute({...p,postedAt:now+86400000},restored).status,'needs-review');
+console.log('Scoped identity: future salary, historical review, generic deposits, conflict and revocation: PASS');

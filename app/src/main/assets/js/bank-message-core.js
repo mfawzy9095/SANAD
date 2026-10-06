@@ -76,7 +76,7 @@
   function ignoredReason(raw){
     const x=cleanText(raw).toLowerCase();
     if(!x)return 'empty';
-    if(/\bfailed\b|\bunsuccessful\b|\bnot\s+(?:credited|completed|processed)\b|no\s+funds\s+(?:were\s+)?credited|لم\s+يتم|فشل|غير\s+ناجح|ملغا|الغاء|cancelled|canceled|\bpending\b/.test(x))return 'non-completed-status';
+    if(/\bfailed\b|\bunsuccessful\b|\bnot\s+(?:credited|completed|processed|successful|paid)\b|no\s+funds\s+(?:were\s+)?credited|لم\s+يتم|فشل|غير\s+ناجح|ملغا|الغاء|cancelled|canceled|\bpending\b/.test(x))return 'non-completed-status';
     if(/دفعة بطاقة تتطلب موافقتك|requires your approval|pending approval|authorization required/.test(x))return 'authorization-pending';
     if(/\botp\b|one time password|verification code|رمز التحقق|كلمة مرور لمرة/.test(x))return 'security-code';
     if(/تم استبدال.+nol payment|rewards? redemption|تم استبدال.+بنجاح/.test(x))return 'rewards-redemption';
@@ -260,6 +260,9 @@
     let currency=null,value=null;
     if(m){currency=m[1].toUpperCase();value=amount(m[2]);}
     else{m=x.match(/([\d,]+(?:\.\d+)?)\s*(AED|USD|EUR|GBP|SAR|EGP|MAD)/i);if(m){value=amount(m[1]);currency=m[2].toUpperCase();}}
+    // Explicit paid principal wins over an earlier balance or amount-due observation.
+    const paid=x.match(/(?:total\s+paid|amount\s+paid)\s*:?\s*(?:(AED|USD|EUR|GBP|SAR|EGP|MAD)\s*)?([\d,]+(?:\.\d+)?)\s*(AED|USD|EUR|GBP|SAR|EGP|MAD)?/i);
+    if(paid&&(paid[1]||paid[3])){currency=(paid[1]||paid[3]).toUpperCase();value=amount(paid[2]);}
     if(!value||!currency)return null;
     const masked=x.match(/\b(\d{4})\s*(?:x{4}|\*{4})\s*(?:x{4}|\*{4})\s*(\d{4})\b/i);
     const startMatch=x.match(/(?:card|بطاق\S*)[^\n]{0,70}?(?:starting\s+with|starts\s+with|beginning\s+with|تبدأ\s+ب|يبدا\s+ب|يبدأ\s+ب)\s*[:#-]?\s*(\d{4,8})/i);
@@ -301,6 +304,11 @@
     const dateMatch=x.match(/(?:date\s*[:.-]?\s*|\bon\s+)?(\d{1,2}\/\d{1,2}\/\d{4})\b/i);
     if(dateMatch)transactionDate=isoDateFromDmy(dateMatch[1]);
     const base={bankId,providerId,amount:value,currency,availableBalanceCurrency:(balMatch&&balMatch[1])||currency,availableCreditCurrency:(creditMatch&&creditMatch[1])||currency,cardFirst4,cardLast4:card,cardNetwork,cardType,accountRef:acc?normalizeRef(acc):null,merchant,availableBalance,availableCredit,beneficiaryName,transactionRef,transactionDate};
+    const paidBill=/bill\s+payment\s+(?:AED|USD|EUR|GBP|SAR|EGP|MAD)|paid\s+bill|bill\s+(?:payment\s+)?(?:is\s+|was\s+)?(?:paid|successful)|payment[\s\S]{0,160}?\bis\s+successful|تم\s+(?:سداد|دفع)\s+(?:الفاتور|فاتور)/i.test(x);
+    if(/refund\s+request|request\s+(?:for\s+)?(?:a\s+)?refund|طلب\s+استرداد/i.test(x))return result(Object.assign(base,{kind:'refund_request',executionStatus:'requested',reviewReason:'refund-not-completed',confidence:0.90}),input,raw);
+    if(/(?:تعبئة|شحن)[\s\S]{0,80}?(?:محفظ|نول)|(?:wallet|nol)[\s-]*(?:top.?up|funding)|top.?up[\s\S]{0,40}(?:wallet|nol)/i.test(x))return result(Object.assign(base,{kind:'wallet_topup',direction:'debit',executionStatus:'purpose-unconfirmed',reviewReason:'wallet-funding-purpose-unconfirmed',confidence:0.90}),input,raw);
+    if(/\bbill\b|\binvoice\b|فاتور/i.test(x)&&!paidBill&&!/purchase|refund|شراء|استرداد/i.test(x))return result(Object.assign(base,{kind:'bill_notice',executionStatus:'notice',reviewReason:'bill-not-payment',confidence:0.90}),input,raw);
+    if(paidBill)return result(Object.assign(base,{kind:'bill_payment',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);
     const ownTransfer=x.match(/(?:from\s+(?:your\s+)?account|من\s+حساب(?:ك)?)\s*[:.]?\s*([A-Za-z0-9Xx*]{2,30}).{0,100}?(?:to\s+(?:your\s+)?account|الى\s+حساب(?:ك)?|إلى\s+حساب(?:ك)?)\s*[:.]?\s*([A-Za-z0-9Xx*]{2,30})/i);
     if(ownTransfer&&/[0-9Xx*]/.test(ownTransfer[1])&&/[0-9Xx*]/.test(ownTransfer[2])){
       const fromRef=normalizeRef(ownTransfer[1]),toRef=normalizeRef(ownTransfer[2]);
@@ -310,7 +318,7 @@
     if(/salary|payroll|راتب/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'salary',direction:'credit',category:'salary',confidence:sourceKnown?0.90:0.76}),input,raw);
     if(/refund|refunded|reversal|reversed|استرداد|مرتجع/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'refund',direction:'credit',category:'other',confidence:sourceKnown?0.90:0.75}),input,raw);
     if(/recharge|mobile\s+top.?up|airtime|شحن\s+رصيد/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'mobile_recharge',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);
-    if(/bill\s+payment|paid\s+bill|فاتور\S*|سداد\s+فاتور/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'bill_payment',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);
+    if(/bill\s+payment|paid\s+bill|تم\s+سداد\s+فاتور/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'bill_payment',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);
     if(/cash\s+withdraw|withdrawn|atm|سحب\s+نقد/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'cash_withdrawal',direction:'debit',category:'other',confidence:sourceKnown?0.90:0.75}),input,raw);
     const incomingTransfer=/تحويل[\s\S]{0,120}الى\s+(?:حسابك|محفظتك)|transferred[\s\S]{0,120}to\s+your\s+(?:account|wallet)/i.test(x)||!!incomingFrom||/\breceived\b[\s\S]{0,120}\bfrom\b|\bfrom\b[\s\S]{0,120}\b(?:to|into)\s+(?:your\s+)?(?:account|wallet)\b|(?:تم\s+)?تحويل[\s\S]{0,120}\sمن\s+.+(?:الى|إلى)\s+(?:حسابك|محفظتك)/i.test(x);
     if(incomingTransfer)return result(Object.assign(base,{kind:'incoming_transfer',direction:'credit',merchant:incomingFrom||merchant,beneficiaryName:incomingFrom||beneficiaryName,category:'other',confidence:sourceKnown?0.92:0.78}),input,raw);
@@ -340,12 +348,16 @@
     });
     if(numericError)return review(numericError);
     let parsed=null,family=null;
+    if(/refund\s+request|request\s+(?:for\s+)?(?:a\s+)?refund|طلب\s+استرداد|فاتور|\bbill\b|\binvoice\b|تعبئة|\bnol\b/i.test(normalized)){
+      parsed=parseGeneric(obj,normalized);if(parsed)family='generic';
+    }
     for(const [name,fn,enabled] of [['wallet',parseWalletFamilies,true],['egypt-bank',parseEgyptBank,true],['enbd',parseEnbd,bank==='emirates-nbd'],['arabic-credit',parseArabicCreditCard,true],['du-pay',parseDuPay,provider==='du-pay'],['generic',parseGeneric,true]]){
+      if(parsed)break;
       if(enabled){parsed=fn(obj,normalized);if(parsed){family=name;break;}}
     }
     if(!parsed)return review('unrecognized');
     if(!parsed.transactionRef){const ref=normalized.match(/\b(?:TR\s+REF|transaction\s+(?:id|reference)|reference|TID|ref)\s*[:#-]?\s*([A-Za-z0-9_-]{4,40})/i);if(ref)parsed.transactionRef=ref[1];}
-    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.8-financial-contract';parsed.executionStatus='completed';
+    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.9-financial-contract';parsed.executionStatus=parsed.executionStatus||'completed';
     // Card-acquiring language also describes wallet funding; ownership/purpose is not in the merchant label.
     if(parsed.kind==='purchase'&&/^(?:e\s*(?:&|and)\s*money|du\s*pay)(?:\s*[,;]|\s*$)/i.test(parsed.merchant||''))parsed.reviewReason='wallet-funding-purpose-unconfirmed';
     if(parsed.kind==='investment_sale'){parsed.reviewReason='investment-non-money-review';return parsed;}
@@ -388,7 +400,7 @@
         if(!i||i.archived)return false;
         if(parsed.cardType&&i.type!==parsed.cardType)return false;
         const linkedAccount=accounts.find(a=>a&&a.id===i.accountId);
-        if(!linkedAccount||linkedAccount.archived||linkedAccount.country!==country||linkedAccount.currency!==parsed.currency)return false;
+        if(!linkedAccount||linkedAccount.archived||linkedAccount.country!==country)return false;
         if(parsed.cardLast4&&String(i.last4||'')!==String(parsed.cardLast4))return false;
         if(parsed.cardFirst4&&String(i.first4||'')!==String(parsed.cardFirst4))return false;
         if(parsed.cardNetwork&&i.network&&i.network!=='other'&&String(i.network)!==String(parsed.cardNetwork))return false;
@@ -398,7 +410,9 @@
       if(cards.length===1)instrument=cards[0];if(instrument)account=accounts.find(a=>a.id===instrument.accountId)||null;
     }
     if(parsed.accountRef||parsed.accountSuffix){
-      const matches=activeAccounts.filter(a=>a.type!=='credit'&&accountRefs(a).some(ref=>refMatches(ref,parsed.accountRef,parsed.accountSuffix)));
+      const bindingMatches=a=>(Array.isArray(a.bankIdentityBindings)?a.bankIdentityBindings:[]).filter(b=>b&&b.enabled!==false&&b.bankId===parsed.bankId&&b.country===a.country&&b.currency===a.currency&&b.accountType===a.type&&b.reference===normalizeRef(parsed.accountRef));
+      const matches=activeAccounts.filter(a=>a.type!=='credit'&&(accountRefs(a).some(ref=>refMatches(ref,parsed.accountRef,parsed.accountSuffix))||bindingMatches(a).some(b=>Number(parsed.postedAt)>=Number(b.confirmedAt))));
+      if(!matches.length&&activeAccounts.some(a=>bindingMatches(a).some(b=>Number(parsed.postedAt)<Number(b.confirmedAt))))return {status:'needs-review',reason:'account-identity-history-review',confidence:0};
       if(matches.length===1)fromAccount=matches[0];
     }
     if(!fromAccount&&!parsed.accountRef&&!parsed.accountSuffix&&parsed.providerId){const wallets=activeAccounts.filter(a=>a.type==='ewallet');if(wallets.length===1)fromAccount=wallets[0];}
@@ -448,10 +462,12 @@
     if(!route||route.status!=='routed')return {ok:false,reason:(route&&route.reason)||'route-required'};
     if(['salary','deposit','incoming_transfer'].includes(parsed.kind)&&route.account&&['credit','debt'].includes(route.account.type))return {ok:false,reason:'asset-account-required'};
     if(['purchase','bill_payment','mobile_recharge','deposit','salary','refund','incoming_transfer'].includes(parsed.kind)){
-      const account=route.account;if(!account)return {ok:false,reason:'account-required'};if(account.currency!==parsed.currency)return {ok:false,reason:'fx-review-required'};
+      const account=route.account;if(!account)return {ok:false,reason:'account-required'};const foreign=account.currency!==parsed.currency;
+      const settlement=foreign?Money.ledgerValue(opts.confirmedSettlementAmount,account.currency):null;
+      if(foreign&&(!['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)||opts.confirmedSettlementAmount==null||!settlement.ok||settlement.value<=0))return {ok:false,reason:'fx-review-required'};
       const type=['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)?'expense':'income';
       const merchantName=['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)&&parsed.merchant?String(parsed.merchant).trim():null;
-      return {ok:true,transaction:{id,type,amount:parsed.amount,currency:parsed.currency,accountId:account.id,instrumentId:route.instrument?route.instrument.id:null,walletAmount:parsed.amount,fxRate:1,cat:type==='income'?(parsed.kind==='salary'?'salary':'other'):(parsed.category||'other'),merchantName,note:parsed.merchant||parsed.beneficiaryName||'',tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,bankTransactionRef:parsed.transactionRef||null}};
+      return {ok:true,transaction:{id,type,amount:parsed.amount,currency:parsed.currency,accountId:account.id,instrumentId:route.instrument?route.instrument.id:null,walletAmount:foreign?settlement.value:parsed.amount,fxRate:foreign?settlement.value/parsed.amount:1,bankSettlementEvidence:foreign?{amount:settlement.value,currency:account.currency,source:'user-confirmation',at:Date.now(),eventId:parsed.eventId||null}:null,cat:type==='income'?(parsed.kind==='salary'?'salary':'other'):(parsed.category||'other'),merchantName,note:parsed.merchant||parsed.beneficiaryName||'',tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,bankTransactionRef:parsed.transactionRef||null}};
     }
     if(parsed.kind==='internal_transfer'){
       const from=route.fromAccount,to=route.targetAccount;if(!from||!to)return {ok:false,reason:'internal-transfer-route-required'};if(from.currency!==parsed.currency||to.currency!==parsed.currency)return {ok:false,reason:'fx-review-required'};
@@ -495,11 +511,14 @@
     if(built.ok&&built.transaction&&feeConfirmed){
       const tx=built.transaction;
       if(tx.type==='expense'){
-        tx.bankPrincipalAmount=parsed.amount;
-        tx.amount=tx.walletAmount=Math.round((parsed.amount+fee)*100)/100;
+        const accountCurrency=route.account.currency,principal=tx.walletAmount;
+        const total=Money.sum([principal,fee],accountCurrency);
+        if(!Money.ledgerValue(fee,accountCurrency).ok||!total.ok)return {ok:false,reason:'invalid-confirmed-fee'};
+        tx.bankPrincipalAmount=principal;tx.walletAmount=total.value;
+        if(tx.currency===accountCurrency)tx.amount=total.value;
       }
       else if(tx.type==='transfer'||tx.type==='external_transfer')tx.fee=Math.round(fee*100)/100;
-      tx.bankFeeEvidence={amount:Math.round(fee*100)/100,currency:parsed.currency,confirmed:true,source:'manual-review'};
+      tx.bankFeeEvidence={amount:Math.round(fee*100)/100,currency:route.account?route.account.currency:parsed.currency,confirmed:true,source:'manual-review'};
     }
     if(built.ok&&built.transaction){const clock=/^(\d{1,2}):([0-5]\d)$/.exec(parsed.transactionTime||'');built.transaction.transactionTime=clock&&Number(clock[1])<24?String(clock[1]).padStart(2,'0')+':'+clock[2]:null;built.transaction.timeSource=built.transaction.transactionTime?'bank-message':'sms-received';built.transaction.smsReceivedAt=Number(parsed.postedAt)||Date.now();}
     if(built.ok&&built.transaction)built.transaction.bankImportEvidence={

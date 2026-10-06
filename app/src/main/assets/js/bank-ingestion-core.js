@@ -526,8 +526,17 @@
     }else if(c.sourceType==='account'){
       account=accounts.find(a=>a&&a.id===c.sourceId&&!a.archived)||null;
     }
+    if(instrument){
+      const institution=arr(state&&state.institutions).find(i=>i&&i.id===(instrument.institutionId||(account&&account.institutionId)));
+      if((parsed.bankId&&institution&&institutionBankId(institution)!==parsed.bankId)||
+         (parsed.providerId&&institution&&institutionProviderId(institution)!==parsed.providerId)||
+         (parsed.cardType&&instrument.type!==parsed.cardType)||
+         (parsed.cardFirst4&&String(instrument.first4||'')!==String(parsed.cardFirst4))||
+         (parsed.cardNetwork&&instrument.network&&instrument.network!=='other'&&instrument.network!==parsed.cardNetwork))
+        return {status:'needs-review',reason:'manual-card-mismatch',confidence:0};
+    }
     const target=c.targetAccountId?accounts.find(a=>a&&a.id===c.targetAccountId&&!a.archived)||null:null;
-    const valid=a=>!!a&&a.country===country&&(!currency||String(a.currency||'').toUpperCase()===currency);
+    const valid=a=>!!a&&a.country===country&&(!currency||String(a.currency||'').toUpperCase()===currency||(['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)&&!!instrument));
     const kind=parsed&&parsed.kind;
     if(['purchase','bill_payment','mobile_recharge','deposit','salary','refund','incoming_transfer'].includes(kind)){
       if(!valid(account))return {status:'needs-review',reason:'manual-source-invalid',confidence:0};
@@ -787,6 +796,21 @@
     }
     return {ok:true,fromInstrumentId:from.id,toInstrumentId:to.id,movedTransactions,movedRecurring,removedAccount};
   }
+  function confirmAccountIdentity(state,parsed,accountId,options){
+    const opts=options||{},account=arr(state&&state.accounts).find(a=>a&&a.id===accountId&&!a.archived);
+    const ref=MessageCore.normalizeRef(parsed&&parsed.accountRef||'');
+    if(!opts.confirmed||!account||!['bank','ewallet'].includes(account.type)||!ref||!parsed.bankId||account.currency!==parsed.currency||account.country!==countryForParsed(parsed))return {ok:false,reason:'account-identity-invalid'};
+    const inst=arr(state.institutions).find(i=>i&&i.id===account.institutionId);
+    if(institutionBankId(inst)!==parsed.bankId)return {ok:false,reason:'account-identity-source-conflict'};
+    const sameScope=a=>a&&a.institutionId===account.institutionId&&a.type===account.type&&a.country===account.country&&a.currency===account.currency;
+    const conflict=arr(state.accounts).some(a=>a.id!==account.id&&sameScope(a)&&(
+      arr(a.bankIdentityBindings).some(b=>b&&b.enabled!==false&&b.bankId===parsed.bankId&&b.reference===ref)||
+      arr(a.bankRefs).concat(a.bankRef||[],a.accountRef||[]).some(r=>MessageCore.normalizeRef(r)===ref)));
+    if(conflict)return {ok:false,reason:'account-identity-reference-conflict'};
+    if(!Array.isArray(account.bankIdentityBindings))account.bankIdentityBindings=[];
+    if(!account.bankIdentityBindings.some(b=>b&&b.enabled!==false&&b.bankId===parsed.bankId&&b.reference===ref))account.bankIdentityBindings.push({bankId:parsed.bankId,accountType:account.type,currency:account.currency,country:account.country,reference:ref,enabled:true,confirmedAt:Number(opts.now)||Date.now(),source:'user-confirmation',eventId:parsed.eventId||null});
+    return {ok:true,accountId:account.id};
+  }
   function learnFromApproval(state,parsed,route,options){
     if(!state||!parsed||!route||route.status!=='routed')return null;
     if(!state.settings||typeof state.settings!=='object')state.settings={};
@@ -921,6 +945,8 @@
     if(!Array.isArray(draft.transactions))draft.transactions=[];
 
     let route=routeFromLearnedRule(parsed,draft,learnedRule)||resolveCustomRoute(parsed,draft,MessageCore.resolveRoute(parsed,draft));
+    const identityRoute=MessageCore.resolveRoute(parsed,draft);
+    if(identityRoute.reason==='account-identity-history-review')return {action:'review',reason:identityRoute.reason,confidence:0};
     const initialRoute=route;
     const direct=autoEligible(parsed,route);
     if(['refund-balance-review','refund-instrument-required'].includes(direct.reason))return {action:'review',reason:direct.reason,confidence:0};
@@ -1169,6 +1195,6 @@
   return Object.freeze({
     manualImportCandidates,manualDuplicateCandidates,linkManualConfirmation,validateManualImportChanges,preserveImportAudit,auditWithDurableDecisions,
     recentScanStart,compatibleScanCheckpoint,eventDecision,reviewHold,matchingReviewHold,rememberEventDecision,EVENT_DECISION_LIMIT,transferCounterparts,pairOwnTransfer,
-    autoEligible,duplicateOf,conflictingReferenceOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
+    confirmAccountIdentity,autoEligible,duplicateOf,conflictingReferenceOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
   });
 });

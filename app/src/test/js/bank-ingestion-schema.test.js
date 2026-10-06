@@ -331,3 +331,26 @@ console.log('bank ingestion schema integration tests: PASS');
   assert.strictEqual(Finance.accountMovement(s,s.accounts[0].id),-21.85);
   assert.strictEqual(Finance.accountBalancePresentation(s,s.accounts[0].id).observed,90.25);
 })();
+
+// Confirmed foreign settlement and account identity survive the actual schema + full backup path.
+{
+ const Backup=require('../../main/assets/js/backup-core'),Report=require('../../main/assets/js/report-core');
+ const state=empty();
+ state.institutions.push({id:'fx-bank',name:'Emirates NBD',bankRegistryId:'emirates-nbd',country:'UAE',type:'bank'});
+ state.accounts.push({id:'fx-account',name:'Synthetic asset',institutionId:'fx-bank',type:'bank',country:'UAE',currency:'AED',openingBalance:1000,openingBalanceKnown:true});
+ state.paymentInstruments.push({id:'fx-card',name:'Synthetic card',accountId:'fx-account',institutionId:'fx-bank',type:'debit_card',country:'UAE',last4:'8765'});
+ const p={recognized:true,eventId:'fx-schema',bankId:'emirates-nbd',kind:'purchase',amount:23.45,currency:'EUR',country:'UAE',cardLast4:'8765',cardType:'debit_card',postedAt:Date.UTC(2026,9,6),confidence:0.99};
+ const built=Message.buildTransaction(p,Message.resolveRoute(p,state),{uid,confirmedSettlementAmount:'94.25',confirmedFee:'1.25'});assert(built.ok);
+ state.transactions.push(built.transaction);
+ assert(Ingest.confirmAccountIdentity(state,{...p,kind:'salary',currency:'AED',accountRef:'XX6789'},'fx-account',{confirmed:true,now:Date.UTC(2026,9,6)}).ok);
+ const packed=Backup.makeFullBackup({state,appVersion:'9.2.9',fingerprint:StateCore.stateFingerprint});
+ const decoded=JSON.parse(JSON.stringify(packed));Backup.validateFullEnvelope(decoded,StateCore.stateFingerprint);
+ const restored=Schema.migrate(decoded.finance);strictOk(restored,'FX settlement restored schema');
+ const t=restored.transactions.find(t=>t.id===built.transaction.id);
+ assert.equal(t.amount,23.45);assert.equal(t.currency,'EUR');assert.equal(t.walletAmount,95.5);assert.equal(t.bankSettlementEvidence.amount,94.25);
+ assert.equal(restored.accounts[0].bankIdentityBindings[0].reference,'XX6789');
+ assert.equal(Finance.accountBalance(restored,'fx-account'),904.5);
+ const entries=Report.reportExpenseEntries(restored,{country:'UAE',period:'month',month:'2026-10',now:p.postedAt});
+ assert.deepEqual(entries.map(e=>e.amount).sort((a,b)=>a-b),[1.25,94.25]);
+ console.log('Full backup/schema preserves FX principal, settlement, fee, binding and exact report impact: PASS');
+}
