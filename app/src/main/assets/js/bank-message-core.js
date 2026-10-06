@@ -308,7 +308,7 @@
     if(/refund\s+request|request\s+(?:for\s+)?(?:a\s+)?refund|طلب\s+استرداد/i.test(x))return result(Object.assign(base,{kind:'refund_request',executionStatus:'requested',reviewReason:'refund-not-completed',confidence:0.90}),input,raw);
     if(/(?:تعبئة|شحن)[\s\S]{0,80}?(?:محفظ|نول)|(?:wallet|nol)[\s-]*(?:top.?up|funding)|top.?up[\s\S]{0,40}(?:wallet|nol)/i.test(x))return result(Object.assign(base,{kind:'wallet_topup',direction:'debit',executionStatus:'purpose-unconfirmed',reviewReason:'wallet-funding-purpose-unconfirmed',confidence:0.90}),input,raw);
     if(/\bbill\b|\binvoice\b|فاتور/i.test(x)&&!paidBill&&!/purchase|refund|شراء|استرداد/i.test(x))return result(Object.assign(base,{kind:'bill_notice',executionStatus:'notice',reviewReason:'bill-not-payment',confidence:0.90}),input,raw);
-    if(paidBill)return result(Object.assign(base,{kind:'bill_payment',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);
+    if(paidBill&&!/refund|refunded|استرداد|مرتجع|salary|payroll|راتب/i.test(x))return result(Object.assign(base,{kind:'bill_payment',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);
     const ownTransfer=x.match(/(?:from\s+(?:your\s+)?account|من\s+حساب(?:ك)?)\s*[:.]?\s*([A-Za-z0-9Xx*]{2,30}).{0,100}?(?:to\s+(?:your\s+)?account|الى\s+حساب(?:ك)?|إلى\s+حساب(?:ك)?)\s*[:.]?\s*([A-Za-z0-9Xx*]{2,30})/i);
     if(ownTransfer&&/[0-9Xx*]/.test(ownTransfer[1])&&/[0-9Xx*]/.test(ownTransfer[2])){
       const fromRef=normalizeRef(ownTransfer[1]),toRef=normalizeRef(ownTransfer[2]);

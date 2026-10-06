@@ -3,6 +3,8 @@ const assert=require('assert');
 const M=require('../../main/assets/js/bank-message-core');
 const I=require('../../main/assets/js/bank-ingestion-core');
 const cases=[
+ ['refund-bill','Your bill payment AED 25.00 was refunded to debit card ending 4321.','refund',true],
+ ['salary-payment','Salary credited AED 7000.00 to account XX5678. Payment is successful.','salary',true],
  ['invoice','Your bill has been issued. Total due: 162.75 AED.','bill_notice',false],
  ['invoice-ar','تم إصدار فاتورة بقيمة 162.75 AED يرجى السداد','bill_notice',false],
  ['payment','Your payment is successful. Total paid: 162.75 AED.','bill_payment',true],
