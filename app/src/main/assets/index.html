@@ -4896,8 +4896,7 @@ function bankRegistryOptions(selectedId){
 function bankLogoHtml(bank,size=34){
   if(!bank)return '<span style="width:'+size+'px;height:'+size+'px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center">🏦</span>';
   const letters=UaeBankRegistryCore.initials?UaeBankRegistryCore.initials(bank.name):'🏦';
-  const domain=UaeBankRegistryCore.logoDomain?UaeBankRegistryCore.logoDomain(bank.id):null;
-  const image=domain?'<img src="https://'+esc(domain)+'/favicon.ico" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'" style="position:absolute;inset:4px;width:calc(100% - 8px);height:calc(100% - 8px);object-fit:contain;background:#fff;border-radius:7px">':'';
+  const image=''; // Neutral initials until a vetted, licensed local asset is bundled.
   return '<span style="position:relative;width:'+size+'px;height:'+size+'px;flex:0 0 '+size+'px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border);display:grid;place-items:center;font-size:11px;font-weight:800;overflow:hidden">'+esc(letters)+image+'</span>';
 }
 function bankRegistryPickerHtml(selectedId,targetId){
@@ -4937,8 +4936,7 @@ function providerRegistryOptions(selectedId){
 function providerLogoHtml(provider,size=34){
   if(!provider)return '<span style="width:'+size+'px;height:'+size+'px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center">👛</span>';
   const letters=UaeBankRegistryCore.initials?UaeBankRegistryCore.initials(provider.short||provider.name):'👛';
-  const domain=UaeBankRegistryCore.logoDomain?UaeBankRegistryCore.logoDomain(provider.id):null;
-  const image=domain?'<img src="https://'+esc(domain)+'/favicon.ico" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'" style="position:absolute;inset:4px;width:calc(100% - 8px);height:calc(100% - 8px);object-fit:contain;background:#fff;border-radius:7px">':'';
+  const image=''; // Neutral initials until a vetted, licensed local asset is bundled.
   return '<span style="position:relative;width:'+size+'px;height:'+size+'px;flex:0 0 '+size+'px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border);display:grid;place-items:center;font-size:10px;font-weight:800;overflow:hidden">'+esc(letters)+image+'</span>';
 }
 function providerRegistryPickerHtml(selectedId,targetId){

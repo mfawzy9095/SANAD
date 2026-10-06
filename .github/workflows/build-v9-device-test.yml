@@ -661,6 +661,7 @@ jobs:
           node app/src/test/js/bank-ingestion-sequence.test.js
           node app/src/test/js/bank-message-corpus.test.js
           node app/src/test/js/backup-repair-tool.test.js
+          node app/src/test/js/offline-institution-marks.test.js
           node app/src/test/js/payment-context-regression.test.js
           node app/src/test/js/fx-card-identity.test.js
           node app/src/test/js/account-identity-binding.test.js
