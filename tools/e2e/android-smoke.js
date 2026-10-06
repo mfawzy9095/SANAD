@@ -69,7 +69,9 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  await page.evaluate(()=>{document.getElementById('bankFixExternalIncome').checked=true;});
  await page.locator('[data-sanad-act="bank-fix-save"]').click();
  await page.waitForFunction(()=>S.transactions.length===2&&!_criticalMutationInFlight);
- await page.evaluate(()=>closeSheet());
+ // Durable write completes before saveCorrection finishes ack/sync/open.
+ await page.waitForFunction(()=>document.getElementById('sheet').dataset.sheetType==='bank-inbox'&&document.getElementById('sheet').classList.contains('on'));
+ await page.locator('#sheet [data-act="close-sheet"]').click();
  pass('Generic native inbound requires per-event external origin confirmation');
  const result=await page.evaluate(()=>({last:SanadBankInbox.lastRecentImport,transactions:S.transactions,accounts:S.accounts}));
  assert.equal(result.last.status,'complete');assert.equal(result.transactions.length,2);
@@ -97,17 +99,15 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  await page.evaluate(()=>{document.getElementById('bankFixExternalIncome').checked=true;});
  await page.locator('[data-sanad-act="bank-fix-save"]').click();
  await page.waitForFunction(n=>S.transactions.length===n+1&&!_criticalMutationInFlight,beforeFresh);
- await page.evaluate(()=>closeSheet());
+ // Durable write completes before saveCorrection finishes ack/sync/open.
+ await page.waitForFunction(()=>document.getElementById('sheet').dataset.sheetType==='bank-inbox'&&document.getElementById('sheet').classList.contains('on'));
+ await page.locator('#sheet [data-act="close-sheet"]').click();
 
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeFresh+1);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bank.id),9086.66);
  const scan=await page.evaluate(()=>SanadBankInbox.lastRecentImport);assert(scan.fromDate>0&&scan.throughDate>=scan.fromDate);
  pass('Bounded direct native SMS scan imports a just-arrived message once after earlier checkpoint');
 
- // The explicit rescan opens its review sheet. Close it through the real UI
- // before asserting an unobscured home screenshot; preserve the opacity gate.
- assert.equal(await page.evaluate(()=>document.getElementById('sheet').classList.contains('on')),true);
- await page.locator('#sheet [data-act="close-sheet"]').click();
  await page.waitForFunction(()=>Number(getComputedStyle(document.getElementById('toast')).opacity)<0.01&&Number(getComputedStyle(document.getElementById('backdrop')).opacity)<0.01&&Number(getComputedStyle(document.querySelector('#view .wallet-hero')||document.getElementById('view')).opacity)>0.99);
  await page.screenshot({path:path.join(out,'android-home.png')});assert.deepEqual(errors,[]);
  fs.writeFileSync(path.join(out,'results.json'),JSON.stringify({status:'PASS',environment:'Android emulator API 35; real APK and AndroidBridge; synthetic SMS',webview:adb('shell','dumpsys','webviewupdate').split('\n').filter(s=>s.includes('Current WebView package')).join('\n'),results,errors},null,2));
