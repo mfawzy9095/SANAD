@@ -11,6 +11,7 @@ function instance(pages){
 (async()=>{
  const a=instance([{ok:true,done:false,scanned:20,nextAfterDate:1000,nextAfterId:20}]);await a.o.importHistoricalSms(0,{fromDate:1});
  assert.equal(store.bankImportActive.nextAfterId,20,'cursor saved after successful batch');
+ store.bankImportActive.pages=2000; // A previous per-run safety limit must remain resumable.
  const b=instance([{ok:true,done:true,scanned:5,nextAfterDate:1100,nextAfterId:25}]);await b.o.importHistoricalSms(0,{resume:true});
  assert.deepEqual(b.queries[0],[1000,20],'new JS instance resumes durable cursor');assert.equal(b.o.lastHistoricalImport.total.scanned,25);
  assert.equal(store.bankImportActive.status,'complete');

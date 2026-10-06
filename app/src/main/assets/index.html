@@ -9269,6 +9269,7 @@ const SanadBankInbox = {
     let afterDate=Math.max(0,rangeStart-1),afterId=0,pages=0;
     const total={scanned:0,matchingRows:0,financialCandidates:0,parsed:0,added:0,observed:0,review:0,duplicates:0,ignored:0,discovered:0};
     if(checkpoint){afterDate=checkpoint.nextAfterDate;afterId=checkpoint.nextAfterId;pages=checkpoint.pages||0;Object.assign(total,checkpoint.total||{});}
+    const pageLimit=pages+2000; // Bound each run without making a durable cursor impossible to resume.
     const scanCheckpoint=status=>({status,fromDate:rangeStart,throughDate:startedAt,mode:options.mode||'historical',configuredStartAt:options.configuredStartAt||null,nextAfterDate:afterDate,nextAfterId:afterId,pages,total:Object.assign({},total)});
     let status='complete';
     this.historicalProgress=Object.assign({pages,fromDate:rangeStart,throughDate:startedAt,reachedAt:afterDate},total);
@@ -9276,7 +9277,7 @@ const SanadBankInbox = {
 
     try{
       if(!checkpoint&&await SanadExtStorage.set('bankImportActive',scanCheckpoint('running'))===false){status='checkpoint-failed';throw new Error('checkpoint-failed');}
-      while(pages<2000){
+      while(pages<pageLimit){
         if(this.historicalCancelRequested){status=this.historicalCancelReason==='pause'?'paused':'cancelled';break;}
         await this.yieldUi(24);
         if(this.historicalCancelRequested){status=this.historicalCancelReason==='pause'?'paused':'cancelled';break;}
@@ -9336,7 +9337,7 @@ const SanadBankInbox = {
         if(await SanadExtStorage.set('bankImportActive',scanCheckpoint('running'))===false){status='checkpoint-failed';break;}
         await this.yieldUi(24);
       }
-      if(pages>=2000&&status==='complete')status='page-limit';
+      if(pages>=pageLimit&&status==='complete')status='page-limit';
     }catch(_){
       if(status!=='checkpoint-failed')status='processing-failed';
     }finally{
