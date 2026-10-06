@@ -1054,10 +1054,12 @@
     const tx=plan.transaction||{};
     const accountId=tx.accountId||tx.fromAccountId||null;
     if(!accountId)return null;
-    const calculated=round2(accountBalanceFn(state,accountId));
-    if(calculated==null)return null;
-    const diff=round2(observed-calculated);
-    return {accountId,observed:round2(observed),calculated,difference:diff,matched:Math.abs(diff)<=0.01};
+    const currency=arr(state&&state.accounts).find(a=>a&&a.id===accountId)?.currency||parsed.currency;
+    const rawCalculated=accountBalanceFn(state,accountId);if(rawCalculated==null)return null;
+    const actual=Money.decimal(observed,currency),expected=Money.decimal(rawCalculated,currency);
+    if(!actual.ok||!expected.ok)return null;
+    const diff=Money.sum([actual.value,-expected.value],currency);if(!diff.ok)return null;
+    return {accountId,observed:actual.value,calculated:expected.value,difference:diff.value,matched:diff.minorUnits==='0'};
   }
 
   function recentScanStart(previous,now,floor){

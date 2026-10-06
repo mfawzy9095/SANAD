@@ -4,6 +4,7 @@ const {createRequire}=require('module');
 const I=require('../../main/assets/js/bank-ingestion-core'),M=require('../../main/assets/js/bank-message-core');
 const State=require('../../main/assets/js/state-core');
 const F=require('../../main/assets/js/finance-core'),Mutation=require('../../main/assets/js/mutation-core'),Backup=require('../../main/assets/js/backup-core');
+const Money=require('../../main/assets/js/money-core');
 const fixturePath=path.join(__dirname,'bank-ingestion-schema.test.js');
 const fixture=fs.readFileSync(fixturePath,'utf8');
 const fixtureCtx={require:createRequire(fixturePath),console};vm.createContext(fixtureCtx);
@@ -18,6 +19,7 @@ function harness(options={}){
  class Clock extends Date{constructor(...v){super(...(v.length?v:[now]));}static now(){return now;}}
  const ctx={S:initial,Date:Clock,Set,Map,Number,Math,Object,Infinity,_dataReplacementInFlight:false,canWrite:()=>true,uid:p=>p+'_'+(++seq),toast(){},render(){},closeSheet(){},BankIngestionCore:I,BankMessageCore:M,FinanceCore:F,isFiniteNumberLike:v=>v!=null&&v!==''&&Number.isFinite(Number(v)),AndroidBridge:{acknowledgeBankNotifications:v=>acks.push(...JSON.parse(v))},SanadExtStorage:{get:async(k,f)=>k in store?clone(store[k]):f,set:async(k,v)=>{if(k===failKey)return false;store[k]=clone(v);return true;}}};
  ctx.Finance={ensureAllPrimaries(){},getAccount:id=>ctx.S.accounts.find(x=>x.id===id)};
+ ctx.SanadMoneyCore=Money;
  const mutator=Mutation.createMutationService({canWrite:()=>true,snapshotState:()=>clone(ctx.S),loadState:s=>{ctx.S=clone(s);},fingerprint:State.stateFingerprint,validateState:s=>Schema.validateStateStrict(s),writeSafetySnapshot:async()=>({ok:true}),verifiedWrite:async s=>{if(failFinance)return {ok:false,restored:true};disk=clone(s);return {ok:true};},tryRestore:async s=>{disk=clone(s);return true;}});
  ctx.commitCriticalMutation=fn=>mutator.run(fn);
  vm.createContext(ctx);let inbox;
@@ -29,6 +31,15 @@ const salary=h=>({id:'synthetic-salary',title:'Emirates NBD',packageName:'sms:EN
 const review=h=>({id:'synthetic-review',title:'EI SMS',packageName:'sms:EI',postedAt:h.now-10000,text:'عملية دفع ببطاقة الائتمان المنتهية بالرقم: 0308 لدى: TESTSHOP المبلغ: AED 25.00 التاريخ: 04/10/2026, 9:05 الحد المتوفر: 800.00 AED'});
 const scan=(h,events)=>h.inbox.syncImpl({events,minPostedAt:h.ctx.S.settings.bankSmsStartAt,maxPostedAt:h.now,force:true});
 (async()=>{
+ for(const [currency,unit] of [['AED',0.01],['KWD',0.001],['JPY',1]]){
+  const q=harness();q.ctx.S.accounts.push({id:'minor',type:'bank',currency,openingBalance:2,openingBalanceKnown:true});
+  const parsed={availableBalance:2-unit,balanceType:'ledger_balance',postedAt:q.now};
+  assert.equal(q.inbox.applyReconciliation(parsed,{observationAccountId:'minor'}).warning,true,currency+' native observation discrepancy');
+  assert.equal(q.ctx.S.accounts[0].bankReconciliation.difference,-unit);
+  q.ctx.S.accounts[0]={id:'minor',type:'credit',currency,openingDebt:1,openingDebtKnown:true,creditLimit:2};
+  assert.equal(q.inbox.applyReconciliation({availableCredit:1-unit,postedAt:q.now},{observationAccountId:'minor'}).warning,true);
+  assert.equal(q.ctx.S.accounts[0].creditReconciliation.difference,-unit);
+ }
  // The real parser, planner, financial validator and mutation service share one commit.
  const h=harness();await scan(h,[salary(h)]);assert.equal(h.ctx.S.transactions.length,1);
  assert.equal(I.eventDecision(h.ctx.S,'synthetic-salary').action,'saved');assert.equal(F.accountBalance(h.ctx.S,h.ctx.S.accounts[0].id),null);assert.equal(F.accountMovement(h.ctx.S,h.ctx.S.accounts[0].id),9000);assert.equal(F.accountBalancePresentation(h.ctx.S,h.ctx.S.accounts[0].id).observed,9001.66);

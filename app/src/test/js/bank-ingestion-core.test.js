@@ -2,6 +2,12 @@
 const assert=require('assert');
 const I=require('../../main/assets/js/bank-ingestion-core.js');
 const P=require('../../main/assets/js/bank-message-core.js');
+for(const [currency,observed,calculated,difference] of [['AED',1,1.01,-0.01],['KWD',1.001,1.002,-0.001],['JPY',1,2,-1]]){
+ const s={accounts:[{id:'a',currency}]},p={balanceType:'ledger_balance',availableBalance:observed,currency};
+ const r=I.reconciliation(p,s,{action:'auto-save',transaction:{accountId:'a'}},()=>calculated);
+ assert.strictEqual(r.observed,observed);assert.strictEqual(r.difference,difference);assert.strictEqual(r.matched,false,currency);
+ assert.strictEqual(I.reconciliation(p,s,{action:'auto-save',transaction:{accountId:'a'}},()=>observed).matched,true);
+}
 // Synthetic legacy fixtures now include source metadata: production never infers it from body.
 function fixtureParse(input){
  const e={...input};
