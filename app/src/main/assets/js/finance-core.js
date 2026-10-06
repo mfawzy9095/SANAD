@@ -188,7 +188,7 @@
       observedAt,
       latestActivityAt,
       observedIsCurrent,
-      mismatch:observedIsCurrent&&difference!==null&&Math.abs(difference)>0.01,
+      mismatch:observedIsCurrent&&difference!==null&&difference!==0,
       difference
     };
   }
@@ -241,11 +241,11 @@
         continue;
       }
       if(!hadBefore){
-        if(afterBal<-0.01)return 'prepaid-insufficient';
+        if(afterBal<0)return 'prepaid-insufficient';
         continue;
       }
-      if(beforeBal>=-0.01&&afterBal<-0.01)return 'prepaid-insufficient';
-      if(beforeBal<-0.01&&afterBal<beforeBal-0.01)return 'prepaid-insufficient';
+      if(beforeBal>=0&&afterBal<0)return 'prepaid-insufficient';
+      if(beforeBal<0&&afterBal<beforeBal)return 'prepaid-insufficient';
     }
     return null;
   }

@@ -2,6 +2,21 @@
 const assert=require('assert');
 const F=require('../../main/assets/js/finance-core.js');
 
+// Every supported minor unit is material; never use a fixed AED tolerance.
+for(const [currency,unit] of [['AED',0.01],['KWD',0.001],['JPY',1]]){
+  const account={id:'minor',type:'prepaid',currency,openingBalance:1,
+    observedBalance:1-unit,observedBalanceType:'ledger_balance',observedBalanceAt:100};
+  const before={accounts:[account],transactions:[]};
+  assert.strictEqual(F.accountBalancePresentation(before,'minor').mismatch,true,currency+' minor-unit discrepancy');
+  const captured=F.capturePrepaidBalances(before);
+  const after={accounts:[account],transactions:[{type:'expense',accountId:'minor',currency,amount:1+unit}]};
+  assert.strictEqual(F.checkPrepaidInvariant(captured,after),'prepaid-insufficient',currency+' overdraft');
+  const legacy={accounts:[{id:'minor',type:'prepaid',currency,openingBalance:-1}],transactions:[]};
+  assert.strictEqual(F.checkPrepaidInvariant(F.capturePrepaidBalances(legacy),{
+    accounts:legacy.accounts,transactions:[{type:'expense',accountId:'minor',currency,amount:unit}]
+  }),'prepaid-insufficient',currency+' legacy debt worsened');
+}
+
 function state(accounts,transactions){return {accounts,transactions};}
 
 (function assetBalance(){
