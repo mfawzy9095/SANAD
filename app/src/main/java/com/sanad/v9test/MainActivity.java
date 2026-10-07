@@ -49,6 +49,7 @@ import android.util.Base64;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends Activity {
     private static final int REQ_FILE_CHOOSER = 7001;
@@ -63,19 +64,25 @@ public final class MainActivity extends Activity {
     private Uri cameraOutputUri;
     private String pendingDownloadName;
     private byte[] pendingDownloadBytes;
-    private long backgroundedAtMs = 0L;
+    private volatile long backgroundedAtMs = 0L;
     private boolean authInProgress = false;
     private final ExecutorService historicalSmsExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService bankNotificationExecutor = Executors.newSingleThreadExecutor();
     private final Object historicalSmsLock = new Object();
     private CancellationSignal historicalSmsCancellation;
     private String historicalSmsRequestId;
+    private final AtomicBoolean historicalCountRequested = new AtomicBoolean(false);
+    private final SmsImportService.Control importControl = reason -> runOnUiThread(() -> {
+        if (webView != null) webView.evaluateJavascript(
+                "if(typeof SanadBankInbox!=='undefined')SanadBankInbox.cancelHistoricalImport(" + JSONObject.quote(reason) + ");", null);
+    });
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         cleanupOldCameraFiles();
         NotificationScheduler.ensureChannel(this);
+        SmsImportService.attach(importControl);
 
         WebView.setWebContentsDebuggingEnabled((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0);
         webView = new WebView(this);
@@ -479,6 +486,26 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean beginSmsImportForeground() {
+            historicalCountRequested.set(true);
+            if (backgroundedAtMs != 0L || isFinishing() || !NotificationManagerCompat.from(MainActivity.this).areNotificationsEnabled()) return false;
+            try {
+                startForegroundService(new Intent(MainActivity.this, SmsImportService.class));
+                return true;
+            } catch (RuntimeException unavailable) { return false; }
+        }
+
+        @JavascriptInterface
+        public void updateSmsImportForeground(long scanned, long added, long review, long total) {
+            runOnUiThread(() -> SmsImportService.progress(scanned, added, review, total));
+        }
+
+        @JavascriptInterface
+        public void endSmsImportForeground() {
+            stopService(new Intent(MainActivity.this, SmsImportService.class));
+        }
+
+        @JavascriptInterface
         public void startHistoricalFinancialSmsPage(
                 String requestId, int days, long afterDate, long afterId, int rawLimit) {
             String safeRequestId = requestId == null ? "" : requestId.trim();
@@ -635,6 +662,7 @@ public final class MainActivity extends Activity {
             int days, long afterDate, long afterId, int rawLimit, CancellationSignal cancellationSignal,
             long throughDate, boolean direct) {
         JSONObject out = new JSONObject();
+        long readStarted = android.os.SystemClock.elapsedRealtime();
         try {
             if (checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
                 out.put("ok", false);
@@ -705,6 +733,7 @@ public final class MainActivity extends Activity {
                     Telephony.Sms.DATE + " ASC, " + Telephony.Sms._ID + " ASC",
                     cancellationSignal)) {
                 if (cursor == null) throw new IllegalStateException("sms-query-unavailable");
+                if (direct && historicalCountRequested.compareAndSet(true, false)) out.put("remainingCount", cursor.getCount());
                 {
                     int idCol = cursor.getColumnIndex(Telephony.Sms._ID);
                     int addressCol = cursor.getColumnIndex(Telephony.Sms.ADDRESS);
@@ -777,6 +806,7 @@ public final class MainActivity extends Activity {
             out.put("nextAfterId", nextId);
             out.put("done", !hasMore);
             out.put("capacityReached", capacityReached);
+            out.put("readMs", android.os.SystemClock.elapsedRealtime() - readStarted);
             return out;
         } catch (OperationCanceledException cancelled) {
             try {
@@ -957,6 +987,8 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        stopService(new Intent(this, SmsImportService.class));
+        SmsImportService.attach(null);
         cancelOutstandingChooser();
         synchronized (historicalSmsLock) {
             if (historicalSmsCancellation != null) {

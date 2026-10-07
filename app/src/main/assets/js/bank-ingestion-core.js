@@ -48,7 +48,7 @@
   function institutionAliases(inst){
     return [inst&&inst.name].concat(arr(inst&&inst.notificationAliases))
       .map(normalizeSource)
-      .filter(x=>x&&x.length>=3&&!['bank','wallet','finance','payments','message','messages'].includes(x));
+      .filter(x=>x&&x.length>=3&&!arr(inst&&inst.disabledNotificationAliases).map(normalizeSource).includes(x)&&!['bank','wallet','finance','payments','message','messages'].includes(x));
   }
   function findCustomInstitutionByHint(state,parsed){
     const hint=normalizeSource(parsed&&parsed.sourceHint);
@@ -223,6 +223,7 @@
     const out=Object.assign({},next);
     for(const [key,value] of Object.entries(old))if(key.startsWith('bank')||['providerId','smsReceivedAt','economicOrigin','manualImportResolution'].includes(key))out[key]=value===undefined?undefined:clone(value);
     out.userFinancialOverride={source:'user-edit',at:Number(at)||Date.now(),previous:{type:old.type,accountId:old.accountId||null,fromAccountId:old.fromAccountId||null,toAccountId:old.toAccountId||null,amount:old.amount==null?null:old.amount,walletAmount:old.walletAmount==null?null:old.walletAmount,fromAmount:old.fromAmount==null?null:old.fromAmount,toAmount:old.toAmount==null?null:old.toAmount,currency:old.currency||null,fromCurrency:old.fromCurrency||null,toCurrency:old.toCurrency||null},prior:old.userFinancialOverride||null};
+    out.userCategoryConfirmed=old.cat!==out.cat||old.userCategoryConfirmed===true;
     return out;
   }
   // A source reference is scoped evidence, not a globally unique posting ID.
@@ -393,17 +394,51 @@
   function normalizedMerchant(value){
     return String(value||'').toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g,' ').replace(/\s+/g,' ').trim();
   }
-  function learnedMerchantCategory(parsed,state){
+  function merchantLearningId(t){return JSON.stringify([t.accountId,t.currency,normalizedMerchant(t.note||t.merchantName)]);}
+  function learningEntries(state){
+    const rows=arr(state?.settings?.bankLearningRules).map(r=>({type:'template',id:r.id,enabled:r.enabled!==false,source:r.sourceKey,accountId:r.accountId||r.fromAccountId,currency:r.currency,country:r.country,kind:r.kind,template:r.templateSignature,at:r.updatedAt||r.createdAt}));
+    for(const i of arr(state?.institutions))for(const alias of arr(i.notificationAliases))rows.push({type:'source',id:JSON.stringify([i.id,alias]),institutionId:i.id,enabled:!arr(i.disabledNotificationAliases).includes(alias),source:alias,country:i.country});
+    for(const a of arr(state?.accounts))for(const b of arr(a.bankIdentityBindings))rows.push({type:'identity',id:JSON.stringify([a.id,b.bankId,b.accountType,b.currency,b.reference,b.confirmedAt]),enabled:b.enabled!==false,source:b.bankId,accountId:a.id,currency:b.currency,country:b.country,reference:b.reference,at:b.confirmedAt});
+    const seen=new Set(),disabled=arr(state?.settings?.bankMerchantLearningDisabled);
+    for(const t of arr(state?.transactions).slice().reverse()){
+      if(t.type!=='expense'||!t.cat||t.cat==='other'||!normalizedMerchant(t.note||t.merchantName))continue;
+      if(hasImportEvidence(t)&&!t.userCategoryConfirmed)continue;
+      const id=merchantLearningId(t);if(seen.has(id))continue;seen.add(id);
+      rows.push({type:'merchant',id,enabled:!disabled.includes(id),accountId:t.accountId,currency:t.currency,merchant:t.note||t.merchantName,category:t.cat,at:t.created});
+    }
+    return rows;
+  }
+  function setLearningEnabled(state,type,id,enabled,options){
+    const row=learningEntries(state).find(r=>r.type===type&&r.id===id);if(!row||typeof enabled!=='boolean')return {ok:false,reason:'learning-not-found'};
+    const at=Number(options?.now)||Date.now();
+    if(!state.settings)state.settings={};
+    if(type==='template'){
+      const r=state.settings.bankLearningRules.find(r=>r.id===id);r.enabled=enabled;r.updatedAt=at;if(enabled)r.effectiveFrom=at;
+    }else if(type==='identity'){
+      const a=state.accounts.find(a=>a.id===row.accountId),b=a.bankIdentityBindings.find(b=>JSON.stringify([a.id,b.bankId,b.accountType,b.currency,b.reference,b.confirmedAt])===id);
+      if(enabled){const trial=clone(state),check=confirmAccountIdentity(trial,{bankId:b.bankId,accountRef:b.reference,currency:b.currency,country:b.country},a.id,{confirmed:true,now:at});if(!check.ok)return check;b.confirmedAt=at;}
+      b.enabled=enabled;b.updatedAt=at;
+    }else if(type==='source'){
+      const inst=state.institutions.find(i=>i.id===row.institutionId),disabled=new Set(arr(inst.disabledNotificationAliases));if(enabled)disabled.delete(row.source);else disabled.add(row.source);inst.disabledNotificationAliases=Array.from(disabled);
+    }else if(type==='merchant'){
+      const disabled=new Set(arr(state.settings.bankMerchantLearningDisabled));if(enabled)disabled.delete(id);else disabled.add(id);state.settings.bankMerchantLearningDisabled=Array.from(disabled);
+    }else return {ok:false,reason:'learning-type-invalid'};
+    state.settings.bankLearningAudit=arr(state.settings.bankLearningAudit).concat([{type,id,enabled,at,source:'user-confirmation'}]).slice(-500);
+    return {ok:true};
+  }
+  function learnedMerchantCategory(parsed,state,accountId){
     if(!parsed||!parsed.merchant)return null;
     const key=normalizedMerchant(parsed.merchant);
     if(!key)return null;
+    if(!accountId)accountId=MessageCore.resolveRoute(parsed,state).account?.id;
+    if(!accountId)return null;
     const txs=arr(state&&state.transactions).slice().reverse();
-    const hit=txs.find(t=>t&&t.type==='expense'&&t.cat&&t.cat!=='other'&&normalizedMerchant(t.note)===key);
+    const hit=txs.find(t=>t&&t.type==='expense'&&t.accountId===accountId&&t.currency===parsed.currency&&(!hasImportEvidence(t)||t.userCategoryConfirmed)&&t.cat&&t.cat!=='other'&&normalizedMerchant(t.note||t.merchantName)===key&&!arr(state?.settings?.bankMerchantLearningDisabled).includes(merchantLearningId(t)));
     return hit?hit.cat:null;
   }
   function applyLearnedCategory(parsed,state,built){
     if(!built||!built.ok||!built.transaction||built.transaction.type!=='expense')return built;
-    const learned=learnedMerchantCategory(parsed,state);
+    const learned=learnedMerchantCategory(parsed,state,built.transaction.accountId);
     if(learned)built.transaction.cat=learned;
     return built;
   }
@@ -452,6 +487,7 @@
     const cardFirst=String(parsed.cardFirst4||''),card=String(parsed.cardLast4||''),account=String(parsed.accountRef||'');
     const instruments=arr(state&&state.paymentInstruments);
     const matches=learningRules(state).filter(r=>{
+      if(Number(r.effectiveFrom||r.createdAt)>Number(parsed.postedAt))return false;
       if(r.sourceKey!==sourceKey||r.templateSignature!==signature)return false;
       if(r.country&&r.country!==country)return false;
       if(r.currency&&String(r.currency).toUpperCase()!==currency)return false;
@@ -835,6 +871,7 @@
     const wantedKey=key(spec);
     let rule=state.settings.bankLearningRules.find(r=>r&&key(r)===wantedKey)||null;
     if(rule){
+      if(rule.enabled===false)return clone(rule);
       Object.assign(rule,spec,{enabled:true,updatedAt:now,approvals:(Number(rule.approvals)||0)+1});
     }else{
       const makeId=typeof opts.uid==='function'?opts.uid:(p=>String(p||'rule')+'_'+now);
@@ -916,6 +953,7 @@
     if(!parsed||!parsed.recognized)return {action:'review',reason:(parsed&&parsed.reason)||'unrecognized',confidence:0};
     if(parsed.reviewReason)return {action:'review',reason:parsed.reviewReason,confidence:0};
     if(!parsed.bankId&&!parsed.providerId&&!findCustomInstitutionByHint(state,parsed)&&!matchLearnedRule(parsed,state))return {action:'review',reason:'source-not-identified',confidence:0};
+    if(parsed.kind==='purchase_settlement')return planPurchaseSettlement(parsed,state);
     if(parsed.kind==='balance_observation')return planBalanceObservation(parsed,state||{},uid);
     const manual=manualDuplicateCandidate(parsed,state);
     if(manual)return {action:'review',reason:'possible-manual-duplicate',existingTransactionId:manual.id,confidence:0};
@@ -1055,6 +1093,11 @@
   }
   function applyPlan(state,plan){
     if(!state||!plan||!['auto-save','observe'].includes(plan.action))return false;
+    if(plan.replacesTransactionId){
+      const index=arr(state.transactions).findIndex(t=>t.id===plan.replacesTransactionId);
+      if(index<0||JSON.stringify(state.transactions[index])!==JSON.stringify(plan.before))return false;
+      state.transactions[index]=clone(plan.transaction);return true;
+    }
     const create=plan.create||{};
     arr(create.institutions).forEach(x=>state.institutions.push(clone(x)));
     arr(create.accounts).forEach(x=>state.accounts.push(clone(x)));
@@ -1193,6 +1236,25 @@
     tx.bankPairingBeforeImage=clone(old);
     return {ok:true,transaction:tx,replacesTransactionId:old.id,before:clone(old),observationAccountId:outgoing?from.id:receiver.id};
   }
+  function planPurchaseSettlement(parsed,state){
+    const review=reason=>({action:'review',reason,confidence:0});
+    if(!parsed.bankId||parsed.executionStatus!=='completed'||!parsed.eventId||!parsed.originalPurchaseRef||!parsed.originalPurchaseDate||parsed.settlementFee==null||parsed.settlementFeeCurrency!==parsed.currency)return review('settlement-evidence-incomplete');
+    const route=MessageCore.resolveRoute(parsed,state);
+    if(route.status!=='routed'||!route.account||!route.instrument||route.account.currency!==parsed.currency)return review('settlement-identity-conflict');
+    const candidates=arr(state.transactions).filter(t=>t.type==='expense'&&t.accountId===route.account.id&&t.instrumentId===route.instrument.id&&t.bankId===parsed.bankId&&t.bankTransactionRef===parsed.originalPurchaseRef&&t.date===parsed.originalPurchaseDate&&t.currency===parsed.originalPurchaseCurrency&&Money.decimal(t.amount,t.currency).ok&&Money.decimal(parsed.originalPurchaseAmount,t.currency).ok&&Money.decimal(t.amount,t.currency).minorUnits===Money.decimal(parsed.originalPurchaseAmount,t.currency).minorUnits);
+    if(candidates.length!==1)return review(candidates.length?'settlement-original-ambiguous':'settlement-original-required');
+    const old=candidates[0],e=old.bankSettlementEvidence;
+    if(old.settlementStatus!=='pending'){
+      if(e?.source==='bank-message'&&e.amount===parsed.amount&&e.currency===parsed.currency&&old.bankFeeEvidence?.amount===parsed.settlementFee)return {action:'duplicate',reason:'settlement-already-linked',existingTransactionId:old.id,confidence:1};
+      return review('settlement-confirmation-conflict');
+    }
+    const proposal=settlePendingPurchase(state,{transactionId:old.id,amount:parsed.amount,fee:parsed.settlementFee,confirmed:true,now:parsed.postedAt});
+    if(!proposal.ok)return review(proposal.reason);
+    Object.assign(proposal.transaction.bankSettlementEvidence,{source:'bank-message',settlementEventId:parsed.eventId,originalReference:parsed.originalPurchaseRef,originalDate:parsed.originalPurchaseDate,raw:parsed.raw,sourceHint:parsed.sourceHint,parserVersion:parsed.parserVersion});
+    const audit=proposal.transaction.bankSettlementAudit.at(-1);audit.source='bank-message';audit.eventId=parsed.eventId;
+    proposal.transaction.bankFeeEvidence.source='bank-message';
+    return {action:'auto-save',reason:'strong-settlement-link',confidence:1,transaction:proposal.transaction,before:proposal.before,replacesTransactionId:old.id};
+  }
   function settlePendingPurchase(state,options){
     const o=options||{},old=arr(state&&state.transactions).find(t=>t.id===o.transactionId);
     if(!old||old.settlementStatus!=='pending'||o.confirmed!==true)return {ok:false,reason:'pending-settlement-confirmation-required'};
@@ -1210,6 +1272,6 @@
   return Object.freeze({
     manualImportCandidates,manualDuplicateCandidates,linkManualConfirmation,validateManualImportChanges,preserveImportAudit,auditWithDurableDecisions,
     recentScanStart,compatibleScanCheckpoint,eventDecision,reviewHold,matchingReviewHold,rememberEventDecision,EVENT_DECISION_LIMIT,transferCounterparts,pairOwnTransfer,
-    settlePendingPurchase,confirmAccountIdentity,autoEligible,duplicateOf,conflictingReferenceOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
+    learningEntries,setLearningEnabled,settlePendingPurchase,confirmAccountIdentity,autoEligible,duplicateOf,conflictingReferenceOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
   });
 });

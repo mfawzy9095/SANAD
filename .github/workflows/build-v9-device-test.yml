@@ -658,6 +658,8 @@ jobs:
           node --check "$BANK_INGESTION_CORE"
           node app/src/test/js/bank-ingestion-core.test.js
           node app/src/test/js/bank-ingestion-schema.test.js
+          node app/src/test/js/late-settlement.test.js
+          node app/src/test/js/learning-controls.test.js
           node app/src/test/js/pending-settlement.test.js
           node app/src/test/js/bank-ingestion-sequence.test.js
           node app/src/test/js/bank-message-corpus.test.js

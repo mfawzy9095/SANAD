@@ -5,7 +5,7 @@ const start=html.indexOf('  async importHistoricalSms(days=0,options={}){'),end=
 const store={},now=1791288000000;let fail=false;
 function instance(pages){
  const ctx={Date:class extends Date{static now(){return now;}},S:{tab:'settings'},Set,Number,Math,Object,toast(){},render(){},canWrite:()=>true,SanadExtStorage:{get:async(k,f)=>store[k]??f,set:async(k,v)=>{if(fail&&k==='bankImportActive')return false;store[k]=JSON.parse(JSON.stringify(v));return true;}}};vm.createContext(ctx);
- const o=vm.runInContext('({'+html.slice(start,end)+'})',ctx);let queries=[];
+ const o=vm.runInContext('({'+html.slice(html.indexOf('  updateImportProgress(){'),html.indexOf('  homeImportHtml(){'))+html.slice(start,end)+'})',ctx);let queries=[];
  Object.assign(o,{historicalSupported:()=>true,historicalPermission:()=>true,yieldUi:async()=>{},sync:async()=>({added:1,reviewIds:[]}),requestHistoricalPage:async(d,date,id)=>{queries.push([date,id]);return pages.shift()||{ok:false,status:'worker-unavailable'};}});return {o,queries};
 }
 (async()=>{

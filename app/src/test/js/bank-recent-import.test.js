@@ -15,7 +15,7 @@ async function scenario(status,mode='recent',permission=true,extra={}){
  const old={scannedThrough:now-3*day,configuredStartAt:now-4*day};
  const context={Date:class extends Date{static now(){return now;}},S:{tab:'home'},Set,Number,Math,Object,confirm:()=>true,AndroidBridge:{requestHistoricalSmsPermission(){}},toast(){},render(){renders++;},canWrite:()=>true,BankIngestionCore:I,SanadExtStorage:{get:async k=>writes[k]||old,set:async(k,v)=>{if(extra.failKey===k)return false;writes[k]=JSON.parse(JSON.stringify(v));return true;}}};
  vm.createContext(context);
- const inbox=vm.runInContext('({'+html.slice(start,end)+'})',context);
+ const inbox=vm.runInContext('({'+html.slice(html.indexOf('  updateImportProgress(){'),html.indexOf('  homeImportHtml(){'))+html.slice(start,end)+'})',context);
  Object.assign(inbox,{historicalSupported:()=>true,historicalPermission:()=>permission,yieldUi:async()=>{},cancelHistoricalImport(){},requestHistoricalPage:async(days,date,id)=>{queries.push({days,date,id});return ['complete','processing-failed','cancel-last','navigate-last'].includes(status)?{ok:true,done:true,scanned:2,financialCandidates:1}:{ok:false,status};},sync:async()=>{if(status==='processing-failed')throw Error('batch failed');if(status==='cancel-last')inbox.historicalCancelRequested=true;if(status==='navigate-last')context.S.tab='tx';return {added:1,parsed:1,duplicates:0,review:0,reviewIds:[]};}});
  await inbox.importHistoricalSms(0,{mode,fromDate:now-4*day,configuredStartAt:now-4*day});
  return {writes,queries,inbox,renders};
@@ -52,8 +52,8 @@ async function scenario(status,mode='recent',permission=true,extra={}){
 {
  const from={id:'bank',type:'bank',currency:'AED',openingBalance:1000},to={id:'credit',type:'credit',currency:'AED',baselinePartial:true};
  const state={accounts:[from,to],transactions:[]};
- const a=html.indexOf('  applyReconciliation(parsed,plan){'),b=html.indexOf('  async commitPlan(parsed,plan){',a);
- const ctx={S:state,Date,Number,Math,isFiniteNumberLike:v=>v!=null&&v!==''&&Number.isFinite(Number(v)),Finance:{getAccount:id=>state.accounts.find(x=>x.id===id)},FinanceCore:{accountBalanceAt:()=>1000,creditAvailableCalculated:()=>null}};
+ const a=html.indexOf('  applyReconciliation(parsed,plan,state=S){'),b=html.indexOf('  async commitPlan(parsed,plan){',a);
+ const ctx={S:state,Date,Number,Math,isFiniteNumberLike:v=>v!=null&&v!==''&&Number.isFinite(Number(v)),Finance:{getAccount:id=>state.accounts.find(x=>x.id===id)},FinanceCore:{getAccount:(s,id)=>s.accounts.find(x=>x.id===id),accountBalanceAt:()=>1000,creditAvailableCalculated:()=>null}};
  ctx.SanadMoneyCore=require('../../main/assets/js/money-core');
  vm.createContext(ctx);const inbox=vm.runInContext('({'+html.slice(a,b)+'})',ctx);
  inbox.applyReconciliation({kind:'card_repayment',postedAt:now,availableBalance:null,availableCredit:500},{transaction:{type:'transfer',fromAccountId:'bank',toAccountId:'credit'}});

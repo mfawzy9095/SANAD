@@ -110,6 +110,31 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  const scan=await page.evaluate(()=>SanadBankInbox.lastRecentImport);assert(scan.fromDate>0&&scan.throughDate>=scan.fromDate);
  pass('Bounded direct native SMS scan imports a just-arrived message once after earlier checkpoint');
 
+ // Real foreground service and provider rows, no timer/mock bridge substitution.
+ adb('shell','pm','grant',pkg,'android.permission.POST_NOTIFICATIONS');
+ const fixtureDate=Date.now()-5000;
+ adb('shell','for n in $(seq 1 160); do content insert --uri content://sms/inbox --bind address:s:QAPROGRESS --bind body:s:QA_PROGRESS_ONLY --bind date:l:'+fixtureDate+' >/dev/null || exit 1; done');
+ assert.equal(await page.evaluate(()=>AndroidBridge.beginSmsImportForeground()),true);
+ for(let n=0;n<30;n++){
+  if(adb('shell','dumpsys','activity','services',pkg).includes('isForeground=true'))break;
+  await new Promise(r=>setTimeout(r,100));
+ }
+ assert(adb('shell','dumpsys','activity','services',pkg).includes('isForeground=true'),'Native service must actually enter foreground');
+ const txBeforeBackground=await page.evaluate(()=>JSON.stringify(S.transactions));
+ await page.evaluate(()=>{window.qaImportDone=false;SanadBankInbox.importHistoricalSms(0,{fromDate:1}).then(()=>{window.qaImportDone=true;});});
+ await page.waitForFunction(()=>SanadBankInbox.historicalImporting&&SanadBankInbox.historicalProgress?.scanned>=20);
+ assert.equal(await page.evaluate(()=>window.qaImportDone),false,'Scan must still be active before HOME');
+ adb('shell','input','keyevent','KEYCODE_HOME');
+ await page.waitForFunction(()=>window.qaImportDone);
+ const backgroundScan=await page.evaluate(()=>SanadBankInbox.lastHistoricalImport);
+ assert.equal(backgroundScan.status,'complete');assert(backgroundScan.total.scanned>=160);
+ assert.equal(backgroundScan.totalCount,backgroundScan.total.scanned,'Known total comes from real SMS provider');
+ assert.equal(await page.evaluate(()=>JSON.stringify(S.transactions)),txBeforeBackground);
+ for(let n=0;n<30&&adb('shell','dumpsys','activity','services',pkg).includes('isForeground=true');n++)await new Promise(r=>setTimeout(r,100));
+ assert(!adb('shell','dumpsys','activity','services',pkg).includes('isForeground=true'),'Foreground service stops after completion');
+ adb('shell','am','start','-n',pkg+'/com.sanad.v9test.MainActivity');
+ pass('Native foreground SMS import completes while app is behind HOME; actual count, unchanged ledger, service cleanup');
+
  await page.waitForFunction(()=>Number(getComputedStyle(document.getElementById('toast')).opacity)<0.01&&Number(getComputedStyle(document.getElementById('backdrop')).opacity)<0.01&&Number(getComputedStyle(document.querySelector('#view .wallet-hero')||document.getElementById('view')).opacity)>0.99);
  await page.screenshot({path:path.join(out,'android-home.png')});assert.deepEqual(errors,[]);
  fs.writeFileSync(path.join(out,'results.json'),JSON.stringify({status:'PASS',environment:'Android emulator API 35; real APK and AndroidBridge; synthetic SMS',webview:adb('shell','dumpsys','webviewupdate').split('\n').filter(s=>s.includes('Current WebView package')).join('\n'),results,errors},null,2));

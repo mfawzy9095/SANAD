@@ -14,18 +14,19 @@ const a=html.indexOf('const SanadBankInbox = {'),b=html.indexOf('\n};',a);
 const inboxCode='('+html.slice(a+'const SanadBankInbox = '.length,b+2)+')';
 const clone=v=>JSON.parse(JSON.stringify(v));
 function harness(options={}){
- let now=Date.UTC(2026,9,4,12),seq=0,disk=empty(),failFinance=false,failKey=null;
+ let now=Date.UTC(2026,9,4,12),seq=0,disk=empty(),failFinance=false,failKey=null,writes=0;
  const store={},acks=[],queries=[];const initial=empty();initial.settings.bankSmsStartAt=now-30*86400000;
  class Clock extends Date{constructor(...v){super(...(v.length?v:[now]));}static now(){return now;}}
  const ctx={S:initial,Date:Clock,Set,Map,Number,Math,Object,Infinity,_dataReplacementInFlight:false,canWrite:()=>true,uid:p=>p+'_'+(++seq),toast(){},render(){},closeSheet(){},BankIngestionCore:I,BankMessageCore:M,FinanceCore:F,isFiniteNumberLike:v=>v!=null&&v!==''&&Number.isFinite(Number(v)),AndroidBridge:{acknowledgeBankNotifications:v=>acks.push(...JSON.parse(v))},SanadExtStorage:{get:async(k,f)=>k in store?clone(store[k]):f,set:async(k,v)=>{if(k===failKey)return false;store[k]=clone(v);return true;}}};
  ctx.Finance={ensureAllPrimaries(){},getAccount:id=>ctx.S.accounts.find(x=>x.id===id)};
  ctx.SanadMoneyCore=Money;
- const mutator=Mutation.createMutationService({canWrite:()=>true,snapshotState:()=>clone(ctx.S),loadState:s=>{ctx.S=clone(s);},fingerprint:State.stateFingerprint,validateState:s=>Schema.validateStateStrict(s),writeSafetySnapshot:async()=>({ok:true}),verifiedWrite:async s=>{if(failFinance)return {ok:false,restored:true};disk=clone(s);return {ok:true};},tryRestore:async s=>{disk=clone(s);return true;}});
+ const mutator=Mutation.createMutationService({canWrite:()=>true,snapshotState:()=>clone(ctx.S),loadState:s=>{ctx.S=clone(s);},fingerprint:State.stateFingerprint,validateState:s=>Schema.validateStateStrict(s),writeSafetySnapshot:async()=>({ok:true}),verifiedWrite:async s=>{writes++;if(failFinance)return {ok:false,restored:true};disk=clone(s);return {ok:true};},tryRestore:async s=>{disk=clone(s);return true;}});
  ctx.commitCriticalMutation=fn=>mutator.run(fn);
+ ctx.snapshotState=()=>clone(ctx.S);ctx.stateFingerprint=State.stateFingerprint;ctx.loadStateInto=s=>{ctx.S=clone(s);};
  vm.createContext(ctx);let inbox;
  const boot=()=>{inbox=vm.runInContext(inboxCode,ctx);Object.assign(inbox,{supported:()=>true,historicalSupported:()=>true,historicalPermission:()=>true,yieldUi:async()=>{},readNative:()=>inbox.smsReviewEvents,open:async()=>inbox.syncImpl({viewReview:true}),requestHistoricalPage:async(days,date,id,limit,through)=>{queries.push({date,through});return {ok:true,done:true,scanned:0,messages:[]};}});inbox.smsReviewEvents=clone(store.bankSmsReviewEvents||[]);return inbox;};
  boot();
- return {ctx,store,acks,queries,get inbox(){return inbox;},get now(){return now;},advance:ms=>{now+=ms;},failFinance:v=>{failFinance=v;},failKey:k=>{failKey=k;},restart:()=>{ctx.S=clone(disk);boot();},persist:async()=>ctx.commitCriticalMutation(()=>true)};
+ return {ctx,store,acks,queries,get writes(){return writes;},get inbox(){return inbox;},get now(){return now;},advance:ms=>{now+=ms;},failFinance:v=>{failFinance=v;},failKey:k=>{failKey=k;},restart:()=>{ctx.S=clone(disk);boot();},persist:async()=>ctx.commitCriticalMutation(()=>true)};
 }
 const salary=h=>({id:'synthetic-salary',title:'Emirates NBD',packageName:'sms:ENBD',postedAt:h.now-60000,text:'تم ايداع الراتب AED 9,000.00 في حسابك .012XXX50XXX01 الرصيد المتوفر هو AED 9,001.66'});
 const review=h=>({id:'synthetic-review',title:'EI SMS',packageName:'sms:EI',postedAt:h.now-10000,text:'عملية دفع ببطاقة الائتمان المنتهية بالرقم: 0308 لدى: TESTSHOP المبلغ: AED 25.00 التاريخ: 04/10/2026, 9:05 الحد المتوفر: 800.00 AED'});
@@ -94,5 +95,13 @@ const scan=(h,events)=>h.inbox.syncImpl({events,minPostedAt:h.ctx.S.settings.ban
  const available=harness();available.ctx.S.accounts.push({...wallet,openingBalanceKnown:true,openingBalance:300});available.ctx.S=Schema.migrate(available.ctx.S);await available.persist();
  assert.equal((await available.inbox.commitPlan(parsed,plan)).ok,true);
  assert.equal(available.ctx.S.accounts[0].bankReconciliation.difference,null,'available balance is not comparable with ledger balance');
+ // A provider page is one durable financial mutation, including its terminal decisions.
+ const batch=harness();const rows=Array.from({length:20},(_,n)=>({...salary(batch),id:'batch-'+n,postedAt:batch.now-60000+n,text:'Purchase AED '+(10+n)+'.00 at SYNTHETIC '+n+' using debit card ending 7654. Available balance AED 900.00. Transaction reference BATCH'+String(n).padStart(4,'0')}));
+ const failedBatch=await batch.inbox.syncImpl({events:rows,historical:true,force:true});
+ assert.equal(failedBatch.ok===false,false);assert.equal(batch.ctx.S.transactions.length,20);assert.equal(batch.writes,1,'one atomic verified financial write per page');
+ batch.restart();await batch.inbox.syncImpl({events:rows,historical:true,force:true});assert.equal(batch.ctx.S.transactions.length,20);
+ const failedPage=harness();failedPage.failFinance(true);const noSave=await failedPage.inbox.syncImpl({events:rows,historical:true,force:true});assert.equal(noSave.ok,false);assert.equal(failedPage.ctx.S.transactions.length,0);assert.equal(failedPage.acks.length,0);assert.equal(I.eventDecision(failedPage.ctx.S,'batch-0'),null);
+ failedPage.failFinance(false);await failedPage.inbox.syncImpl({events:rows,historical:true,force:true});assert.equal(failedPage.ctx.S.transactions.length,20);failedPage.restart();assert.equal(failedPage.ctx.S.transactions.length,20);
+ console.log('Atomic page: 20 postings, one verified financial write, durable decisions, rollback and retry: PASS');
  console.log('Durable financial decisions, dismissal/restart/backup, write failures, frozen starts and compatible checkpoints: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});

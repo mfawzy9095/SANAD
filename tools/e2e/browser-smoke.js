@@ -136,6 +136,8 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.locator('#sanadFullImport').setInputFiles(backupPath);await page.locator('.dialog-backdrop.on #dlgOk').click();
  await page.waitForFunction(expected=>stateFingerprint(snapshotState())===expected,fp);
  assert(await page.evaluate(async id=>!!(await SanadExtStorage.getReceipt(id)),expenseId));record('Full backup export/restore with receipt and fingerprint equality');
+ // Full restore also finishes receipt/feature writes after the financial fingerprint changes.
+ await page.waitForFunction(()=>!_dataReplacementInFlight&&!_criticalMutationInFlight&&!_financialFlowInFlight);
  // Add a second account and transfer through the actual forms.
  await page.evaluate(()=>openAccountSheet(null,'bank'));
  await page.locator('#wName').fill('QA Savings');await page.locator('#wBalance').fill('0');await page.locator('#wOpeningKnown').check();
@@ -273,6 +275,32 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).walletAmount,pendingId),95.5);
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),pendingBefore.count+1);
  record('Known foreign purchase retained without settlement; incomplete report; durable same-event settlement, exact fees and repeat deduplication');
+ const autoBefore=await page.evaluate(id=>({count:S.transactions.length,balance:Finance.accountBalance(id)}),bankId);
+ await page.evaluate(()=>{window.__qaRows=[{id:'qa-late-original',title:'EmiratesNBD',packageName:'sms:ENBD',postedAt:Date.now(),text:'Purchase USD 10.00 at Synthetic Late Shop using debit card ending 6452. Transaction reference AUTOFX01'}];});
+ await page.evaluate(()=>SanadBankInbox.refreshRecentSms());await page.evaluate(()=>SanadBankInbox.openCorrection('qa-late-original'));
+ await page.locator('#bankFixRetainPending').check();await page.locator('[data-sanad-act="bank-fix-save"]').click();
+ await page.waitForFunction(()=>document.getElementById('sheet').dataset.sheetType==='bank-inbox'&&!SanadBankInbox.syncing&&S.transactions.some(t=>t.bankImportEventId==='qa-late-original'));
+ const autoId=await page.evaluate(()=>S.transactions.find(t=>t.bankImportEventId==='qa-late-original').id);
+ await page.evaluate(()=>{const date=S.transactions.find(t=>t.bankImportEventId==='qa-late-original').date;window.__qaRows=[{id:'qa-late-proof',title:'EmiratesNBD',packageName:'sms:ENBD',postedAt:Date.now(),text:'Purchase settlement completed. Original purchase: USD 10.00. Original reference: AUTOFX01. Purchase date: '+date+'. Settled amount excluding fees: AED 37.00. Total fees: AED 1.00. Debit card ending 6452.'}];});
+ await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
+ assert.equal(await page.evaluate(()=>S.transactions.length),autoBefore.count+1);
+ assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),Math.round((autoBefore.balance-38)*100)/100);
+ assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).bankSettlementEvidence.source,autoId),'bank-message');
+ assert.equal(await page.evaluate(()=>SanadBankInbox.lastHistoricalImport.total.updated),1);
+ assert.equal(await page.evaluate(()=>SanadBankInbox.lastHistoricalImport.total.added),0);
+ await page.evaluate(()=>{const copy={...window.__qaRows[0],id:'qa-late-notification',postedAt:Date.now()};window.__qaRows.push(copy);});await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
+ await page.reload();await page.waitForFunction(()=>S.ready&&SanadV9.initialized);
+ assert.equal(await page.evaluate(()=>S.transactions.length),autoBefore.count+1);assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).bankSettlementAudit.length,autoId),1);
+ record('Late bank settlement replaces original purchase, counts an update, retains proof and survives cross-channel repeat/reload');
+ const historicalBeforeLearning=await page.evaluate(()=>JSON.stringify(S.transactions));
+ await page.evaluate(()=>{closeSheet();go('settings');});await page.locator('[data-sanad-act="bank-learning"]').click();
+ const ruleButton=page.locator('[data-sanad-act="bank-learning-toggle"][data-learning-type="template"][data-enabled="false"]').first();
+ const ruleId=await ruleButton.getAttribute('data-id');await ruleButton.click();
+ await page.waitForFunction(id=>S.settings.bankLearningRules.find(r=>r.id===id)?.enabled===false&&!_criticalMutationInFlight,ruleId);
+ await page.reload();await page.waitForFunction(()=>S.ready&&SanadV9.initialized);
+ assert.equal(await page.evaluate(id=>S.settings.bankLearningRules.find(r=>r.id===id).enabled,ruleId),false);
+ assert.equal(await page.evaluate(()=>JSON.stringify(S.transactions)),historicalBeforeLearning);
+ record('Learning screen revokes a saved template durably without changing historical transactions');
  const perfContext=await browser.newContext(),perfPage=await perfContext.newPage();perfPage.on('pageerror',e=>errors.push(e.message));
  await perfPage.goto(process.env.SANAD_QA_URL||'http://127.0.0.1:8765');await perfPage.waitForFunction(()=>typeof S!=='undefined'&&S.ready&&SanadV9.initialized);
  if(await perfPage.locator('#onboard').isVisible())await perfPage.locator('[onclick="onboardSkip()"]').click();await perfPage.waitForFunction(()=>!document.getElementById('app').hidden&&(!document.getElementById('sanadBootSplash')||getComputedStyle(document.getElementById('sanadBootSplash')).visibility==='hidden')&&!_criticalMutationInFlight&&!_dataReplacementInFlight&&!_financialFlowInFlight&&!SanadBankInbox.syncing&&!SanadBankInbox.historicalImporting&&!SanadBankInbox._recentStarting);
