@@ -37,3 +37,7 @@ for(const [index,[text,expected]] of acceptance.entries()){
 }
 assert.equal(wrongPosting,0);
 console.log(JSON.stringify({suite:'sms-variants-acceptance',total:acceptance.length,recognized,review,posted,wrongPosting,wrongPostingRate:wrongPosting/acceptance.length,recognitionCoverage:recognized/acceptance.length,reviewRate:review/acceptance.length}));
+const differentBalanceCurrency=M.parse({sender:'BanK-AlAhly',text:'تم خصم 63.25EGP من بطاقة الخصم المباشر رقم 4567 عند Synthetic Store يوم 03/02/2026 الساعه 12:10 المتاح 720.50 USD للمزيد إتصل ب 19000'});
+assert.equal(differentBalanceCurrency.amount,63.25);
+assert.equal(differentBalanceCurrency.currency,'EGP');
+assert.equal(differentBalanceCurrency.availableBalanceCurrency,'USD','explicit observed balance currency must not be relabeled');
