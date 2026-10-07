@@ -357,7 +357,7 @@
     }
     if(!parsed)return review('unrecognized');
     if(!parsed.transactionRef){const ref=normalized.match(/\b(?:TR\s+REF|transaction\s+(?:id|reference)|reference|TID|ref)\s*[:#-]?\s*([A-Za-z0-9_-]{4,40})/i);if(ref)parsed.transactionRef=ref[1];}
-    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.9-financial-contract';parsed.executionStatus=parsed.executionStatus||'completed';
+    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.10-financial-contract';parsed.executionStatus=parsed.executionStatus||'completed';
     // Card-acquiring language also describes wallet funding; ownership/purpose is not in the merchant label.
     if(parsed.kind==='purchase'&&/^(?:e\s*(?:&|and)\s*money|du\s*pay)(?:\s*[,;]|\s*$)/i.test(parsed.merchant||''))parsed.reviewReason='wallet-funding-purpose-unconfirmed';
     if(parsed.kind==='investment_sale'){parsed.reviewReason='investment-non-money-review';return parsed;}

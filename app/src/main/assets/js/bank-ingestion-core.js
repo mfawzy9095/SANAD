@@ -914,9 +914,9 @@
     const hold=parsed&&matchingReviewHold(state,parsed);
     if(hold)return {action:'review',reason:hold.reason,confidence:0};
     if(!parsed||!parsed.recognized)return {action:'review',reason:(parsed&&parsed.reason)||'unrecognized',confidence:0};
+    if(parsed.reviewReason)return {action:'review',reason:parsed.reviewReason,confidence:0};
     if(!parsed.bankId&&!parsed.providerId&&!findCustomInstitutionByHint(state,parsed)&&!matchLearnedRule(parsed,state))return {action:'review',reason:'source-not-identified',confidence:0};
     if(parsed.kind==='balance_observation')return planBalanceObservation(parsed,state||{},uid);
-    if(parsed.reviewReason)return {action:'review',reason:parsed.reviewReason,confidence:0};
     const manual=manualDuplicateCandidate(parsed,state);
     if(manual)return {action:'review',reason:'possible-manual-duplicate',existingTransactionId:manual.id,confidence:0};
     const learnedRule=matchLearnedRule(parsed,state);
@@ -949,6 +949,7 @@
     if(identityRoute.reason==='account-identity-history-review')return {action:'review',reason:identityRoute.reason,confidence:0};
     const initialRoute=route;
     const direct=autoEligible(parsed,route);
+    if(direct.reason==='fee-review-required'&&route&&route.account&&route.instrument)return {action:'review',reason:direct.reason,confidence:0};
     if(['refund-balance-review','refund-instrument-required'].includes(direct.reason))return {action:'review',reason:direct.reason,confidence:0};
     if(direct.ok){
       const create={institutions:[],accounts:[],instruments:[],beneficiaries:[]};
