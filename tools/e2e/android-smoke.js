@@ -4,6 +4,7 @@
 
 const {execFileSync}=require('child_process');
 const fs=require('fs'),path=require('path'),assert=require('assert/strict');
+const {findAppTarget}=require('./android-devtools-target');
 const pkg=process.env.SANAD_QA_PACKAGE||'com.sanad.v9test.forensicqa.stable',out=process.env.SANAD_QA_OUTPUT||'/tmp/sanad-android-qa';fs.mkdirSync(out,{recursive:true});
 const results=[],errors=[];let browser,page;
 const adb=(...args)=>execFileSync('adb',args,{encoding:'utf8'}).trim();
@@ -22,13 +23,14 @@ const trustFixtureRows=()=>{
 const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);};
 (async()=>{
  adb('shell','am','start','-n',pkg+'/com.sanad.v9test.MainActivity');
- for(let n=0;n<60;n++){
-  const sockets=adb('shell','cat','/proc/net/unix');const match=sockets.match(/@(webview_devtools_remote_\d+)/);
-  if(match){adb('forward','tcp:9222','localabstract:'+match[1]);break;}
-  await new Promise(r=>setTimeout(r,1000));
- }
- const targets=await (await fetch('http://127.0.0.1:9222/json/list')).json();
- const target=targets.find(t=>t.type==='page');assert(target);
+ const discovery=[];
+ const target=await findAppTarget({adb,fetchTargets:async()=>{
+  const response=await fetch('http://127.0.0.1:9222/json/list',{signal:AbortSignal.timeout(5000)});
+  assert(response.ok,'DevTools target list request failed');return response.json();
+ },wait:ms=>new Promise(r=>setTimeout(r,ms)),onAttempt:entry=>{
+  discovery.push(entry);fs.writeFileSync(path.join(out,'devtools-targets.json'),JSON.stringify(discovery,null,2));
+ }});
+ console.log('Attached app WebView:',target.id,target.url);
  const socket=new WebSocket(target.webSocketDebuggerUrl);await new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});});
  let seq=0;const pending=new Map();
  socket.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.id){const p=pending.get(m.id);if(p){pending.delete(m.id);clearTimeout(p.timer);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}}else if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.text);});
@@ -111,5 +113,5 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  await page.waitForFunction(()=>Number(getComputedStyle(document.getElementById('toast')).opacity)<0.01&&Number(getComputedStyle(document.getElementById('backdrop')).opacity)<0.01&&Number(getComputedStyle(document.querySelector('#view .wallet-hero')||document.getElementById('view')).opacity)>0.99);
  await page.screenshot({path:path.join(out,'android-home.png')});assert.deepEqual(errors,[]);
  fs.writeFileSync(path.join(out,'results.json'),JSON.stringify({status:'PASS',environment:'Android emulator API 35; real APK and AndroidBridge; synthetic SMS',webview:adb('shell','dumpsys','webviewupdate').split('\n').filter(s=>s.includes('Current WebView package')).join('\n'),results,errors},null,2));
-})().catch(async e=>{console.error(e);fs.writeFileSync(path.join(out,'results.json'),JSON.stringify({status:'FAIL',results,errors,error:e.message},null,2));if(page)try{await page.screenshot({path:path.join(out,'failure.png')});}catch(_){}process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();});
+})().catch(async e=>{console.error(e);fs.writeFileSync(path.join(out,'results.json'),JSON.stringify({status:'FAIL',results,errors,error:e.message},null,2));try{fs.writeFileSync(path.join(out,'failure-logcat.txt'),execFileSync('adb',['logcat','-d','-t','1000'],{encoding:'utf8',timeout:15000,maxBuffer:4*1024*1024}));}catch(_){}if(page)try{await page.screenshot({path:path.join(out,'failure.png')});}catch(_){}process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();});
 
