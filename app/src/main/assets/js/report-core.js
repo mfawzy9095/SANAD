@@ -18,6 +18,7 @@
   function isRefund(t){return !!(t&&(t.financialEvent==='purchase-refund'||t.bankImportEvidence&&t.bankImportEvidence.kind==='refund'));}
   function reportUncertainty(t,account){
     if(!account)return 'account-unresolved';
+    if(t.settlementStatus==='pending')return 'fx-review-required';
     const kind=(t.bankImportEvidence||{}).kind||String(t.bankImportKey||'').split('|')[2]||null;
     const imported=!!(t.bankImportKey||t.bankImportEventId||t.bankImportEvidence);
     const origin=t.economicOrigin||{};
@@ -84,13 +85,13 @@
       if(t.type==='expense'){
         const acc=getAccount(state,t.accountId);
         if(!acc||acc.country!==o.country)continue;
-        const gross=reportMoney(t.walletAmount!=null?t.walletAmount:t.amount,acc.currency);
+        const gross=t.settlementStatus==='pending'?null:reportMoney(t.walletAmount!=null?t.walletAmount:t.amount,acc.currency);
         const splitFee=t.bankPrincipalAmount!=null&&t.bankFeeEvidence&&t.bankFeeEvidence.confirmed&&t.bankFeeEvidence.currency===acc.currency&&exactTotal([t.bankPrincipalAmount,t.bankFeeEvidence.amount],acc.currency)===gross;
         const amount=splitFee?reportMoney(t.bankPrincipalAmount,acc.currency):gross;
         if(amount!==null&&amount<=0)continue;
         push({
           id:t.id+':exp',sourceTxId:t.id,sourceType:'expense',
-          amount,currency:acc.currency,category:t.cat||'other',
+          amount,currency:acc.currency,originalAmount:t.amount,originalCurrency:t.currency,category:t.cat||'other',
           date:t.date,accountId:t.accountId,instrumentId:t.instrumentId||null,note:t.note||''
         });
         if(splitFee&&Number(t.bankFeeEvidence.amount)>0)push({id:t.id+':bank-fee',sourceTxId:t.id,sourceType:'purchase_fee',amount:reportMoney(t.bankFeeEvidence.amount,acc.currency),currency:acc.currency,category:'bankFee',date:t.date,accountId:t.accountId,note:t.note||''});
@@ -244,7 +245,8 @@
       currency:o.currency,
       month:o.month,
       expenses,incomes,transfers,spendingByCur,incomeByCur,categoryByCur,chartCurrencyRequired,
-      financialReviews:expenses.concat(incomes).filter(e=>e.reviewReason||e.amount===null).map(e=>({sourceTxId:e.sourceTxId,reason:e.reviewReason||'money-invalid',recordedAmount:e.recordedAmount,currency:e.currency})),
+      pendingSettlementCount:expenses.filter(e=>e.reviewReason==='fx-review-required').length,
+      financialReviews:expenses.concat(incomes).filter(e=>e.reviewReason||e.amount===null).map(e=>({sourceTxId:e.sourceTxId,reason:e.reviewReason||'money-invalid',recordedAmount:e.recordedAmount,currency:e.currency,originalAmount:e.originalAmount,originalCurrency:e.originalCurrency})),
       chartBuckets:chartBuckets(o.period,expenses,o.month,o.now)
     };
   }
@@ -338,14 +340,15 @@
     return groupedTotals(rows,e=>e.currency);
   }
   function creditPeriodActivity(state,accountId,range){
-    const r=range||{},purchases=[],repayment=[];const acc=getAccount(state,accountId);
+    const r=range||{},purchases=[],repayment=[];let pendingSettlementCount=0;const acc=getAccount(state,accountId);
     for(const t of (state&&state.transactions)||[]){
       if(!t||!t.date||t.date<r.start||t.date>r.end)continue;
+      if(t.settlementStatus==='pending'&&t.accountId===accountId){pendingSettlementCount++;continue;}
       if(t.type==='expense'&&t.accountId===accountId)purchases.push(t.walletAmount!=null?t.walletAmount:t.amount);
       if(t.type==='income'&&t.accountId===accountId&&isRefund(t))purchases.push(-Number(t.walletAmount!=null?t.walletAmount:t.amount));
       if(t.type==='transfer'&&t.toAccountId===accountId)repayment.push(t.toAmount);
     }
-    return {purchases:purchases.length?exactTotal(purchases,acc&&acc.currency):0,repaymentPrincipal:repayment.length?exactTotal(repayment,acc&&acc.currency):0};
+    return {purchases:pendingSettlementCount?null:(purchases.length?exactTotal(purchases,acc&&acc.currency):0),pendingSettlementCount,repaymentPrincipal:repayment.length?exactTotal(repayment,acc&&acc.currency):0};
   }
 
   function categoryPieBuckets(categoryTotals){

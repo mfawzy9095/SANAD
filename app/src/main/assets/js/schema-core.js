@@ -152,7 +152,7 @@
       } else if (t.type === 'expense' || t.type === 'income'){
         const acc = filled.accounts.find(a => a.id === t.accountId);
         if (!t.currency && acc) t.currency = acc.currency;
-        if (t.walletAmount == null && isFiniteNumberLike(t.amount)){
+        if (t.settlementStatus !== 'pending' && t.walletAmount == null && isFiniteNumberLike(t.amount)){
           if (!acc || !t.currency || t.currency === acc.currency) t.walletAmount = Number(t.amount);
           else if (isFiniteNumberLike(t.fxRate) && Number(t.fxRate) > 0)
             t.walletAmount = Math.round(Number(t.amount) * Number(t.fxRate) * 100) / 100;
@@ -403,7 +403,7 @@
       if (t.type === 'expense' || t.type === 'income'){
         const acc = out.accounts.find(a => a.id === t.accountId);
         if (!t.currency && acc) t.currency = acc.currency;
-        if (t.walletAmount == null && isFiniteNumberLike(t.amount)){
+        if (t.settlementStatus !== 'pending' && t.walletAmount == null && isFiniteNumberLike(t.amount)){
           if (!acc || !t.currency || t.currency === acc.currency) t.walletAmount = Number(t.amount);
           else if (isFiniteNumberLike(t.fxRate) && Number(t.fxRate) > 0) t.walletAmount = Math.round(Number(t.amount) * Number(t.fxRate) * 100) / 100;
         }
@@ -689,6 +689,7 @@
       if (!t.id || typeof t.id !== 'string'){ push('معاملة بدون id صالح'); continue; }
       if (txIds.has(t.id)){ push('معرّف معاملة مكرر: ' + t.id); continue; }
       txIds.add(t.id);
+      if(t.settlementStatus==='pending'&&t.type!=='expense')push('حالة تسوية غير صالحة: '+t.id);
       if (!SUPPORTED_TX_TYPES.includes(t.type)){ push('نوع معاملة غير صالح: ' + t.id); continue; }
       if (!isValidIsoDate(t.date)) push('تاريخ معاملة غير صالح: ' + t.id);
       if (t.created != null && !isFiniteNumberLike(t.created)) push('وقت إنشاء معاملة غير صالح: ' + t.id);
@@ -700,10 +701,13 @@
         const a = accById.get(t.accountId);
         if (!a) push('حساب المعاملة غير موجود: ' + t.id);
         pos(t.amount, 'مبلغ المعاملة غير صالح: ' + t.id);
-        pos(t.walletAmount, 'مبلغ الحساب غير صالح: ' + t.id);
+        const pending=t.settlementStatus==='pending';
+        if(pending){
+          if(t.type!=='expense'||!a||t.currency===a.currency||t.walletAmount!=null||t.fxRate!=null||!t.instrumentId||!t.bankImportEventId||t.bankImportEvidence?.kind!=='purchase'||t.bankImportEvidence?.executionStatus!=='completed')push('شراء ينتظر تسوية غير صالح: '+t.id);
+        }else pos(t.walletAmount, 'مبلغ الحساب غير صالح: ' + t.id);
         if (!currencies.has(t.currency)) push('عملة المعاملة غير صالحة: ' + t.id);
         if (a && t.currency === a.currency && Math.abs(Number(t.walletAmount) - Number(t.amount)) > 0.011) push('مبلغ الحساب لا يطابق المعاملة بنفس العملة: ' + t.id);
-        pos(t.fxRate, 'سعر صرف المعاملة غير صالح: ' + t.id);
+        if(!pending)pos(t.fxRate, 'سعر صرف المعاملة غير صالح: ' + t.id);
         if (t.instrumentId){
           const i = instById.get(t.instrumentId);
           if (!i) push('بطاقة المعاملة غير موجودة: ' + t.id);

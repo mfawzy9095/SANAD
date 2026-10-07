@@ -354,3 +354,27 @@ console.log('bank ingestion schema integration tests: PASS');
  assert.deepEqual(entries.map(e=>e.amount).sort((a,b)=>a-b),[1.25,94.25]);
  console.log('Full backup/schema preserves FX principal, settlement, fee, binding and exact report impact: PASS');
 }
+// A retained foreign purchase is durable without an invented conversion.
+{
+ const Backup=require('../../main/assets/js/backup-core'),Report=require('../../main/assets/js/report-core');
+ const state=empty();
+ state.institutions.push({id:'pending-bank',name:'Emirates NBD',bankRegistryId:'emirates-nbd',country:'UAE',type:'bank'});
+ state.accounts.push({id:'pending-account',name:'Synthetic pending asset',institutionId:'pending-bank',type:'bank',country:'UAE',currency:'AED',openingBalance:1000,openingBalanceKnown:true,openingDebt:0,creditLimit:0});
+ state.paymentInstruments.push({id:'pending-card',name:'Synthetic pending card',accountId:'pending-account',institutionId:'pending-bank',type:'debit_card',country:'UAE',last4:'8765'});
+ const p=Message.parse({id:'pending-schema',sender:'EmiratesNBD',text:'Purchase EUR 23.45 at Synthetic Store using debit card ending 8765. Transaction reference PENDING01',postedAt:Date.UTC(2026,9,6)});
+ const built=Message.buildTransaction(p,Message.resolveRoute(p,state),{uid,allowPendingSettlement:true});assert(built.ok);state.transactions.push(built.transaction);
+ strictOk(state,'Pending purchase strict schema');
+ const packed=Backup.makeFullBackup({state,appVersion:'9.2.12',fingerprint:StateCore.stateFingerprint});
+ const decoded=JSON.parse(JSON.stringify(packed));Backup.validateFullEnvelope(decoded,StateCore.stateFingerprint);
+ const restored=Schema.migrate(decoded.finance);strictOk(restored,'Pending restored schema');
+ assert.equal(restored.transactions[0].walletAmount,null);assert.equal(restored.transactions[0].fxRate,null);
+ assert.equal(Finance.accountBalance(restored,'pending-account'),null);assert.equal(Finance.accountMovement(restored,'pending-account'),0);
+ const ds=Report.buildReportDataset(restored,{country:'UAE',period:'month',month:'2026-10'});
+ assert.equal(ds.pendingSettlementCount,1);assert.equal(ds.spendingByCur.AED,null);
+ const proposal=Ingest.settlePendingPurchase(restored,{transactionId:built.transaction.id,amount:'94.25',fee:'1.25',confirmed:true});assert(proposal.ok);
+ const previous=deepClone(restored);restored.transactions[0]=proposal.transaction;
+ assert.equal(Finance.validateMoneyChanges(restored,previous),null);strictOk(restored,'Settled restored schema');
+ const again=Schema.migrate(JSON.parse(JSON.stringify(restored)));strictOk(again,'Settled restart');assert.equal(Finance.accountBalance(again,'pending-account'),904.5);
+ assert.equal(again.transactions[0].bankSettlementAudit.length,1);assert.equal(again.transactions.length,1);
+ console.log('Pending/settled full backup, strict schema, restart and incomplete report: PASS');
+}

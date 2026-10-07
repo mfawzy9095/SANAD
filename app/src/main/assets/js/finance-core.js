@@ -27,7 +27,7 @@
     const a=getAccount(state,accountId);if(!a)return null;
     const cutoff=asOf==null?Infinity:Number(asOf),terms=[];
     for(const t of (state&&state.transactions)||[]){
-      if(!t)continue;
+      if(!t||t.settlementStatus==='pending')continue;
       const side=t.type==='transfer'?(t.fromAccountId===accountId?'from':t.toAccountId===accountId?'to':null):null;
       const posting=side&&t.bankPostingTimes&&Number(t.bankPostingTimes[side]);
       const at=posting>0?posting:Number(t.created)||0;if(at>cutoff)continue;
@@ -60,6 +60,7 @@
   }
   function hasUnconfirmedEvidence(t,account){
     if(!t)return false;
+    if(t.settlementStatus==='pending')return true;
     const kind=(t.bankImportEvidence||{}).kind||String(t.bankImportKey||'').split('|')[2]||null;
     if(t.type==='income'&&isLiabilityAccount(account)&&kind!=='refund'&&t.financialEvent!=='purchase-refund')return true;
     if(!t.bankImportKey&&!t.bankImportEventId&&!t.bankImportEvidence)return false;
@@ -97,12 +98,21 @@
     const check=(value,currency)=>{const x=Money.decimal(value,currency);return x.ok?null:reject(x.reason);};
     for(const t of (candidate&&candidate.transactions)||[]){
       const old=previous.get(t.id);
-      const fields=['type','amount','currency','walletAmount','walletCurrency','accountId','fromAccountId','toAccountId','fromAmount','toAmount','fromCurrency','toCurrency','fee','fxRate','fxRateSource','bankPrincipalAmount','financialEvent'];
-      if(old&&fields.every(k=>old[k]===t[k])&&old.bankImportEvidence?.kind===t.bankImportEvidence?.kind&&old.economicOrigin?.kind===t.economicOrigin?.kind&&old.economicOrigin?.source===t.economicOrigin?.source&&old.economicOrigin?.eventId===t.economicOrigin?.eventId&&JSON.stringify(old.bankFeeEvidence)===JSON.stringify(t.bankFeeEvidence))continue;
+      const fields=['type','amount','currency','walletAmount','walletCurrency','accountId','fromAccountId','toAccountId','fromAmount','toAmount','fromCurrency','toCurrency','fee','fxRate','fxRateSource','bankPrincipalAmount','financialEvent','settlementStatus'];
+      if(old&&fields.every(k=>old[k]===t[k])&&old.bankImportEvidence?.kind===t.bankImportEvidence?.kind&&old.economicOrigin?.kind===t.economicOrigin?.kind&&old.economicOrigin?.source===t.economicOrigin?.source&&old.economicOrigin?.eventId===t.economicOrigin?.eventId&&JSON.stringify(old.bankFeeEvidence)===JSON.stringify(t.bankFeeEvidence)&&JSON.stringify(old.bankSettlementEvidence)===JSON.stringify(t.bankSettlementEvidence))continue;
+      if(t.settlementStatus==='pending'&&t.type!=='expense')return reject('invalid-pending-settlement');
+      if(old?.settlementStatus==='pending'&&t.settlementStatus==='confirmed'&&['amount','currency','accountId','instrumentId','bankImportEventId','bankImportKey','created'].some(k=>old[k]!==t[k]))return reject('settlement-original-changed');
       const ids=[t.accountId,t.fromAccountId,t.toAccountId].filter(Boolean);ids.forEach(id=>touched.add(id));
       if(t.accountId){
         const a=getAccount(candidate,t.accountId);if(!a)return reject('transaction-account-required');
         if(t.type==='income'&&isLiabilityAccount(a)&&!(t.financialEvent==='purchase-refund'||t.bankImportEvidence&&t.bankImportEvidence.kind==='refund'))return reject('liability-income-review');
+        if(t.settlementStatus==='pending'){
+          const instrument=(candidate.paymentInstruments||[]).find(i=>i.id===t.instrumentId);
+          if(old&&old.settlementStatus!=='pending')return reject('settlement-regression');
+          if(t.type!=='expense'||t.bankImportEvidence?.kind!=='purchase'||t.bankImportEvidence?.executionStatus!=='completed'||!t.bankImportEventId||t.currency===a.currency||t.walletAmount!=null||t.fxRate!=null||!instrument||instrument.accountId!==a.id)return reject('invalid-pending-settlement');
+          const error=check(t.amount,t.currency);if(error||Number(t.amount)<=0)return error||reject('invalid-amount');
+          continue;
+        }
         const wallet=t.walletAmount!==null&&t.walletAmount!==undefined;
         if((t.walletCurrency&&t.walletCurrency!==a.currency)||(!wallet&&t.currency&&t.currency!==a.currency))return reject('transaction-currency-mismatch');
         let error=check(wallet?t.walletAmount:t.amount,a.currency);if(error)return error;
@@ -112,9 +122,15 @@
           if(t.bankFeeEvidence.currency!==a.currency||!feeTotal.ok||feeTotal.minorUnits!==Money.decimal(wallet?t.walletAmount:t.amount,a.currency).minorUnits)return reject('fee-components-unresolved');
         }
         if(t.currency&&t.currency!==a.currency){
-          if(!wallet||!(Number(t.fxRate)>0)||t.fxRateSource!=='user-entry')return reject('transaction-fx-required');
-          const converted=Money.convert(t.amount,t.currency,a.currency,t.fxRate);if(!converted.ok)return reject(converted.reason);
-          if(Money.decimal(t.walletAmount,a.currency).minorUnits!==converted.minorUnits)return reject('transaction-fx-amount-mismatch');
+          if(!wallet||!(Number(t.fxRate)>0)||!['user-entry','bank-settlement'].includes(t.fxRateSource))return reject('transaction-fx-required');
+          const principal=t.bankPrincipalAmount!=null&&t.bankFeeEvidence?.confirmed?t.bankPrincipalAmount:t.walletAmount;
+          if(t.fxRateSource==='bank-settlement'){
+            const evidence=t.bankSettlementEvidence;
+            if(!evidence||!t.bankImportEventId||evidence.currency!==a.currency||!['user-confirmation','bank-message'].includes(evidence.source)||!(Number(evidence.at)>0)||evidence.eventId!==t.bankImportEventId||!Money.decimal(evidence.amount,a.currency).ok||Money.decimal(evidence.amount,a.currency).minorUnits!==Money.decimal(principal,a.currency).minorUnits)return reject('settlement-evidence-required');
+          }else{
+            const converted=Money.convert(t.amount,t.currency,a.currency,t.fxRate);if(!converted.ok)return reject(converted.reason);
+            if(Money.decimal(principal,a.currency).minorUnits!==converted.minorUnits)return reject('transaction-fx-amount-mismatch');
+          }
         }
       }
       if(t.type==='transfer'&&t.fromCurrency&&t.toCurrency&&t.fromCurrency!==t.toCurrency){

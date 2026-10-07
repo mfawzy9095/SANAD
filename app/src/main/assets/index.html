@@ -1893,6 +1893,7 @@ function viewHome(){
     '<div class="cs-sub">أرصدة الأصول من السجل</div>' + liquidityRows +
     '<div style="border-top:1px solid var(--outline);margin:8px 0 4px"></div>' +
     '<div class="cs-sub">صافي مصروف هذا الشهر</div>' + spendingRows +
+    (ds.pendingSettlementCount?'<div class="cs-sub">'+ds.pendingSettlementCount+' شراء هذا الشهر يحتاج تأكيد مبلغ الخصم؛ الإجمالي غير مكتمل.</div>':'') +
     (outboundRows ? '<div style="border-top:1px solid var(--outline);margin:8px 0 4px"></div>' +
       '<div class="cs-sub">تحويلات خارج البلد</div>' + outboundRows : '') + '</div>';
   const liabAccounts = Finance.getCountryAccounts(country).filter(a => isLiabilityAccount(a));
@@ -2240,7 +2241,7 @@ function txRowHtml(t, withSwipe){
   const sourceTxt = inst ? (inst.name + (inst.last4 ? ' ••' + inst.last4 : '')) : (acc ? acc.name : '');
   const origCur = t.currency || (acc ? acc.currency : 'EGP');
   const walletCur = acc ? acc.currency : 'EGP';
-  const fxLine = (origCur !== walletCur && t.fxRate && t.fxRate !== 1)
+  const fxLine = t.settlementStatus==='pending'?'<span class="fx">مبلغ الخصم يحتاج تأكيدًا</span>':(origCur !== walletCur && t.fxRate && t.fxRate !== 1)
     ? '<span class="fx amt-val">≈ ' + amtFull(t.walletAmount, walletCur) + '</span>' : '';
   const inner = '<div class="ic" style="background:' + c.c + '22;color:' + c.c + '">' + c.i + '</div>' +
     '<div class="info"><b>' + tags + esc(c.n) + (t.rec ? ' 🔁' : '') + '</b>' +
@@ -2648,6 +2649,7 @@ function viewRep(){
       const pct = Math.min(100, st.pct);
       let infoTxt;
       if (st.level === 'over') infoTxt = 'تجاوزت الحد بـ ' + amtFull(spent - limit, activeCur);
+      else if(st.level==='unknown')infoTxt='الإجمالي غير مكتمل؛ مبلغ خصم يحتاج تأكيدًا';
       else infoTxt = 'باقي ' + amtFull(limit - spent, activeCur);
       return '<div class="budget-row ' + st.level + '"><div class="icon" style="background:' + c.c + '22;color:' + c.c + '">' + c.i + '</div>' +
         '<div class="body"><div class="top"><span>' + esc(c.n) + '</span><span class="amt amt-val">' + amtText(spent) + ' / ' + amtText(limit) + '</span></div>' +
@@ -2686,7 +2688,8 @@ function viewRep(){
       '<div class="stat-card"><div class="lbl">متوسط المعاملة</div><div class="v amt-val">' + amtText(totalExpCount ? spending/totalExpCount : 0) + '</div></div>' +
       '<div class="stat-card"><div class="lbl">الصافي</div><div class="v ' + (net >= 0 ? 'pos' : 'neg') + ' amt-val">' + amtText(net) + '</div></div>' +
     '</div>' +
-    (ds.financialReviews.length?'<div class="help-box"><span class="hi">⚠️</span><div class="ht">بعض إجماليات التقرير غير مؤكدة. هذه اقتراحات مراجعة؛ السجل المحفوظ لم يتغير.<br>'+ds.financialReviews.slice(0,12).map(e=>'<button type="button" data-txid="'+esc(e.sourceTxId)+'">راجع مصدر/وجهة الحركة '+esc(e.sourceTxId)+' · '+amtFull(e.recordedAmount,e.currency)+'</button>').join('<br>')+'</div></div>':'')+
+    (ds.pendingSettlementCount?'<div class="help-box"><div class="ht">'+ds.pendingSettlementCount+' شراء يحتاج تأكيد مبلغ الخصم بعملة الحساب. إجماليات هذه الفترة غير مكتملة.</div></div>':'')+
+    (ds.financialReviews.length?'<div class="help-box"><span class="hi">⚠️</span><div class="ht">بعض إجماليات التقرير غير مؤكدة. هذه اقتراحات مراجعة؛ السجل المحفوظ لم يتغير.<br>'+ds.financialReviews.slice(0,12).map(e=>'<button type="button" data-txid="'+esc(e.sourceTxId)+'">راجع مصدر/وجهة الحركة '+esc(e.sourceTxId)+' · '+amtFull(e.originalAmount==null?e.recordedAmount:e.originalAmount,e.originalCurrency||e.currency)+'</button>').join('<br>')+'</div></div>':'')+
     overallHtml + budgetSection +
     (pieData.length ?
       '<div class="sec"><h2>التوزيع</h2></div>' +
@@ -3202,6 +3205,7 @@ function openEditTx(id){
   if (!canWrite()){ toast('وضع القراءة فقط'); return; }
   const t = S.transactions.find(x => x.id === id);
   if (!t) return;
+  if(t.settlementStatus==='pending'){SanadBankInbox.openPendingSettlement(id);return;}
   if (t.type === 'adjustment'){ toast('لا يمكن تعديل التسويات'); return; }
   if (t.type === 'transfer'){
     const toAcc = Finance.getAccount(t.toAccountId);
@@ -4555,6 +4559,7 @@ async function delTxConfirm(id){
 function openTxDetails(id){
   const t = S.transactions.find(x => x.id === id);
   if (!t) return;
+  if(t.settlementStatus==='pending'){SanadBankInbox.openPendingSettlement(id);return;}
   const rows = [];
   const hide = S.settings.hideAmounts;
   const moneyRow = (label, val, cur) => [label, hide ? '•••' : (fmt(val) + (cur ? ' ' + Finance.curSymbol(cur) : ''))];
@@ -9450,6 +9455,7 @@ const SanadBankInbox = {
         '<div class="field"><label>المبلغ</label><input id="bankFixAmount" type="number" inputmode="decimal" step="0.01" value="'+esc(String(p.amount||''))+'"></div>'+
         '<div class="field"><label>عملة ومبلغ العملية الأصليان</label><select id="bankFixCurrency">'+curOpts+'</select><div class="field-hint">احتفظ بعملة الشراء الأصلية؛ مبلغ الخصم المؤكد له حقل منفصل.</div></div>'+
         '<div class="field"><label>مبلغ الخصم بعملة الحساب المختار، بدون الرسوم الإضافية</label><input id="bankFixSettlement" type="number" inputmode="decimal" min="0" step="0.01"><div class="field-hint">للشراء الأجنبي فقط: من كشف الحساب، دون تخمين أو تغيير رمز العملة. اترك الدليل للمراجعة إذا لم يتوفر المبلغ.</div></div>'+
+        (p.kind==='purchase'&&r&&r.account&&r.instrument&&p.currency!==r.account.currency?'<div class="field"><label><input id="bankFixRetainPending" type="checkbox"> احفظ الشراء المعروف والكارت؛ مبلغ الخصم بعملة الحساب يحتاج تأكيدًا</label><div class="field-hint">يبقى ظاهرًا للمراجعة، ولن يُحتسب مبلغ تخميني في الرصيد أو التقارير.</div></div>':'')+
         '<div class="field"><label>رسوم إضافية تخصم من حساب المصدر، شاملة الضريبة</label><input id="bankFixFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="اتركها فارغة إذا لم تتأكد"><div class="field-hint">بنفس عملة الحساب المختار. أدخل صفرًا فقط إذا تأكدت أن العملية بلا رسوم إضافية؛ لا تستنتج الرسوم من صيغة نسبة أو فرق الرصيد.</div></div>'+
         '<div class="field"><label>الحساب / الكارت المصدر</label><select id="bankFixSource">'+this.correctionSourceOptions(p,source)+'</select>'+
           (p.cardLast4?'<div class="field-hint">الرسالة تشير إلى كارت ****'+esc(p.cardLast4)+'؛ اختر نفس الكارت حتى يتعلم الربط بدقة.</div>':'')+'</div>'+
@@ -9473,6 +9479,30 @@ const SanadBankInbox = {
       if(!inst.notificationAliases.some(x=>String(x||'').toLowerCase().replace(/\s+/g,' ').trim()===key))inst.notificationAliases.push(alias);
     }
     if(inst.notificationAliases.length>12)inst.notificationAliases=inst.notificationAliases.slice(-12);
+  },
+  openPendingSettlement(id){
+    const tx=S.transactions.find(t=>t.id===id&&t.settlementStatus==='pending');if(!tx)return;
+    const account=Finance.getAccount(tx.accountId),instrument=Finance.getInstrument(tx.instrumentId);if(!account||!instrument)return;
+    openSheet('<div class="sheet-head"><button class="close" data-act="close-sheet">×</button><h2>تأكيد مبلغ الخصم</h2></div><div class="sheet-body">'+
+      '<div class="help-box"><div class="ht">الشراء الأصلي '+amtFull(tx.amount,tx.currency)+'<br>'+esc(account.name)+' · '+esc(instrument.name||'كارت')+' ••••'+esc(instrument.last4||'')+'<br>مبلغ الخصم بعملة الحساب يحتاج تأكيدًا.</div></div>'+
+      '<div class="field"><label>مبلغ الخصم بدون الرسوم ('+esc(account.currency)+')</label><input id="pendingSettlementAmount" type="number" min="0" step="0.01" inputmode="decimal"></div>'+
+      '<div class="field"><label>الرسوم شاملة الضريبة ('+esc(account.currency)+')</label><input id="pendingSettlementFee" type="number" min="0" step="0.01" inputmode="decimal"><div class="field-hint">أدخل صفرًا فقط إذا تأكدت من عدم وجود رسوم إضافية.</div></div>'+
+      '<label><input id="pendingSettlementConfirmed" type="checkbox"> أؤكد أن المبلغ من كشف الحساب ولنفس الشراء والكارت</label>'+
+      '<button class="btn primary" data-sanad-act="bank-settlement-save" data-id="'+esc(id)+'">حفظ التسوية لنفس الشراء</button></div>','pending-settlement');
+  },
+  async savePendingSettlement(id){
+    if(!canWrite())return;
+    const fee=String(document.getElementById('pendingSettlementFee')?.value||'').trim();
+    if(!fee){toast('أكد الرسوم؛ أدخل صفرًا فقط عند التأكد');return;}
+    const proposal=BankIngestionCore.settlePendingPurchase(S,{transactionId:id,amount:document.getElementById('pendingSettlementAmount')?.value,fee,confirmed:!!document.getElementById('pendingSettlementConfirmed')?.checked});
+    if(!proposal.ok){toast('أكد مبلغ الخصم والرسوم ونفس الشراء');return;}
+    const result=await commitCriticalMutation(async()=>{
+      const index=S.transactions.findIndex(t=>t.id===id);
+      if(index<0||JSON.stringify(S.transactions[index])!==JSON.stringify(proposal.before))throw Error('settlement-source-changed');
+      S.transactions[index]=proposal.transaction;return true;
+    });
+    if(!result.ok){toast('تعذر حفظ التسوية؛ الشراء محفوظ للمراجعة');return;}
+    closeSheet();render();toast('تم تأكيد الخصم لنفس الشراء');
   },
   async saveCorrection(id){
     const item=this.items.find(x=>String(x.native.id)===String(id));
@@ -9521,6 +9551,7 @@ const SanadBankInbox = {
     const buildOptions={uid};
     const settlementInput=String((document.getElementById('bankFixSettlement')||{}).value||'').trim();
     if(settlementInput)buildOptions.confirmedSettlementAmount=settlementInput;
+    if(document.getElementById('bankFixRetainPending')?.checked)buildOptions.allowPendingSettlement=true;
     if(currency!==item.parsed.currency){toast('احتفظ بعملة العملية الأصلية وأدخل الخصم في حقل مبلغ الحساب');return;}
     if(['deposit','incoming_transfer'].includes(kind)){
       if(!(document.getElementById('bankFixExternalIncome')||{}).checked){toast(this.reasonLabel('incoming-origin-unconfirmed'));return;}
@@ -9553,11 +9584,11 @@ const SanadBankInbox = {
         S.transactions[index]=built.transaction;
       }else{
         S.transactions.push(built.transaction);
-        if(!confirmIdentity)BankIngestionCore.learnFromApproval(S,corrected,route,{uid,kind});
+        if(!confirmIdentity&&built.transaction.settlementStatus!=='pending')BankIngestionCore.learnFromApproval(S,corrected,route,{uid,kind});
       }
       BankIngestionCore.rememberEventDecision(S,String(item.native.id),'saved',Date.now(),built.transaction.id,{decisionSource:'user-confirmation'});
       this.learnSourceAlias(item,route);
-      this.applyReconciliation(corrected,{transaction:built.transaction,observationAccountId:built.observationAccountId});
+      if(built.transaction.settlementStatus!=='pending')this.applyReconciliation(corrected,{transaction:built.transaction,observationAccountId:built.observationAccountId});
       return true;
     });
     if(!result.ok){render();toast('تعذر حفظ التصحيح');return;}
@@ -9565,7 +9596,7 @@ const SanadBankInbox = {
     await this.sync({force:false});
     render();
     await this.open();
-    toast('تمت الإضافة · SANAD تعلّم الربط');
+    toast(built.transaction.settlementStatus==='pending'?'تم حفظ الشراء · مبلغ الخصم يحتاج تأكيدًا':'تمت الإضافة · SANAD تعلّم الربط');
   },
   async open(){
     await this.sync({force:false,viewReview:true});
@@ -9654,7 +9685,7 @@ const SanadV9 = {
   settingsHtml(){const lang=S.settings.language==='en'?'en':'ar',mode=SanadTheme.mode(),sec=SanadSecurity.cfg.enabled?'مفعّل':'غير مفعّل',langDesc=lang==='en'?'Arabic / English':'العربية / الإنجليزية',enLabel=lang==='en'?'English':'الإنجليزية';return '<div class="sec"><h2>اللغة والمظهر</h2></div><div class="card feature-card"><div class="feature-row"><div><b>🌐 اللغة</b><span>'+langDesc+'</span></div><div class="seg"><button type="button" class="'+(lang==='ar'?'on':'')+'" data-sanad-act="lang" data-value="ar">العربية</button><button type="button" class="'+(lang==='en'?'on':'')+'" data-sanad-act="lang" data-value="en">'+enLabel+'</button></div></div><div class="feature-row"><div><b>🎨 المظهر</b><span>فاتح، داكن أو حسب الجهاز</span></div><div class="seg"><button type="button" class="'+(mode==='light'?'on':'')+'" data-sanad-act="theme" data-value="light">☀️</button><button type="button" class="'+(mode==='dark'?'on':'')+'" data-sanad-act="theme" data-value="dark">🌙</button><button type="button" class="'+(mode==='system'?'on':'')+'" data-sanad-act="theme" data-value="system">◐</button></div></div></div>'+'<div class="sec"><h2>الأمان والخصوصية</h2></div><div class="list"><div class="list-item" data-sanad-act="toggle-security"><div class="li-ico">🔐</div><div class="li-body"><b>قفل بالبصمة / الجهاز</b><span>'+sec+(SanadSecurity.supported()?'':' · يحتاج HTTPS')+'</span></div><div class="li-arrow">›</div></div></div>'+SanadBankInbox.settingsHtml()+'<div class="sec"><h2>السحابة والعائلة</h2></div><div class="list"><div class="list-item" aria-disabled="true"><div class="li-ico">☁️</div><div class="li-body"><b>مؤجل إلى V9.1</b><span>معطّل في النسخة المحلية المستقرة</span></div></div></div>'+'<div class="sec"><h2>نسخة احتياطية كاملة</h2></div><button type="button" class="btn" data-sanad-act="full-export">📦 تصدير كامل مع الفواتير</button><button type="button" class="btn" data-sanad-act="full-import">📥 استيراد نسخة كاملة</button>';},
   async setLanguage(lang){if(!I18nCore.isValidLanguage(lang)||!canWrite())return;const prev=S.settings.language;S.settings.language=lang;const ok=await persist();if(!ok){S.settings.language=prev;return;}render();requestAnimationFrame(()=>SanadI18n.apply(document));},
   async afterStart(fromUnlock=false){SanadTheme.apply();SanadI18n.apply();if(SanadExtStorage.mode==='error')toast('تنبيه: تخزين المرفقات غير متاح مؤقتاً');const validIds=new Set(S.transactions.map(t=>t.id));await SanadExtStorage.pruneReceiptOrphans(validIds);await SanadFamily.pruneMissingTransactions();if(SecurityCrypto.shouldShowLockOverlay({enabled:SanadSecurity.cfg.enabled,unlocked:SanadSecurity.unlocked})){SanadSecurity.show();return;}if(await SanadBankInbox.ensureSmsStart())await SanadBankInbox.refresh();else toast('تعذر حفظ إعدادات سحب الرسائل');hideSanadBootSplash();},
-  async click(el){const a=el.dataset.sanadAct,v=el.dataset.value;if(a==='lang')return this.setLanguage(v);if(a==='theme')return SanadTheme.set(v);if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable();if(a==='amount-visibility')return SanadAmountPrivacy.toggle();if(a==='unlock')return SanadSecurity.unlock();if(a==='recovery-unlock')return SanadSecurity.recovery();if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;}if(a==='remove-receipt')return SanadReceipts.removeCurrent();if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);if(a==='firebase-config')return SanadCloud.openConfig();if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||'');if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle();if(a==='sync-now')return SanadCloud.syncNow();if(a==='verify-phone')return SanadCloud.verifyPhoneSheet();if(a==='send-phone-code')return SanadCloud.sendPhoneCode();if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();if(a==='open-family')return SanadFamily.open();if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||'');if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||'');if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();if(a==='bank-access')return SanadBankInbox.openAccess();if(a==='bank-auto-toggle')return SanadBankInbox.toggleAuto();if(a==='bank-sync')return SanadBankInbox.syncNow();if(a==='bank-sms-recent')return SanadBankInbox.refreshRecentSms();if(a==='bank-sms-config')return SanadBankInbox.openSmsConfig();if(a==='bank-sms-config-save')return SanadBankInbox.saveSmsConfig();if(a==='bank-support-export')return SanadFullBackup.exportSupport();if(a==='bank-sms-resume'){closeSheet();return SanadBankInbox.importHistoricalSms(0,{resume:true});}if(a==='bank-sms-pause')return SanadBankInbox.cancelHistoricalImport('pause');if(a==='bank-sms-cancel')return SanadBankInbox.cancelHistoricalImport('user');if(a==='bank-sms-history')return SanadBankInbox.historicalImporting?SanadBankInbox.cancelHistoricalImport('user'):SanadBankInbox.openHistoricalImportPicker();if(a==='bank-sms-range'){closeSheet();return SanadBankInbox.importHistoricalSms(Number(el.dataset.days)||0);}if(a==='bank-sms-date')return SanadBankInbox.importHistoricalFromDate();if(a==='bank-inbox')return SanadBankInbox.open();if(a==='bank-refresh')return SanadBankInbox.open();if(a==='bank-approve')return SanadBankInbox.approve(el.dataset.id);if(a==='bank-fix')return SanadBankInbox.openCorrection(el.dataset.id);if(a==='bank-fix-save')return SanadBankInbox.saveCorrection(el.dataset.id);if(a==='bank-dismiss')return SanadBankInbox.dismiss(el.dataset.id);if(a==='full-export')return SanadFullBackup.export();if(a==='full-import')return SanadFullBackup.importPicker();}
+  async click(el){const a=el.dataset.sanadAct,v=el.dataset.value;if(a==='lang')return this.setLanguage(v);if(a==='theme')return SanadTheme.set(v);if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable();if(a==='amount-visibility')return SanadAmountPrivacy.toggle();if(a==='unlock')return SanadSecurity.unlock();if(a==='recovery-unlock')return SanadSecurity.recovery();if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;}if(a==='remove-receipt')return SanadReceipts.removeCurrent();if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);if(a==='firebase-config')return SanadCloud.openConfig();if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||'');if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle();if(a==='sync-now')return SanadCloud.syncNow();if(a==='verify-phone')return SanadCloud.verifyPhoneSheet();if(a==='send-phone-code')return SanadCloud.sendPhoneCode();if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();if(a==='open-family')return SanadFamily.open();if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||'');if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||'');if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();if(a==='bank-access')return SanadBankInbox.openAccess();if(a==='bank-auto-toggle')return SanadBankInbox.toggleAuto();if(a==='bank-sync')return SanadBankInbox.syncNow();if(a==='bank-sms-recent')return SanadBankInbox.refreshRecentSms();if(a==='bank-sms-config')return SanadBankInbox.openSmsConfig();if(a==='bank-sms-config-save')return SanadBankInbox.saveSmsConfig();if(a==='bank-support-export')return SanadFullBackup.exportSupport();if(a==='bank-sms-resume'){closeSheet();return SanadBankInbox.importHistoricalSms(0,{resume:true});}if(a==='bank-sms-pause')return SanadBankInbox.cancelHistoricalImport('pause');if(a==='bank-sms-cancel')return SanadBankInbox.cancelHistoricalImport('user');if(a==='bank-sms-history')return SanadBankInbox.historicalImporting?SanadBankInbox.cancelHistoricalImport('user'):SanadBankInbox.openHistoricalImportPicker();if(a==='bank-sms-range'){closeSheet();return SanadBankInbox.importHistoricalSms(Number(el.dataset.days)||0);}if(a==='bank-sms-date')return SanadBankInbox.importHistoricalFromDate();if(a==='bank-inbox')return SanadBankInbox.open();if(a==='bank-refresh')return SanadBankInbox.open();if(a==='bank-approve')return SanadBankInbox.approve(el.dataset.id);if(a==='bank-fix')return SanadBankInbox.openCorrection(el.dataset.id);if(a==='bank-settlement-save')return SanadBankInbox.savePendingSettlement(el.dataset.id);if(a==='bank-fix-save')return SanadBankInbox.saveCorrection(el.dataset.id);if(a==='bank-dismiss')return SanadBankInbox.dismiss(el.dataset.id);if(a==='full-export')return SanadFullBackup.export();if(a==='full-import')return SanadFullBackup.importPicker();}
 };
 
 /* ===== non-destructive wrappers around the stable V8.9.1 core ===== */

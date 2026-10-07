@@ -465,10 +465,11 @@
     if(['purchase','bill_payment','mobile_recharge','deposit','salary','refund','incoming_transfer'].includes(parsed.kind)){
       const account=route.account;if(!account)return {ok:false,reason:'account-required'};const foreign=account.currency!==parsed.currency;
       const settlement=foreign?Money.ledgerValue(opts.confirmedSettlementAmount,account.currency):null;
-      if(foreign&&(!['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)||opts.confirmedSettlementAmount==null||!settlement.ok||settlement.value<=0))return {ok:false,reason:'fx-review-required'};
+      const pending=foreign&&parsed.kind==='purchase'&&opts.allowPendingSettlement===true&&opts.confirmedSettlementAmount==null&&route.instrument&&!!(parsed.bankId||parsed.providerId);
+      if(foreign&&!pending&&(!['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)||opts.confirmedSettlementAmount==null||!settlement.ok||settlement.value<=0))return {ok:false,reason:'fx-review-required'};
       const type=['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)?'expense':'income';
       const merchantName=['purchase','bill_payment','mobile_recharge'].includes(parsed.kind)&&parsed.merchant?String(parsed.merchant).trim():null;
-      return {ok:true,transaction:{id,type,amount:parsed.amount,currency:parsed.currency,accountId:account.id,instrumentId:route.instrument?route.instrument.id:null,walletAmount:foreign?settlement.value:parsed.amount,fxRate:foreign?settlement.value/parsed.amount:1,bankSettlementEvidence:foreign?{amount:settlement.value,currency:account.currency,source:'user-confirmation',at:Date.now(),eventId:parsed.eventId||null}:null,cat:type==='income'?(parsed.kind==='salary'?'salary':'other'):(parsed.category||'other'),merchantName,note:parsed.merchant||parsed.beneficiaryName||'',tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,bankTransactionRef:parsed.transactionRef||null}};
+      return {ok:true,transaction:{id,type,amount:parsed.amount,currency:parsed.currency,accountId:account.id,instrumentId:route.instrument?route.instrument.id:null,walletAmount:foreign?(pending?null:settlement.value):parsed.amount,fxRate:foreign?(pending?null:settlement.value/parsed.amount):1,settlementStatus:foreign?(pending?'pending':'confirmed'):null,fxRateSource:foreign&&!pending?'bank-settlement':null,bankSettlementEvidence:foreign&&!pending?{amount:settlement.value,currency:account.currency,source:'user-confirmation',at:Date.now(),eventId:parsed.eventId||null}:null,cat:type==='income'?(parsed.kind==='salary'?'salary':'other'):(parsed.category||'other'),merchantName,note:parsed.merchant||parsed.beneficiaryName||'',tags:[],date,created:Number(parsed.postedAt)||Date.now(),bankImportKey:key,bankImportEventId:parsed.eventId||null,bankId:parsed.bankId||null,providerId:parsed.providerId||null,bankTransactionRef:parsed.transactionRef||null}};
     }
     if(parsed.kind==='internal_transfer'){
       const from=route.fromAccount,to=route.targetAccount;if(!from||!to)return {ok:false,reason:'internal-transfer-route-required'};if(from.currency!==parsed.currency||to.currency!==parsed.currency)return {ok:false,reason:'fx-review-required'};
@@ -509,6 +510,7 @@
     const built=buildTransactionBase(parsed,route,options);
     if(built.ok&&built.transaction&&parsed.kind==='outgoing_transfer')built.transaction.economicOrigin={kind:'external-destination',source:'user-confirmation',eventId:parsed.eventId||null};
     if(built.ok&&built.transaction&&['deposit','incoming_transfer'].includes(parsed.kind))built.transaction.economicOrigin={kind:'external-income',source:'user-confirmation',eventId:parsed.eventId||null};
+    if(built.ok&&built.transaction&&built.transaction.settlementStatus==='pending'&&feeConfirmed)return {ok:false,reason:'pending-fees-require-settlement'};
     if(built.ok&&built.transaction&&feeConfirmed){
       const tx=built.transaction;
       if(tx.type==='expense'){

@@ -1193,9 +1193,23 @@
     tx.bankPairingBeforeImage=clone(old);
     return {ok:true,transaction:tx,replacesTransactionId:old.id,before:clone(old),observationAccountId:outgoing?from.id:receiver.id};
   }
+  function settlePendingPurchase(state,options){
+    const o=options||{},old=arr(state&&state.transactions).find(t=>t.id===o.transactionId);
+    if(!old||old.settlementStatus!=='pending'||o.confirmed!==true)return {ok:false,reason:'pending-settlement-confirmation-required'};
+    const account=arr(state.accounts).find(a=>a.id===old.accountId),instrument=arr(state.paymentInstruments).find(i=>i.id===old.instrumentId);
+    if(!account||!instrument||instrument.accountId!==account.id)return {ok:false,reason:'settlement-identity-conflict'};
+    const amount=Money.ledgerValue(o.amount,account.currency),fee=Money.ledgerValue(o.fee==null?0:o.fee,account.currency);
+    if(!amount.ok||amount.value<=0||!fee.ok||fee.value<0)return {ok:false,reason:'invalid-settlement-amount'};
+    const total=Money.sum([amount.value,fee.value],account.currency);if(!total.ok)return {ok:false,reason:total.reason};
+    const at=Number(o.now)||Date.now();
+    const transaction=clone(old);
+    Object.assign(transaction,{settlementStatus:'confirmed',walletAmount:total.value,walletCurrency:account.currency,bankPrincipalAmount:amount.value,fxRate:amount.value/old.amount,fxRateSource:'bank-settlement',bankSettlementEvidence:{amount:amount.value,currency:account.currency,source:'user-confirmation',at,eventId:old.bankImportEventId},bankFeeEvidence:{amount:fee.value,currency:account.currency,confirmed:true,source:'manual-review'}});
+    transaction.bankSettlementAudit=arr(old.bankSettlementAudit).concat([{action:'settlement-confirmed',at,source:'user-confirmation',originalAmount:old.amount,originalCurrency:old.currency,settlementAmount:amount.value,settlementCurrency:account.currency,fee:fee.value}]);
+    return {ok:true,transaction,before:clone(old),replacesTransactionId:old.id};
+  }
   return Object.freeze({
     manualImportCandidates,manualDuplicateCandidates,linkManualConfirmation,validateManualImportChanges,preserveImportAudit,auditWithDurableDecisions,
     recentScanStart,compatibleScanCheckpoint,eventDecision,reviewHold,matchingReviewHold,rememberEventDecision,EVENT_DECISION_LIMIT,transferCounterparts,pairOwnTransfer,
-    confirmAccountIdentity,autoEligible,duplicateOf,conflictingReferenceOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
+    settlePendingPurchase,confirmAccountIdentity,autoEligible,duplicateOf,conflictingReferenceOf,semanticDuplicateOf,openingBalanceForObserved,plan,applyPlan,reconciliation,sourceDisplay,learnedMerchantCategory,findCustomInstitutionByHint,sortNotifications,learningSourceKey,templateSignature,matchLearnedRule,routeFromLearnedRule,routeFromManualChoice,rebindAccountInstitution,rebindInstrumentAccount,mergeDuplicateAccount,cardIdentityCompatible,mergeDuplicateInstrument,learnFromApproval
   });
 });

@@ -137,10 +137,10 @@ const state={
     {type:'transfer',toAccountId:'card',toAmount:30,date:'2026-10-01'}
   ]};
   assert.deepStrictEqual(R.creditPeriodActivity(creditState,'card',{start:'2026-09-01',end:'2026-09-30'}),{
-    purchases:200,repaymentPrincipal:70
+    purchases:200,pendingSettlementCount:0,repaymentPrincipal:70
   });
   assert.deepStrictEqual(R.creditPeriodActivity(null,'card',{start:'2026-09-01',end:'2026-09-30'}),{
-    purchases:0,repaymentPrincipal:0
+    purchases:0,pendingSettlementCount:0,repaymentPrincipal:0
   });
 })();
 
