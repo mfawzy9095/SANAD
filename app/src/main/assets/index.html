@@ -8872,6 +8872,10 @@ const SanadBankInbox = {
       const merged=new Map(rows.concat(this.smsReviewEvents||[]).map(n=>[String(n.id),n]));return BankIngestionCore.sortNotifications(Array.from(merged.values()));
     }catch(e){if(strict)throw e;return [];}
   },
+  icon(name){
+    const paths={bank:'M3 9h18L12 3 3 9M5 10v9m7-9v9m7-9v9M3 21h18',sync:'M20 7a8 8 0 0 0-13-3L3 8m0-5v5h5m-4 9a8 8 0 0 0 13 3l4-4m0 5v-5h-5',message:'M4 4h16v12H9l-5 4V4',inbox:'M4 4h16v16H4V4m0 9h5l1 3h4l1-3h5',edit:'m4 16 12-12 4 4-12 12H4v-4m10-10 4 4',pause:'M8 4v16M16 4v16',clock:'M12 8v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18',archive:'M4 7h16v14H4V7M3 3h18v4H3V3m6 8h6',activity:'M3 12h4l3-8 4 16 3-8h4'};
+    return '<svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;flex-shrink:0"><path d="'+(paths[name]||paths.activity)+'"/></svg>';
+  },
   kindLabel(kind){
     return {
       purchase:'شراء',purchase_settlement:'تسوية شراء سابق',salary:'راتب',deposit:'إيداع',refund:'استرداد',
@@ -9193,21 +9197,21 @@ const SanadBankInbox = {
       ' · Duplicates: '+histDuplicates+' · Added: '+histAdded+' · Review: '+histReview+' · Ignored: '+histIgnored;
     const progressDetails=this.historicalImporting?('الفترة: '+new Date(hp.fromDate||0).toLocaleDateString('ar-AE')+' — '+new Date(hp.throughDate||Date.now()).toLocaleDateString('ar-AE')+' · وصل إلى: '+new Date(hp.reachedAt||hp.fromDate||0).toLocaleString('ar-AE')+' · قُرئ '+histScanned+' · أُضيف '+histAdded+' · مكرر '+histDuplicates+' · للمراجعة '+histReview):'اكتمال قراءة الرسائل لا يعني اكتمال المراجعة المالية. الاستكمال بعد إعادة فتح التطبيق يدوي من النقطة المحفوظة.';
     return '<div class="sec"><h2>المزامنة البنكية التلقائية</h2></div><div class="list">' +
-      '<div class="list-item" data-sanad-act="bank-access"><div class="li-ico">🏦</div><div class="li-body"><b>الوصول لإشعارات البنوك والمحافظ</b><span>' +
+      '<div class="list-item" data-sanad-act="bank-access"><div class="li-ico">'+this.icon('bank')+'</div><div class="li-body"><b>الوصول لإشعارات البنوك والمحافظ</b><span>' +
         captureDesc +
       '</span></div><div class="li-arrow">›</div></div>' +
-      '<div class="list-item"><div class="li-ico">📡</div><div class="li-body"><b>حالة الالتقاط</b><span>' +
+      '<div class="list-item"><div class="li-ico">'+this.icon('activity')+'</div><div class="li-body"><b>حالة الالتقاط</b><span>' +
         esc(String(diag.capturedTotal||0))+' إشعار مالي ملتقط · '+esc(lastCapture) + (diag.recoveryRequired?' · تنبيه: ضغط أو فشل التقاط ('+esc(String(diag.captureFailures||diag.captureFailuresInProcess||0))+') — زامن ثم أعد فحص الإشعارات المتاحة وSMS؛ الإشعار المفقود بلا SMS يحتاج إدخالًا يدويًا':'') +
       '</span></div></div>' +
-      '<div class="list-item" data-sanad-act="bank-auto-toggle"><div class="li-ico">'+(auto?'⚡':'⏸️')+'</div><div class="li-body"><b>الإضافة التلقائية</b><span>' +
+      '<div class="list-item" data-sanad-act="bank-auto-toggle"><div class="li-ico">'+this.icon(auto?'activity':'pause')+'</div><div class="li-body"><b>الإضافة التلقائية</b><span>' +
         (auto?'مفعّلة · العمليات عالية الثقة تُسجل تلقائيًا':'متوقفة · ستبقى العمليات للمراجعة') +
       '</span></div><div class="switch '+(auto?'on':'')+'"></div></div>' +
       '<div class="list-item" data-sanad-act="bank-learning"><div class="li-body"><b>الروابط والتعلم</b><span>مراجعة وإيقاف هوية الحساب أو قالب الرسالة أو تصنيف التاجر</span></div><div class="li-arrow">›</div></div>' +
-      '<div class="list-item" data-sanad-act="bank-sync"><div class="li-ico">🔄</div><div class="li-body"><b>مزامنة العمليات الجديدة الآن</b><span>'+syncDesc+'</span></div><div class="li-arrow">›</div></div>' +
-      '<div class="list-item" data-sanad-act="bank-sms-config"><div class="li-ico">🕒</div><div class="li-body"><b>بداية سحب الرسائل من الرئيسية</b><span>'+esc(new Date(this.configuredSmsStart()).toLocaleString('ar-AE'))+'</span></div></div>' + '<div class="list-item" data-sanad-act="bank-support-export"><div class="li-ico">📦</div><div class="li-body"><b>تصدير باكب + تقرير تشخيص</b><span>ملف محلي واحد يشمل البيانات وأسباب قرارات الرسائل</span></div></div>' + '<div class="list-item" data-sanad-act="bank-sms-history"><div class="li-ico">💬</div><div class="li-body"><b>استيراد رسائل SMS السابقة</b><span>'+esc(histDesc)+'</span></div><div class="li-arrow">›</div></div>' +
+      '<div class="list-item" data-sanad-act="bank-sync"><div class="li-ico">'+this.icon('sync')+'</div><div class="li-body"><b>مزامنة العمليات الجديدة الآن</b><span>'+syncDesc+'</span></div><div class="li-arrow">›</div></div>' +
+      '<div class="list-item" data-sanad-act="bank-sms-config"><div class="li-ico">'+this.icon('clock')+'</div><div class="li-body"><b>بداية سحب الرسائل من الرئيسية</b><span>'+esc(new Date(this.configuredSmsStart()).toLocaleString('ar-AE'))+'</span></div></div>' + '<div class="list-item" data-sanad-act="bank-support-export"><div class="li-ico">'+this.icon('archive')+'</div><div class="li-body"><b>تصدير باكب + تقرير تشخيص</b><span>ملف محلي واحد يشمل البيانات وأسباب قرارات الرسائل</span></div></div>' + '<div class="list-item" data-sanad-act="bank-sms-history"><div class="li-ico">'+this.icon('message')+'</div><div class="li-body"><b>استيراد رسائل SMS السابقة</b><span>'+esc(histDesc)+'</span></div><div class="li-arrow">›</div></div>' +
       '<div class="list-item"><button type="button" data-sanad-act="bank-sms-pause">إيقاف مؤقت</button><button type="button" data-sanad-act="bank-sms-resume">استكمال الفحص المحفوظ</button><button type="button" data-sanad-act="bank-sms-cancel">إلغاء الفحص</button></div>'+
-      '<div class="list-item"><div class="li-ico">🧪</div><div class="li-body"><b>تشخيص استيراد SMS</b><span style="direction:ltr;text-align:left;white-space:normal">'+esc(progressDetails)+'</span><span style="direction:ltr">'+esc(histDiagnostics)+'</span></div></div>' +
-      '<div class="list-item" data-sanad-act="bank-inbox"><div class="li-ico">📥</div><div class="li-body"><b>عمليات تحتاج مراجعة</b><span>' +
+      '<div class="list-item"><div class="li-ico">'+this.icon('activity')+'</div><div class="li-body"><b>تشخيص استيراد SMS</b><span style="direction:ltr;text-align:left;white-space:normal">'+esc(progressDetails)+'</span><span style="direction:ltr">'+esc(histDiagnostics)+'</span></div></div>' +
+      '<div class="list-item" data-sanad-act="bank-inbox"><div class="li-ico">'+this.icon('inbox')+'</div><div class="li-body"><b>عمليات تحتاج مراجعة</b><span>' +
         (count?count+' عملية':'لا توجد عمليات تحتاج مراجعة') +
       '</span></div><div class="li-arrow">›</div></div></div>';
   },
@@ -9306,7 +9310,7 @@ const SanadBankInbox = {
     const running=this.historicalImporting,stats=this.historicalProgress||{},last=this.lastRecentImport||{},total=last.total||{};
     const label=running?'إيقاف فحص الرسائل':'تحديث الرسائل';
     const detail=running?('فُحص '+Number(stats.scanned||0)+' · أضيف '+Number(stats.added||0)):last.at?('آخر تحديث: '+Number(total.added||0)+' مضافة · '+Number(total.duplicates||0)+' مكررة · '+Number(total.review||0)+' للمراجعة'+(last.status==='complete'?'':' · الفحص لم يكتمل')):'اسحب العمليات الحديثة من SMS؛ استيراد التاريخ القديم متاح مرة واحدة من الإعدادات.';
-    return '<div style="margin-top:10px"><div class="quick-add"><button type="button" class="quick-chip more" data-sanad-act="bank-sms-recent">💬 '+(running?label:'سحب الرسائل')+'</button><button type="button" class="quick-chip" data-sanad-act="bank-inbox">📥 مراجعة الرسائل</button></div><div style="font-size:12px;color:var(--text-2);margin-top:6px">'+esc(detail)+'</div></div>';
+    return '<div style="margin-top:10px"><div class="quick-add"><button type="button" class="quick-chip more" data-sanad-act="bank-sms-recent">'+this.icon('message')+' '+(running?label:'سحب الرسائل')+'</button><button type="button" class="quick-chip" data-sanad-act="bank-inbox">'+this.icon('inbox')+' مراجعة الرسائل</button></div><div style="font-size:12px;color:var(--text-2);margin-top:6px">'+esc(detail)+'</div></div>';
   },
   async refreshRecentSms(){
     if(this.historicalImporting){this.cancelHistoricalImport('user');return null;}
@@ -9401,7 +9405,9 @@ const SanadBankInbox = {
 
         let directEvents=null;
         if(Array.isArray(page.messages)){
+          const filterStarted=clock();
           directEvents=page.messages.filter(n=>n.candidate||(BankMessageCore.parse(n)||{}).recognized);
+          timings.parsePlanMs+=clock()-filterStarted;
           await this.recordAudit(directEvents.map(n=>({id:n.id,sender:n.title,text:n.text,postedAt:n.postedAt,stage:'provider',action:'candidate',reason:n.candidate?'native-candidate':'parser-candidate',at:Date.now()})));
         }
         const batch=await this.sync({
@@ -9505,8 +9511,11 @@ const SanadBankInbox = {
     const option=(value,label)=>'<option value="'+esc(value)+'"'+(selected===value?' selected':'')+'>'+esc(label)+'</option>';
     const groups=S.accounts.filter(a=>a&&!a.archived&&a.country===country).map(acc=>{
       const cards=S.paymentInstruments.filter(i=>i&&!i.archived&&i.accountId===acc.id);
+      const institution=(S.institutions||[]).find(i=>i.id===acc.institutionId);
+      const bank=institution&&institution.bankRegistryId&&typeof UaeBankRegistryCore!=='undefined'?UaeBankRegistryCore.get(institution.bankRegistryId):null;
+      const short=bank&&typeof bankUiShort==='function'?bankUiShort(bank):'';
       let rows=cardMessage?'':option('account:'+acc.id,acc.name+' ('+acc.currency+')');
-      rows+=cards.map(i=>option('instrument:'+i.id,({'debit_card':'خصم','credit_card':'ائتمان','wallet_card':'محفظة','prepaid_card':'مسبق الدفع'}[i.type]||'كارت')+' ••••'+(i.last4||'غير معلوم')+' ('+acc.currency+')')).join('');
+      rows+=cards.map(i=>option('instrument:'+i.id,(short?short+' · ':'')+({'debit_card':'خصم','credit_card':'ائتمان','wallet_card':'محفظة','prepaid_card':'مسبق الدفع'}[i.type]||'كارت')+' ••••'+(i.last4||'غير معلوم')+' ('+acc.currency+')')).join('');
       return rows?'<optgroup label="'+esc(acc.name+' ('+acc.currency+')')+'">'+rows+'</optgroup>':'';
     });
     return '<option value="">— اختر الحساب / الكارت —</option>'+groups.join('');
@@ -9720,7 +9729,7 @@ const SanadBankInbox = {
         '<div style="font-size:11px;color:var(--text-3);margin-top:8px;direction:auto;white-space:normal">' + esc(String(n.text||'').slice(0,260)) + '</div>' +
         '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">' +
           (canApprove?'<button type="button" class="btn primary" data-sanad-act="bank-approve" data-id="'+esc(n.id)+'" style="margin:0;flex:1;min-width:110px">اعتماد وإضافة</button>':'') +
-          (p.recognized?'<button type="button" class="btn" data-sanad-act="bank-fix" data-id="'+esc(n.id)+'" style="margin:0;flex:1;min-width:110px">✏️ تعديل وربط</button>':'') +
+          (p.recognized?'<button type="button" class="btn" data-sanad-act="bank-fix" data-id="'+esc(n.id)+'" style="margin:0;flex:1;min-width:110px">'+this.icon('edit')+' تعديل وربط</button>':'') +
           '<button type="button" class="btn" data-sanad-act="bank-dismiss" data-id="'+esc(n.id)+'" style="margin:0;flex:1;min-width:90px">تجاهل</button>' +
         '</div></div>';
     }).join('');

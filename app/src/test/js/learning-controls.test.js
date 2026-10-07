@@ -18,3 +18,10 @@ assert.notEqual(M.resolveRoute({...salary,postedAt:1791298000000},state).status,
 const restored=JSON.parse(JSON.stringify(state));I.setLearningEnabled(restored,'identity',binding.id,true,{now:1791288003000});assert.equal(M.resolveRoute({...salary,postedAt:1791298000000},restored).status,'routed');
 assert.equal(JSON.stringify(state.transactions),before,'changing future learning does not reinterpret history');assert(state.settings.bankLearningAudit.length>=4);
 console.log('Learning controls: scoped merchant/template/identity, revoke/restore, no historical mutation or implicit re-enable');
+
+const custom={institutions:[{id:'custom',name:'Synthetic Institution',country:'UAE',notificationAliases:['QA_SOURCE']}],settings:{}};
+const source={sourceHint:'QA_SOURCE',country:'UAE',currency:'AED'};
+assert.equal(I.findCustomInstitutionByHint(custom,source).id,'custom');
+const alias=I.learningEntries(custom).find(x=>x.type==='source');I.setLearningEnabled(custom,'source',alias.id,false);
+assert.equal(I.findCustomInstitutionByHint(JSON.parse(JSON.stringify(custom)),source),null);
+I.setLearningEnabled(custom,'source',alias.id,true);assert.equal(I.findCustomInstitutionByHint(custom,source).id,'custom');

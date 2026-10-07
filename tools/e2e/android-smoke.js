@@ -31,9 +31,10 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
   discovery.push(entry);fs.writeFileSync(path.join(out,'devtools-targets.json'),JSON.stringify(discovery,null,2));
  }});
  console.log('Attached app WebView:',target.id,target.url);
- const socket=new WebSocket(target.webSocketDebuggerUrl);await new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});});
+ let socket=new WebSocket(target.webSocketDebuggerUrl);await new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});});
  let seq=0;const pending=new Map();
- socket.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.id){const p=pending.get(m.id);if(p){pending.delete(m.id);clearTimeout(p.timer);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}}else if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.text);});
+ const receive=e=>{const m=JSON.parse(e.data);if(m.id){const p=pending.get(m.id);if(p){pending.delete(m.id);clearTimeout(p.timer);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}}else if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.text);};
+ socket.addEventListener('message',receive);
  const command=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq;const timer=setTimeout(()=>{pending.delete(id);reject(Error('DevTools timeout: '+method));},60000);pending.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params}));});
  const evaluate=async(fn,arg)=>{const r=await command('Runtime.evaluate',{expression:'('+fn.toString()+')('+JSON.stringify(arg===undefined?null:arg)+')',awaitPromise:true,returnByValue:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result.value;};
  await command('Runtime.enable');await command('Page.enable');
@@ -134,6 +135,27 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  assert(!adb('shell','dumpsys','activity','services',pkg).includes('isForeground=true'),'Foreground service stops after completion');
  adb('shell','am','start','-n',pkg+'/com.sanad.v9test.MainActivity');
  pass('Native foreground SMS import completes while app is behind HOME; actual count, unchanged ledger, service cleanup');
+
+ await page.evaluate(()=>{SanadBankInbox.importHistoricalSms(0,{fromDate:1});});
+ await page.waitForFunction(()=>SanadBankInbox.historicalImporting&&SanadBankInbox.historicalProgress?.scanned>=20);
+ const beforeKill=await page.evaluate(()=>SanadExtStorage.get('bankImportActive',null));
+ assert.equal(beforeKill.status,'running');assert(beforeKill.nextAfterId>0);
+ adb('shell','am','force-stop',pkg);
+ assert.equal(adb('shell','sh','-c','"pidof '+pkg+' || true"'),'','Android process must really be absent');
+ adb('shell','am','start','-n',pkg+'/com.sanad.v9test.MainActivity');
+ const restartedTarget=await findAppTarget({adb,fetchTargets:async()=>{const r=await fetch('http://127.0.0.1:9222/json/list',{signal:AbortSignal.timeout(5000)});return r.json();},wait:ms=>new Promise(r=>setTimeout(r,ms))});
+ socket=new WebSocket(restartedTarget.webSocketDebuggerUrl);
+ await new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});});
+ socket.addEventListener('message',receive);await command('Runtime.enable');await command('Page.enable');
+ await page.waitForFunction(()=>typeof S!=='undefined'&&S.ready&&SanadV9.initialized&&!_dataReplacementInFlight&&!_criticalMutationInFlight&&!_financialFlowInFlight);
+ const afterKill=await page.evaluate(()=>SanadExtStorage.get('bankImportActive',null));
+ assert.equal(afterKill.status,'running','Killed scan must not announce completion');assert.equal(afterKill.throughDate,beforeKill.throughDate);assert(afterKill.pages>=beforeKill.pages);
+ assert.equal(await page.evaluate(()=>JSON.stringify(S.transactions)),txBeforeBackground);
+ await page.evaluate(()=>SanadBankInbox.importHistoricalSms(0,{resume:true}));
+ const resumed=await page.evaluate(()=>SanadBankInbox.lastHistoricalImport);
+ assert.equal(resumed.status,'complete');assert.equal(resumed.throughDate,beforeKill.throughDate);assert.equal(resumed.total.scanned,backgroundScan.total.scanned);
+ assert.equal(await page.evaluate(()=>JSON.stringify(S.transactions)),txBeforeBackground);
+ pass('Actual Android process force-stop and cold reopen retain cursor; bounded resume completes without loss or repeated posting');
 
  await page.waitForFunction(()=>Number(getComputedStyle(document.getElementById('toast')).opacity)<0.01&&Number(getComputedStyle(document.getElementById('backdrop')).opacity)<0.01&&Number(getComputedStyle(document.querySelector('#view .wallet-hero')||document.getElementById('view')).opacity)>0.99);
  await page.screenshot({path:path.join(out,'android-home.png')});assert.deepEqual(errors,[]);

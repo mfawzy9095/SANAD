@@ -102,6 +102,17 @@ const scan=(h,events)=>h.inbox.syncImpl({events,minPostedAt:h.ctx.S.settings.ban
  batch.restart();await batch.inbox.syncImpl({events:rows,historical:true,force:true});assert.equal(batch.ctx.S.transactions.length,20);
  const failedPage=harness();failedPage.failFinance(true);const noSave=await failedPage.inbox.syncImpl({events:rows,historical:true,force:true});assert.equal(noSave.ok,false);assert.equal(failedPage.ctx.S.transactions.length,0);assert.equal(failedPage.acks.length,0);assert.equal(I.eventDecision(failedPage.ctx.S,'batch-0'),null);
  failedPage.failFinance(false);await failedPage.inbox.syncImpl({events:rows,historical:true,force:true});assert.equal(failedPage.ctx.S.transactions.length,20);failedPage.restart();assert.equal(failedPage.ctx.S.transactions.length,20);
+ const concurrent=harness();let intervened=false;
+ concurrent.inbox.yieldUi=async()=>{if(!intervened){intervened=true;await concurrent.ctx.commitCriticalMutation(()=>{concurrent.ctx.S.settings.bankAutoImportEnabled=false;return true;});}};
+ const stale=await concurrent.inbox.syncImpl({events:rows,historical:true,force:true,cooperative:true});
+ assert.equal(stale.ok,false);assert.equal(concurrent.ctx.S.transactions.length,0);assert.equal(concurrent.ctx.S.settings.bankAutoImportEnabled,false);assert.equal(concurrent.acks.length,0,'concurrent user change rejects stale draft and preserves evidence');
+ const progress=harness();let starts=0,ends=0,notifications=[];
+ progress.ctx.AndroidBridge.beginSmsImportForeground=()=>{starts++;return true;};progress.ctx.AndroidBridge.endSmsImportForeground=()=>ends++;
+ progress.ctx.AndroidBridge.updateSmsImportForeground=(read,added,review,total)=>{assert(progress.store.bankImportActive,'notification must follow durable checkpoint');notifications.push({read,total});};
+ let page=0;progress.inbox.requestHistoricalPage=async()=>({ok:true,done:++page===2,scanned:20,remainingCount:page===1?40:undefined,nextAfterDate:progress.now-1000+page,nextAfterId:page*20,messages:[]});
+ await progress.inbox.importHistoricalSms(0,{fromDate:1});assert.equal(starts,1);assert.equal(ends,1);assert.equal(progress.inbox.lastHistoricalImport.totalCount,40);assert.equal(notifications.at(-1).read,40);assert.equal(progress.store.bankImportActive.status,'complete');
+ progress.store.bankImportActive.status='paused';assert.equal(await progress.inbox.cancelHistoricalImport('user'),true);assert.equal(progress.store.bankImportActive.status,'cancelled');
+ progress.store.bankImportActive.status='paused';progress.failKey('bankImportActive');assert.equal(await progress.inbox.cancelHistoricalImport('user'),false);assert.equal(progress.store.bankImportActive.status,'paused');
  console.log('Atomic page: 20 postings, one verified financial write, durable decisions, rollback and retry: PASS');
  console.log('Durable financial decisions, dismissal/restart/backup, write failures, frozen starts and compatible checkpoints: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});
