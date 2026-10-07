@@ -2668,6 +2668,7 @@ function viewRep(){
         '<button type="button" class="more" data-act="edit-overall-limit">تحديد</button></div>' +
         '<div class="card" style="padding:16px;text-align:center;color:var(--text-2);font-size:13px">لم يتم تحديد حد</div>';
     }
+    if(budgetSpending===null)return '<div class="sec"><h2>حد الإنفاق الشهري الكلي</h2><button type="button" class="more" data-act="edit-overall-limit">تعديل</button></div><div class="card"><div class="help-box">المتبقي غير مؤكد حتى تأكيد مبالغ الخصم؛ الحد '+amtFull(limit,activeCur)+'</div></div>';
     const st = Finance.computeBudgetStatus(budgetSpending, limit);
     const pct = Math.min(100, st.pct);
     let infoTxt;
@@ -2685,7 +2686,7 @@ function viewRep(){
     '<div class="stat-grid">' +
       '<div class="stat-card"><div class="lbl">المصروف (' + Finance.curSymbol(activeCur) + ')</div><div class="v neg amt-val">' + amtText(spending) + '</div><div class="sub">' + totalExpCount + ' معاملة</div></div>' +
       '<div class="stat-card"><div class="lbl">الدخل (' + Finance.curSymbol(activeCur) + ')</div><div class="v pos amt-val">' + amtText(income) + '</div></div>' +
-      '<div class="stat-card"><div class="lbl">متوسط المعاملة</div><div class="v amt-val">' + amtText(totalExpCount ? spending/totalExpCount : 0) + '</div></div>' +
+      '<div class="stat-card"><div class="lbl">متوسط المعاملة</div><div class="v amt-val">' + amtText(spending===null?null:(totalExpCount ? spending/totalExpCount : 0)) + '</div></div>' +
       '<div class="stat-card"><div class="lbl">الصافي</div><div class="v ' + (net >= 0 ? 'pos' : 'neg') + ' amt-val">' + amtText(net) + '</div></div>' +
     '</div>' +
     (ds.pendingSettlementCount?'<div class="help-box"><div class="ht">'+ds.pendingSettlementCount+' شراء يحتاج تأكيد مبلغ الخصم بعملة الحساب. إجماليات هذه الفترة غير مكتملة.</div></div>':'')+

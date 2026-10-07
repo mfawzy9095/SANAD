@@ -64,6 +64,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.locator('#bankFixExternalIncome').check();
  await page.locator('[data-sanad-act="bank-fix-save"]').click();
  await page.waitForFunction(()=>S.transactions.length===2&&!_criticalMutationInFlight);
+ await page.waitForFunction(()=>document.getElementById('sheet').dataset.sheetType==='bank-inbox'&&!SanadBankInbox.syncing);
  assert.equal(await page.evaluate(()=>S.transactions.find(t=>t.bankImportEventId==='qa-deposit').economicOrigin.source),'user-confirmation');
  record('Generic inbound stays review until per-event external income confirmation');
  await page.evaluate(()=>closeSheet());
@@ -113,6 +114,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.waitForFunction(id=>S.transactions.find(t=>t.id===id)?.amount===30&&!_criticalMutationInFlight,expenseId);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),9121.66);record('Edit existing expense without duplicating it');
  // Attach a real PNG via the file input, then save and verify durability.
+ await stableHome();
  await page.evaluate(id=>openEditTx(id),expenseId);
  const png=await page.screenshot({clip:{x:0,y:0,width:20,height:20}});
  await page.locator('#sanadReceiptInput').setInputFiles({name:'qa-receipt.png',mimeType:'image/png',buffer:png});
@@ -248,10 +250,14 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.locator('#bankFixRetainPending').check();
  await page.locator('[data-sanad-act="bank-fix-save"]').click();
  await page.waitForFunction(n=>S.transactions.length===n+1&&!_criticalMutationInFlight,pendingBefore.count);
+ await page.waitForFunction(()=>document.getElementById('sheet').dataset.sheetType==='bank-inbox'&&!SanadBankInbox.syncing);
  const pendingId=await page.evaluate(()=>S.transactions.find(t=>t.bankImportEventId==='qa-pending-fx').id);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),null);
  await page.evaluate(()=>{closeSheet();go('rep');});
+ assert.equal(await page.evaluate(async()=>{const r=await commitCriticalMutation(()=>{Finance.setOverallLimit(S.month,'UAE','AED',1000);return true;});render();return r.ok;}),true);
  assert.match(await page.locator('#view').innerText(),/شراء يحتاج تأكيد مبلغ الخصم/);
+ assert.match(await page.locator('#view').innerText(),/المتبقي غير مؤكد حتى تأكيد مبالغ الخصم/);
+ assert.equal(await page.locator('.stat-card').filter({hasText:/متوسط المعاملة|Average transaction/}).locator('.v').innerText(),'غير معروف');
  assert.equal(await page.evaluate(()=>Finance.buildReportDataset({country:'UAE',period:'month',month:isoToday().slice(0,7),currency:'AED'}).pendingSettlementCount),1);
  await page.reload();await page.waitForFunction(()=>S.ready&&SanadV9.initialized);
  assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).walletAmount,pendingId),null);
@@ -269,7 +275,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  record('Known foreign purchase retained without settlement; incomplete report; durable same-event settlement, exact fees and repeat deduplication');
  const perfContext=await browser.newContext(),perfPage=await perfContext.newPage();perfPage.on('pageerror',e=>errors.push(e.message));
  await perfPage.goto(process.env.SANAD_QA_URL||'http://127.0.0.1:8765');await perfPage.waitForFunction(()=>typeof S!=='undefined'&&S.ready&&SanadV9.initialized);
- if(await perfPage.locator('#onboard').isVisible())await perfPage.locator('[onclick="onboardSkip()"]').click();await perfPage.waitForFunction(()=>!document.getElementById('app').hidden&&!_criticalMutationInFlight&&!_dataReplacementInFlight&&!_financialFlowInFlight&&!SanadBankInbox.syncing&&!SanadBankInbox.historicalImporting&&!SanadBankInbox._recentStarting);
+ if(await perfPage.locator('#onboard').isVisible())await perfPage.locator('[onclick="onboardSkip()"]').click();await perfPage.waitForFunction(()=>!document.getElementById('app').hidden&&(!document.getElementById('sanadBootSplash')||getComputedStyle(document.getElementById('sanadBootSplash')).visibility==='hidden')&&!_criticalMutationInFlight&&!_dataReplacementInFlight&&!_financialFlowInFlight&&!SanadBankInbox.syncing&&!SanadBankInbox.historicalImporting&&!SanadBankInbox._recentStarting);
  const financialPerformance=await perfPage.evaluate(async()=>{
    const seed=snapshotState(),day=isoToday(),now=Date.now();seed.accounts=[{id:'perf',type:'bank',country:'UAE',currency:'AED',name:'Synthetic performance',institutionId:null,openingBalance:10000,openingBalanceKnown:true,openingDebt:0,creditLimit:0,archived:false,created:day}];seed.paymentInstruments=[];seed.institutions=[];seed.transactions=Array.from({length:22934},(_,n)=>({id:'perf-'+n,type:n%2?'income':'expense',accountId:'perf',currency:'AED',amount:0.01,walletAmount:0.01,fxRate:1,cat:'other',date:day,created:now+n}));seed.settings.defaultAccountByCountry={UAE:'perf'};seed.settings.primaryAccountByCountry={UAE:'perf'};seed.settings.defaultInstrumentByCountry={};
    const loadStart=performance.now();let seedResult;await withExclusiveDataOperation(async()=>{seedResult=await _commitCriticalMutationImpl(()=>{loadStateInto(seed);return true;});});if(!seedResult.ok)throw Error('large synthetic seed rejected '+seedResult.reason);
