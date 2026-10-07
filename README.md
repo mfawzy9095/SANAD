@@ -1,9 +1,9 @@
-# SANAD 9.2.10 — Financial review QA batch
+# SANAD 9.2.11 — Financial review QA batch
 
 Local Android personal finance app with accounts, cards, income/expenses,
 transfers, receipts, reminders, biometric/device lock and bank-message import.
 
-Financial stability phase remains OPEN. See [9.2.10 review-reason follow-up](docs/financial-closure/9.2.10-review-reasons.md) and [9.2.9 evidence and remaining blockers](docs/financial-closure/9.2.9-review-batch.md). See [financial contract](docs/financial-closure/CONTRACT.md) and [defect register](docs/financial-closure/DEFECTS.md). CI emulator uses a distinct `.forensicqa.ci` debug-signed harness; delivered `.forensicqa.stable` must use the existing private QA certificate.
+Financial stability phase remains OPEN. See [9.2.11 SMS template variants](docs/financial-closure/9.2.11-sms-variants.md), [9.2.10 review-reason follow-up](docs/financial-closure/9.2.10-review-reasons.md) and [9.2.9 evidence and remaining blockers](docs/financial-closure/9.2.9-review-batch.md). See [financial contract](docs/financial-closure/CONTRACT.md) and [defect register](docs/financial-closure/DEFECTS.md). CI emulator uses a distinct `.forensicqa.ci` debug-signed harness; delivered `.forensicqa.stable` must use the existing private QA certificate.
 
 ## Current delivery
 - Development: `feature-v9.2-ui-features` only.

@@ -245,7 +245,7 @@
     const base={bankId,country:'EGY',currency:'EGP',confidence:0.99};
     m=x.match(/Your\s+Card\s*\*+\s*(\d{4})\s+was\s+debited\s+with\s+(EGP|USD|EUR|SAR|MAD|AED)\s*([\d,]+(?:\.\d+)?)\s+at\s+(.+?)\s+on\s+[\d/ :]+\.\s*Available\s+limit\s+is\s+(EGP|USD)\s*([\d,]+(?:\.\d+)?)/i);
     if(m)return result(Object.assign(base,{kind:'purchase',direction:'debit',cardLast4:m[1],cardType:'credit_card',currency:m[2],amount:amount(m[3]),merchant:m[4].trim(),category:categoryForMerchant(m[4]),availableCredit:amount(m[6]),availableCreditCurrency:m[5]}),input,raw);
-    m=x.match(new RegExp('تم\\s+خصم\\s*(?:مبلغ\\s*)?(?:([A-Za-z]{3})\\s*)?'+value+'\\s*(?:([A-Za-z]{3})|'+local+')?\\s+من\\s+(بطاقة\\s+الائتمان|بطاقة\\s+الخصم\\s+المباشر|البطاقه|البطاقة).*?(\\d{4})\\s+عند\\s+(.+?)\\s+يوم[\\s\\S]*?المتاح\\s*'+value+'\\s*'+local,'i'));
+    m=x.match(new RegExp('تم\\s+خصم\\s*(?:مبلغ\\s*)?(?:([A-Za-z]{3})\\s*)?'+value+'\\s*(?:([A-Za-z]{3})|'+local+')?\\s+من\\s+(بطاقة\\s+الائتمان|بطاقة\\s+الخصم\\s+المباشر|البطاقه|البطاقة).*?(\\d{4})\\s+عند\\s+(.+?)\\s+يوم[\\s\\S]*?المتاح\\s*'+value+'(?:\\s*'+local+')?(?![\\d.,])','i'));
     if(m){const credit=m[4].includes('الائتمان'),debit=m[4].includes('المباشر');const b=Object.assign(base,{kind:/\bATM(?:\b|(?=\d))/i.test(m[6])?'cash_withdrawal':'purchase',direction:'debit',currency:m[1]||m[3]||'EGP',amount:amount(m[2]),cardLast4:m[5],cardType:credit?'credit_card':debit?'debit_card':null,merchant:m[6].trim(),category:categoryForMerchant(m[6])});if(credit){b.availableCredit=amount(m[7]);b.availableCreditCurrency='EGP';}else if(debit){b.availableBalance=amount(m[7]);b.availableBalanceCurrency='EGP';}return result(b,input,raw);}
     m=x.match(new RegExp('تم\\s+(تنفيذ|اضافة)\\s+تحويل\\s+لحظي\\s+(?:من\\s+حسابكم\\s+(?:رقم|المنتهي\\s+ب)|لحسابكم\\s+(?:رقم|المنتهي\\s+ب))\\s*(\\d+)\\s+بمبلغ\\s*'+value+'\\s*'+local,'i'));
     if(m){const ref=(x.match(/(?:رقم\s+مرجعي|الرقم\s+المرجعي)\s*([A-Za-z0-9-]+)/)||[])[1]||null;return result(Object.assign(base,{kind:m[1]==='اضافة'?'incoming_transfer':'outgoing_transfer',direction:m[1]==='اضافة'?'credit':'debit',accountRef:m[2],amount:amount(m[3]),transactionRef:ref}),input,raw);}
@@ -319,12 +319,13 @@
     if(/refund|refunded|reversal|reversed|استرداد|مرتجع/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'refund',direction:'credit',category:'other',confidence:sourceKnown?0.90:0.75}),input,raw);
     if(/recharge|mobile\s+top.?up|airtime|شحن\s+رصيد/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'mobile_recharge',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);
     if(/bill\s+payment|paid\s+bill|تم\s+سداد\s+فاتور/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'bill_payment',direction:'debit',category:'bills',confidence:sourceKnown?0.90:0.75}),input,raw);
-    if(/cash\s+withdraw|withdrawn|atm|سحب\s+نقد/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'cash_withdrawal',direction:'debit',category:'other',confidence:sourceKnown?0.90:0.75}),input,raw);
+    if(/cash\s+withdraw|withdrawn|atm|سحب\s+نقد|(?:قمت\s+بسحب|تم\s+سحب)\s+مبلغ/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'cash_withdrawal',direction:'debit',category:'other',confidence:sourceKnown?0.90:0.75}),input,raw);
     const incomingTransfer=/تحويل[\s\S]{0,120}الى\s+(?:حسابك|محفظتك)|transferred[\s\S]{0,120}to\s+your\s+(?:account|wallet)/i.test(x)||!!incomingFrom||/\breceived\b[\s\S]{0,120}\bfrom\b|\bfrom\b[\s\S]{0,120}\b(?:to|into)\s+(?:your\s+)?(?:account|wallet)\b|(?:تم\s+)?تحويل[\s\S]{0,120}\sمن\s+.+(?:الى|إلى)\s+(?:حسابك|محفظتك)/i.test(x);
     if(incomingTransfer)return result(Object.assign(base,{kind:'incoming_transfer',direction:'credit',merchant:incomingFrom||merchant,beneficiaryName:incomingFrom||beneficiaryName,category:'other',confidence:sourceKnown?0.92:0.78}),input,raw);
     if(/deposit|credited|ايداع|اودع/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'deposit',direction:'credit',category:'other',confidence:sourceKnown?0.88:0.75}),input,raw);
     if(/transfer.+to|transfer.+debited|sent\s+to|transferred\s+to|تحويل.+الى|تحويل.+إلى/.test(x.toLowerCase()))return result(Object.assign(base,{kind:'outgoing_transfer',direction:'debit',category:'externalTransfer',confidence:sourceKnown?0.88:0.74}),input,raw);
-    if(/purchase|pos|شراء|merchant|paid\s+at|card.+debited\s+with/.test(x.toLowerCase())&&(card||cardFirst4))return result(Object.assign(base,{kind:'purchase',direction:'debit',category:categoryForMerchant(merchant),confidence:sourceKnown?0.86:0.72}),input,raw);
+    if(/purchase|pos|شراء|merchant|paid\s+at|card.+debited\s+with/.test(x.toLowerCase())&&(card||cardFirst4||/you\s+have\s+made\s+a\s+purchase\s+for\s+(?:EGP|AED|USD|EUR|MAD|SAR|GBP)\b/i.test(x)))return result(Object.assign(base,{kind:'purchase',direction:'debit',category:categoryForMerchant(merchant),confidence:sourceKnown?0.86:0.72}),input,raw);
+    if(/تم\s+خصم\s+مبلغ[\s\S]{0,100}?من\s+حسابك/i.test(x))return result(Object.assign(base,{kind:'debit_notice',direction:'debit',reviewReason:'debit-purpose-required',confidence:0.90}),input,raw);
     return null;
   }
   function parse(input){
@@ -357,7 +358,7 @@
     }
     if(!parsed)return review('unrecognized');
     if(!parsed.transactionRef){const ref=normalized.match(/\b(?:TR\s+REF|transaction\s+(?:id|reference)|reference|TID|ref)\s*[:#-]?\s*([A-Za-z0-9_-]{4,40})/i);if(ref)parsed.transactionRef=ref[1];}
-    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.10-financial-contract';parsed.executionStatus=parsed.executionStatus||'completed';
+    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.11-financial-contract';parsed.executionStatus=parsed.executionStatus||'completed';
     // Card-acquiring language also describes wallet funding; ownership/purpose is not in the merchant label.
     if(parsed.kind==='purchase'&&/^(?:e\s*(?:&|and)\s*money|du\s*pay)(?:\s*[,;]|\s*$)/i.test(parsed.merchant||''))parsed.reviewReason='wallet-funding-purpose-unconfirmed';
     if(parsed.kind==='investment_sale'){parsed.reviewReason='investment-non-money-review';return parsed;}

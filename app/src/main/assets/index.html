@@ -914,7 +914,7 @@ const ACCOUNT_ICONS = ['🏦','💵','💰','🪙','🏛️','📱','💼','🏧
 const CARD_ICONS = ['💳','🪪','💠','🎴','🏦','📱','💎'];
 const DEBT_ICONS = ['📋','🧾','📉','💸','📝','🏷️'];
 
-const APP_VERSION = '9.2.10';
+const APP_VERSION = '9.2.11';
 const APP_CHANNEL = 'local-rc';
 const SCHEMA_VERSION = 16;
 const DB_NAME = 'masareef_v8';
@@ -8627,7 +8627,7 @@ const SanadFullBackup = {
       family:SanadFamily.state,
       syncMeta:Object.assign({},SanadCloud.meta,{dirty:true}),
       firebaseConfig:SanadCloud.config||null,
-      bankImportAudit:{version:1,parserVersion:'9.2.10-financial-contract',configuredStartAt:SanadBankInbox.configuredSmsStart(),decisions:BankIngestionCore.auditWithDurableDecisions(await SanadExtStorage.get('bankDecisionAudit',null),S),smsReviewEvents:SanadBankInbox.smsReviewEvents,pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
+      bankImportAudit:{version:1,parserVersion:'9.2.11-financial-contract',configuredStartAt:SanadBankInbox.configuredSmsStart(),decisions:BankIngestionCore.auditWithDurableDecisions(await SanadExtStorage.get('bankDecisionAudit',null),S),smsReviewEvents:SanadBankInbox.smsReviewEvents,pendingEvents:SanadBankInbox.readNative(),diagnostics:SanadBankInbox.diagnostics(),historical:await SanadExtStorage.get('bankImportLastHistorical',null),recent:await SanadExtStorage.get('bankImportLastRecent',null)}
     };
     if(diagnostic)features.diagnosticReport={version:1,generatedAt:new Date().toISOString(),appVersion:APP_VERSION,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,clock:Date.now(),smsPermission:SanadBankInbox.historicalPermission(),native:SanadBankInbox.diagnostics(),import:features.bankImportAudit,counts:{accounts:state.accounts.length,transactions:state.transactions.length,receipts:packed.length},note:'Local export; financial source messages included. Decision log retains the latest 1000 records; omitted count is explicit. Operation time and SMS arrival time are separate.'};
     delete features.syncMeta.receiptDirty;
@@ -8865,7 +8865,7 @@ const SanadBankInbox = {
       purchase:'شراء',salary:'راتب',deposit:'إيداع',refund:'استرداد',
       incoming_transfer:'تحويل وارد',outgoing_transfer:'تحويل لشخص / جهة',internal_transfer:'تحويل بين حساباتي',
       card_repayment:'سداد بطاقة',cash_withdrawal:'سحب نقدي',
-      mobile_recharge:'شحن رصيد اتصال',bill_payment:'دفع فاتورة',bill_notice:'فاتورة غير مثبت سدادها',refund_request:'طلب استرداد غير مكتمل',wallet_topup:'شحن محفظة — الغرض يحتاج مراجعة'
+      mobile_recharge:'شحن رصيد اتصال',bill_payment:'دفع فاتورة',debit_notice:'خصم من الحساب — الغرض يحتاج مراجعة',bill_notice:'فاتورة غير مثبت سدادها',refund_request:'طلب استرداد غير مكتمل',wallet_topup:'شحن محفظة — الغرض يحتاج مراجعة'
     }[kind]||'عملية مالية';
   },
   reasonLabel(reason){
@@ -8909,6 +8909,7 @@ const SanadBankInbox = {
       'possible-own-transfer':'قد تكون الطرف الآخر لتحويل بين حساباتك؛ أكد الربط قبل التسجيل',
       'fx-review-required':'مبلغ الخصم بعملة الحساب يحتاج تأكيدًا',
       'bill-not-payment':'إصدار الفاتورة ليس إثبات دفع',
+      'debit-purpose-required':'الخصم مثبت لكن غرضه غير محدد — حدّد هل هو تحويل أو سداد أو مصروف',
       'refund-not-completed':'طلب الاسترداد ليس استردادًا مكتملًا',
       'account-identity-history-review':'هوية الحساب مؤكدة؛ الرسالة أقدم من التأكيد وتحتاج مراجعة',
       'existing-source-required':'يحتاج حسابًا موجودًا قبل الحفظ',
