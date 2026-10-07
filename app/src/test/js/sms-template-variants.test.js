@@ -5,7 +5,7 @@ const I=require('../../main/assets/js/bank-ingestion-core');
 const empty={institutions:[],accounts:[],paymentInstruments:[],transactions:[]};
 const cases=[
  ['nbe-balance-without-unit','BanK-AlAhly','تم خصم 63.25EGP من بطاقة الخصم المباشر رقم 4567 عند Synthetic Store يوم 03/02/2026 الساعه 12:10 المتاح 720.50 للمزيد إتصل ب 19000','purchase',63.25,'EGP'],
- ['ar-atm','EmiratesNBD','لقد قمت بسحب مبلغ AED 130.00 مستخدما بطاقة الصراف الآلي من Synthetic ATM. رصيدك المتوفر هو AED 760.00','cash_withdrawal',130,'AED'],
+ ['ar-atm','EmiratesNBD','لقد قمت بسحب مبلغ AED 130.00 مستخدما بطاقة الصراف الآلي من Synthetic Cash Point. رصيدك المتوفر هو AED 760.00','cash_withdrawal',130,'AED'],
  ['purchase-missing-card-ref','EmiratesNBD','You have made a purchase for EGP 73.20 with your debit card at Synthetic Store. Account balance is 980 EGP','purchase',73.2,'EGP'],
  ['debit-purpose-unknown','EmiratesNBD','تم خصم مبلغ EGP 18.25 من حسابك XX5678 بتاريخ 2026-02-03. رصيد حسابك الحالي مبلغ EGP 980.00','debit_notice',18.25,'EGP'],
  ['debit-not-income','EmiratesNBD','تم خصم مبلغ AED 12.50 من حسابك XX5678','debit_notice',12.5,'AED']
@@ -24,7 +24,7 @@ const acceptance=[
  ['Purchase AED 20.00 at Synthetic Store using debit card ending 4321','auto-save'],
  ['You have made a purchase for AED 73.20 with your debit card at Synthetic Store. Account balance is 980 AED','review'],
  ['تم خصم مبلغ AED 12.50 من حسابك XX5678','review'],
- ['لقد قمت بسحب مبلغ AED 130.00 مستخدما بطاقة الصراف الآلي من Synthetic ATM. رصيدك المتوفر هو AED 760.00','review'],
+ ['لقد قمت بسحب مبلغ AED 130.00 مستخدما بطاقة الصراف الآلي من Synthetic Cash Point. رصيدك المتوفر هو AED 760.00','review'],
  ['لم يتم خصم مبلغ AED 12.50 من حسابك XX5678','not-posted'],
  ['Your purchase AED 73.20 with debit card ending 4321 was declined due to insufficient funds','not-posted']
 ];
