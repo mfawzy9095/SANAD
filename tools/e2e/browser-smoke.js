@@ -339,19 +339,22 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(id=>S.settings.bankLearningRules.find(r=>r.id===id).enabled,ruleId),false);
  assert.equal(await page.evaluate(()=>JSON.stringify(S.transactions)),historicalBeforeLearning);
  record('Learning screen revokes a saved template durably without changing historical transactions');
- // Synthetic review-only UI regression: never posts or processes real financial content.
- // The old interface hid editing for unrecognized messages and attempted to render
- // thousands of cards in one DOM update.
- await page.evaluate(()=>{
+ // Synthetic review-only UI regression. Drain any in-flight provider sync first:
+ // otherwise a pre-existing async sync can overwrite the injected 95-row fixture
+ // with the actual one-row queue while openSheet renders.
+ await page.waitForFunction(()=>!SanadBankInbox.syncing&&!SanadBankInbox.historicalImporting&&!SanadBankInbox._recentStarting);
+ const initialReview=await page.evaluate(async()=>{
    window.qaOriginalReviewSync=SanadBankInbox.sync;
+   window.qaOriginalReviewItems=SanadBankInbox.items;
    SanadBankInbox.sync=async()=>({ok:true,review:95});
    SanadBankInbox.items=Array.from({length:95},(_,n)=>({
      native:{id:'qa-unknown-'+n,title:'Synthetic unknown issuer',text:'Synthetic financial notification requiring manual review '+n,postedAt:Date.now()},
      parsed:{recognized:false,ignored:false},plan:{action:'review',reason:'source-not-identified'}
    }));
+   await SanadBankInbox.open();
+   return {queued:SanadBankInbox.items.length,rendered:document.querySelectorAll('#sheet [data-sanad-act="bank-fix"]').length};
  });
- await page.evaluate(()=>SanadBankInbox.open());
- assert.equal(await page.locator('#sheet [data-sanad-act="bank-fix"]').count(),40);
+ assert.deepEqual(initialReview,{queued:95,rendered:40},'Review queue was replaced mid-render: '+JSON.stringify(initialReview));
  assert.match(await page.locator('#sheet').innerText(),/عرض 1–40 من 95/);
  await page.locator('#sheet [data-sanad-act="bank-review-page"][data-page="1"]').click();
  assert.equal(await page.locator('#sheet [data-sanad-act="bank-fix"]').count(),40);
@@ -360,7 +363,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.locator('#bankFixConfirmIssuer').count(),1);
  assert.equal(await page.locator('#bankFixConfirmCurrency').count(),1);
  assert((await page.locator('#bankFixSource option').count())>1);
- await page.evaluate(()=>{SanadBankInbox.sync=window.qaOriginalReviewSync;closeSheet();});
+ await page.evaluate(()=>{SanadBankInbox.sync=window.qaOriginalReviewSync;SanadBankInbox.items=window.qaOriginalReviewItems;closeSheet();});
  record('Review queue paginates 40 of 95 and unknown sources offer explicit human-controlled correction without posting');
  // User-selected SMS XML must be review-only even when parser/known-card routing
  // would otherwise qualify the message for automatic posting.
