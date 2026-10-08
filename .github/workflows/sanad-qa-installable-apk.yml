@@ -6,6 +6,7 @@ on:
       - feature-v9.2-ui-features
     paths:
       - '.github/workflows/sanad-qa-installable-apk.yml'
+      - '.github/workflows/build-v9-device-test.yml'
       - 'app/**'
       - 'tools/e2e/**'
       - 'build.gradle'
