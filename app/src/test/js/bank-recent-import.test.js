@@ -66,7 +66,7 @@ async function scenario(status,mode='recent',permission=true,extra={}){
 {
  const state={accounts:[{id:'egp',name:'Egypt card',country:'EGY',currency:'EGP',type:'credit'}],paymentInstruments:[{id:'card',name:'9721',accountId:'egp',country:'EGY',type:'credit_card',last4:'9721'}]};
  const a=html.indexOf('  correctionSourceOptions(parsed,selected){'),b=html.indexOf('  openCorrection(id){',a);
- const ctx={S:state,Finance:{getAccount:id=>state.accounts.find(x=>x.id===id)},esc:s=>String(s)};vm.createContext(ctx);
+ const ctx={S:state,Finance:{getAccount:id=>state.accounts.find(x=>x.id===id)},esc:s=>String(s),countryInfo:code=>({name:code})};vm.createContext(ctx);
  const ui=vm.runInContext('({'+html.slice(a,b)+'})',ctx);
  const p={kind:'purchase',country:'EGY',currency:'MAD',amount:100,cardLast4:'9721'};
  assert(ui.correctionSourceOptions(p,'').includes('instrument:card'));
