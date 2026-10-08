@@ -70,6 +70,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(qaRecent.recent,'complete','Recent SMS scan did not complete: '+JSON.stringify(qaRecent));
  assert.equal(await page.evaluate(()=>S.transactions.length),1,'Generic deposit origin must remain review');
  await page.evaluate(()=>SanadBankInbox.openCorrection('qa-deposit'));
+ assert.match(await page.locator('#bankFixDate').inputValue(),/^\d{4}-\d{2}-\d{2}$/,'SMS review must present a valid ISO date before saving');
  await page.locator('[data-sanad-act="bank-fix-save"]').click();
  assert.equal(await page.evaluate(()=>S.transactions.length),1,'Unchecked external origin cannot post');
  await page.locator('#bankFixExternalIncome').check();
