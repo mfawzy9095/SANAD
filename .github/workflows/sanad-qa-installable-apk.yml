@@ -1,0 +1,90 @@
+# Local first CI QA APK; never uses the private stable signing certificate.
+name: SANAD Installable QA Candidate
+on:
+  push:
+    branches:
+      - feature-v9.2-ui-features
+    paths:
+      - '.github/workflows/sanad-qa-installable-apk.yml'
+      - 'app/**'
+      - 'tools/e2e/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: sanad-qa-candidate
+  cancel-in-progress: true
+jobs:
+  gate-and-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run source regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in app/src/test/js/*.test.js; do node "$test"; done
+      - name: Set up browser integration
+        run: |
+          npm ci --prefix tools/e2e
+          cd tools/e2e
+          npx playwright install --with-deps chromium
+      - name: Exercise complete browser flows
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8765 --directory app/src/main/assets >/tmp/sanad-qa-http.log 2>&1 &
+          SANAD_QA_OUTPUT="$RUNNER_TEMP/sanad-browser-qa" node tools/e2e/browser-smoke.js
+      - name: Build and lint isolated QA variant
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleForensicQaCi
+      - name: Verify output and hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-apk
+          cp app/build/outputs/apk/forensicQaCi/*.apk qa-apk/SANAD-FINANCIAL-QA-DEVICE-UNVERIFIED.apk
+          sha256sum qa-apk/*.apk > qa-apk/SHA256SUMS.txt
+          cat > qa-apk/READ-ME-FIRST.txt <<'EOF'
+          SANAD CI FINANCIAL QA ONLY — NOT A PRODUCTION RELEASE.
+          Debug-signed, separate package ID; cannot overwrite stable app.
+          Do not import irreplaceable real financial data.
+          Android device, biometrics, notifications, and signing continuity
+          have NOT been tested by this pipeline.
+          No private signing key or real SMS is used or uploaded here.
+          EOF
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-QA-BROWSER-DIAGNOSTICS
+          path: |
+            /tmp/sanad-qa-http.log
+            $RUNNER_TEMP/sanad-browser-qa
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload QA APK only on success
+        uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-V9.2.14-ISOLATED-QA-APK
+          path: qa-apk/
+          if-no-files-found: error
+          retention-days: 14
