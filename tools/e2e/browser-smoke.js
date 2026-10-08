@@ -335,6 +335,31 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert((await page.locator('#bankFixSource option').count())>1);
  await page.evaluate(()=>{SanadBankInbox.sync=window.qaOriginalReviewSync;closeSheet();});
  record('Review queue paginates 40 of 95 and unknown sources offer explicit human-controlled correction without posting');
+ // User-selected SMS XML must be review-only even when parser/known-card routing
+ // would otherwise qualify the message for automatic posting.
+ const ledgerBeforeXml=await page.evaluate(()=>S.transactions.length);
+ const xmlFirst=await page.evaluate(async()=>{
+   const now=Date.now(),body='Purchase AED 17.19 at SYNTHETIC XML SHOP using debit card ending 6452';
+   const xml='<?xml version="1.0"?><smses count="2"><sms address="EmiratesNBD" date="'+now+'" body="'+body+'"/><sms address="Other" date="'+now+'" body="Hello"/></smses>';
+   window.__qaXmlText=xml;
+   return SanadBankInbox.importSmsXmlFile(new File([xml],'qa-sms.xml',{type:'application/xml'}));
+ });
+ assert.equal(xmlFirst.ok,true);assert.equal(xmlFirst.total,2);assert.equal(xmlFirst.added,1);
+ assert.equal(await page.evaluate(()=>S.transactions.length),ledgerBeforeXml);
+ const fileId=await page.evaluate(()=>SanadBankInbox.smsReviewEvents.find(n=>n.importProvenance==='untrusted-sms-xml')?.id);
+ assert(fileId&&fileId.startsWith('smsxml:'));
+ await page.evaluate(()=>SanadBankInbox.sync({force:true}));
+ assert.equal(await page.evaluate(()=>S.transactions.length),ledgerBeforeXml,'Forced auto sync must never post imported XML evidence');
+ const fileHold=await page.evaluate(id=>SanadBankInbox.items.find(x=>x.native.id===id)?.plan,fileId);
+ assert.equal(fileHold?.reason,'file-import-human-confirmation-required');
+ await page.evaluate(id=>SanadBankInbox.openCorrection(id),fileId);
+ assert.equal(await page.locator('#bankFixManualProof').count(),1);
+ await page.evaluate(()=>closeSheet());
+ const xmlRepeat=await page.evaluate(()=>SanadBankInbox.importSmsXmlFile(new File([window.__qaXmlText],'qa-sms.xml',{type:'application/xml'})));
+ assert.equal(xmlRepeat.ok,true);assert.equal(xmlRepeat.added,0);assert.equal(xmlRepeat.existing,1);
+ await page.evaluate(()=>closeSheet());
+ assert.equal(await page.evaluate(()=>S.transactions.length),ledgerBeforeXml);
+ record('Untrusted SMS XML: local parse, progress, human-only review, no ledger posting on forced sync, repeat dedup');
  const perfContext=await browser.newContext(),perfPage=await perfContext.newPage();perfPage.on('pageerror',e=>errors.push(e.message));
  await perfPage.goto(process.env.SANAD_QA_URL||'http://127.0.0.1:8765');await perfPage.waitForFunction(()=>typeof S!=='undefined'&&S.ready&&SanadV9.initialized);
  if(await perfPage.locator('#onboard').isVisible())await perfPage.locator('[onclick="onboardSkip()"]').click();await perfPage.waitForFunction(()=>!document.getElementById('app').hidden&&(!document.getElementById('sanadBootSplash')||getComputedStyle(document.getElementById('sanadBootSplash')).visibility==='hidden')&&!_criticalMutationInFlight&&!_dataReplacementInFlight&&!_financialFlowInFlight&&!SanadBankInbox.syncing&&!SanadBankInbox.historicalImporting&&!SanadBankInbox._recentStarting);
