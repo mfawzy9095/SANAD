@@ -46,7 +46,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
    malformed:bankReviewDateInputValue('08/10/2026',Date.UTC(2026,9,8,12))
  }));
  assert.equal(reviewDates.valid,'2026-02-28');
- assert.match(reviewDates.invalid,/^\\d{4}-\\d{2}-\\d{2}$/);
+ assert.match(reviewDates.invalid,/^\d{4}-\d{2}-\d{2}$/);
  assert.notEqual(reviewDates.invalid,'2026-02-30');
  assert.equal(reviewDates.invalid,reviewDates.malformed);
  if(await page.locator('#onboard').isVisible())await page.locator('[onclick="onboardSkip()"]').click();
