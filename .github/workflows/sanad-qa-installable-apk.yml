@@ -78,7 +78,7 @@ jobs:
           name: SANAD-QA-BROWSER-DIAGNOSTICS
           path: |
             /tmp/sanad-qa-http.log
-            $RUNNER_TEMP/sanad-browser-qa
+            ${{ runner.temp }}/sanad-browser-qa
           if-no-files-found: ignore
           retention-days: 14
       - name: Upload QA APK only on success
