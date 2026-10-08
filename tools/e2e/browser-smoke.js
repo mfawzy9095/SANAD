@@ -56,7 +56,18 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  ];});
  await page.locator('#fab').click();
  await page.locator('#sheet [data-sanad-act="bank-sms-recent"]').click();
- await page.waitForFunction(()=>SanadBankInbox.lastRecentImport?.status==='complete');
+ // Report the actual scan outcome instead of losing 30s to an opaque timeout.
+ // This remains a real browser/SMS-bridge import; never force a completed result.
+ await page.waitForFunction(()=>!SanadBankInbox._recentStarting&&!SanadBankInbox.historicalImporting,{timeout:45000});
+ const qaRecent=await page.evaluate(()=>({
+   recent:SanadBankInbox.lastRecentImport?.status||null,
+   lastHistorical:SanadBankInbox.lastHistoricalImport?.status||null,
+   scanned:SanadBankInbox.lastRecentImport?.total?.scanned||0,
+   review:SanadBankInbox.lastRecentImport?.total?.review||0,
+   added:SanadBankInbox.lastRecentImport?.total?.added||0,
+   reviews:SanadBankInbox.smsReviewEvents?.length||0
+ }));
+ assert.equal(qaRecent.recent,'complete','Recent SMS scan did not complete: '+JSON.stringify(qaRecent));
  assert.equal(await page.evaluate(()=>S.transactions.length),1,'Generic deposit origin must remain review');
  await page.evaluate(()=>SanadBankInbox.openCorrection('qa-deposit'));
  await page.locator('[data-sanad-act="bank-fix-save"]').click();
