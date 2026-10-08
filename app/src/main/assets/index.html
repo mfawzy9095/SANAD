@@ -1992,7 +1992,7 @@ function viewHome(){
   }
   const quickHtml = quickCats.map(id => {
     const c = Finance.getCat('expense', id);
-    return '<button type="button" class="quick-chip" data-quick="' + c.id + '"><span class="ci">' + c.i + '</span><span>' + esc(c.n) + '</span></button>';
+    return '<button type="button" class="quick-chip" data-quick="' + c.id + '"><span class="ci">' + categoryIconHtml(c,20) + '</span><span>' + esc(c.n) + '</span></button>';
   }).join('') + '<button type="button" class="quick-chip more" data-quick="__all">+ المزيد</button>';
   const countryAccountIds = new Set(Finance.getCountryAccounts(country).map(a => a.id));
   const monthTx = S.transactions.filter(t =>
@@ -2281,7 +2281,7 @@ function txRowHtml(t, withSwipe){
   const walletCur = acc ? acc.currency : 'EGP';
   const fxLine = t.settlementStatus==='pending'?'<span class="fx">مبلغ الخصم يحتاج تأكيدًا</span>':(origCur !== walletCur && t.fxRate && t.fxRate !== 1)
     ? '<span class="fx amt-val">≈ ' + amtFull(t.walletAmount, walletCur) + '</span>' : '';
-  const inner = '<div class="ic" style="background:' + c.c + '22;color:' + c.c + '">' + c.i + '</div>' +
+  const inner = '<div class="ic" style="background:' + c.c + '22;color:' + c.c + '">' + categoryIconHtml(c,20) + '</div>' +
     '<div class="info"><b>' + tags + esc(c.n) + (t.rec ? ' 🔁' : '') + '</b>' +
       '<span>' + noteText + (sourceTxt ? ' • ' + esc(sourceTxt) : '') + '</span><span>'+esc(t.date)+' · '+esc(transactionTimeText(t))+'</span></div>' +
     '<div class="amt ' + cls + ' amt-val">' + sign + amtText(t.amount) + ' ' + Finance.curSymbol(origCur) + fxLine + '</div>';
@@ -2679,7 +2679,7 @@ function viewRep(){
       const limit = Finance.getCategoryBudget(budgetMonth, country, activeCur, catId);
       const c = Finance.getCat('expense', catId);
       if (limit <= 0){
-        return '<div class="budget-row normal"><div class="icon" style="background:' + c.c + '22;color:' + c.c + '">' + c.i + '</div>' +
+        return '<div class="budget-row normal"><div class="icon" style="background:' + c.c + '22;color:' + c.c + '">' + categoryIconHtml(c,20) + '</div>' +
           '<div class="body"><div class="top"><span>' + esc(c.n) + '</span><span class="amt amt-val">' + amtText(spent) + '</span></div>' +
           '<div class="info" style="color:var(--text-3)">بدون حد</div></div></div>';
       }
@@ -2689,7 +2689,7 @@ function viewRep(){
       if (st.level === 'over') infoTxt = 'تجاوزت الحد بـ ' + amtFull(spent - limit, activeCur);
       else if(st.level==='unknown')infoTxt='الإجمالي غير مكتمل؛ مبلغ خصم يحتاج تأكيدًا';
       else infoTxt = 'باقي ' + amtFull(limit - spent, activeCur);
-      return '<div class="budget-row ' + st.level + '"><div class="icon" style="background:' + c.c + '22;color:' + c.c + '">' + c.i + '</div>' +
+      return '<div class="budget-row ' + st.level + '"><div class="icon" style="background:' + c.c + '22;color:' + c.c + '">' + categoryIconHtml(c,20) + '</div>' +
         '<div class="body"><div class="top"><span>' + esc(c.n) + '</span><span class="amt amt-val">' + amtText(spent) + ' / ' + amtText(limit) + '</span></div>' +
         '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
         '<div class="info amt-val">' + infoTxt + '</div></div></div>';
@@ -2743,7 +2743,7 @@ function viewRep(){
       '<div class="card">' + cats.map(([id,val]) => {
         const c = Finance.getCat('expense', id);
         const pct = spending ? Math.round((val/spending)*100) : 0;
-        return '<div class="cat-row"><div class="icon" style="background:' + c.c + '22;color:' + c.c + '">' + c.i + '</div>' +
+        return '<div class="cat-row"><div class="icon" style="background:' + c.c + '22;color:' + c.c + '">' + categoryIconHtml(c,20) + '</div>' +
           '<div class="body"><div class="top"><span>' + esc(c.n) + '</span><span class="amt amt-val">' + amtText(val) + ' • ' + pct + '%</span></div>' +
           '<div class="bar"><i style="width:' + (val/maxCat)*100 + '%;background:' + c.c + '"></i></div></div></div>';
       }).join('') + '</div>'
@@ -4825,7 +4825,7 @@ function openEditCategoryBudgets(){
   const rows = cats.map(c => {
     const v = Finance.getCategoryBudget(month, country, currency, c.id);
     return '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--outline)">' +
-      '<div style="width:34px;height:34px;border-radius:10px;background:' + c.c + '22;color:' + c.c + ';display:grid;place-items:center;font-size:16px">' + c.i + '</div>' +
+      '<div style="width:34px;height:34px;border-radius:10px;background:' + c.c + '22;color:' + c.c + ';display:grid;place-items:center;font-size:16px">' + categoryIconHtml(c,20) + '</div>' +
       '<div style="flex:1;font-size:13.5px;font-weight:500">' + esc(c.n) + '</div>' +
       '<input type="number" inputmode="decimal" data-catbudget="' + c.id + '" value="' + (v || '') + '" placeholder="0" style="width:100px;background:var(--surface-2);border:1px solid transparent;border-radius:9px;padding:8px 10px;font-size:13.5px;text-align:center;font-variant-numeric:tabular-nums">' +
     '</div>';
@@ -5905,7 +5905,7 @@ function openCatsManage(type){
   const customIds = (S.categories[type] || []).map(c => c.id);
   const rows = cats.map(c => {
     const isCustom = customIds.includes(c.id);
-    return '<div class="list-item"><div class="li-ico" style="background:' + c.c + '22;color:' + c.c + '">' + c.i + '</div>' +
+    return '<div class="list-item"><div class="li-ico" style="background:' + c.c + '22;color:' + c.c + '">' + categoryIconHtml(c,20) + '</div>' +
       '<div class="li-body"><b>' + esc(c.n) + '</b><span>' + (isCustom ? 'مخصصة' : 'افتراضية') + '</span></div>' +
       (isCustom ? '<button type="button" class="li-del" data-cat-edit="' + type + ':' + c.id + '">✏️</button>' +
         '<button type="button" class="li-del" data-cat-del="' + type + ':' + c.id + '">🗑</button>' : '') + '</div>';
