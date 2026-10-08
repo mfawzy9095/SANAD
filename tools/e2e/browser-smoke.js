@@ -312,6 +312,29 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(id=>S.settings.bankLearningRules.find(r=>r.id===id).enabled,ruleId),false);
  assert.equal(await page.evaluate(()=>JSON.stringify(S.transactions)),historicalBeforeLearning);
  record('Learning screen revokes a saved template durably without changing historical transactions');
+ // Synthetic review-only UI regression: never posts or processes real financial content.
+ // The old interface hid editing for unrecognized messages and attempted to render
+ // thousands of cards in one DOM update.
+ await page.evaluate(()=>{
+   window.qaOriginalReviewSync=SanadBankInbox.sync;
+   SanadBankInbox.sync=async()=>({ok:true,review:95});
+   SanadBankInbox.items=Array.from({length:95},(_,n)=>({
+     native:{id:'qa-unknown-'+n,title:'Synthetic unknown issuer',text:'Synthetic financial notification requiring manual review '+n,postedAt:Date.now()},
+     parsed:{recognized:false,ignored:false},plan:{action:'review',reason:'source-not-identified'}
+   }));
+ });
+ await page.evaluate(()=>SanadBankInbox.open());
+ assert.equal(await page.locator('#sheet [data-sanad-act="bank-fix"]').count(),40);
+ assert.match(await page.locator('#sheet').innerText(),/عرض 1–40 من 95/);
+ await page.locator('#sheet [data-sanad-act="bank-review-page"][data-page="1"]').click();
+ assert.equal(await page.locator('#sheet [data-sanad-act="bank-fix"]').count(),40);
+ await page.locator('#sheet [data-sanad-act="bank-fix"][data-id="qa-unknown-40"]').click();
+ assert.equal(await page.locator('#bankFixManualProof').count(),1);
+ assert.equal(await page.locator('#bankFixConfirmIssuer').count(),1);
+ assert.equal(await page.locator('#bankFixConfirmCurrency').count(),1);
+ assert((await page.locator('#bankFixSource option').count())>1);
+ await page.evaluate(()=>{SanadBankInbox.sync=window.qaOriginalReviewSync;closeSheet();});
+ record('Review queue paginates 40 of 95 and unknown sources offer explicit human-controlled correction without posting');
  const perfContext=await browser.newContext(),perfPage=await perfContext.newPage();perfPage.on('pageerror',e=>errors.push(e.message));
  await perfPage.goto(process.env.SANAD_QA_URL||'http://127.0.0.1:8765');await perfPage.waitForFunction(()=>typeof S!=='undefined'&&S.ready&&SanadV9.initialized);
  if(await perfPage.locator('#onboard').isVisible())await perfPage.locator('[onclick="onboardSkip()"]').click();await perfPage.waitForFunction(()=>!document.getElementById('app').hidden&&(!document.getElementById('sanadBootSplash')||getComputedStyle(document.getElementById('sanadBootSplash')).visibility==='hidden')&&!_criticalMutationInFlight&&!_dataReplacementInFlight&&!_financialFlowInFlight&&!SanadBankInbox.syncing&&!SanadBankInbox.historicalImporting&&!SanadBankInbox._recentStarting);
