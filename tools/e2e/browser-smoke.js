@@ -80,11 +80,15 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  }));
  assert.equal(qaRecent.recent,'complete','Recent SMS scan did not complete: '+JSON.stringify(qaRecent));
  assert.equal(await page.evaluate(()=>S.transactions.length),1,'Generic deposit origin must remain review');
- await page.evaluate(()=>SanadBankInbox.openCorrection('qa-deposit'));
+ await page.evaluate(()=>{const item=SanadBankInbox.items.find(x=>x.native.id==='qa-deposit');item.parsed.transactionDate='2026-02-30';SanadBankInbox.openCorrection('qa-deposit');});
  assert.match(await page.locator('#bankFixDate').inputValue(),/^\d{4}-\d{2}-\d{2}$/,'SMS review must present a valid ISO date before saving');
+ assert.notEqual(await page.locator('#bankFixDate').inputValue(),'2026-02-30');
  await page.locator('[data-sanad-act="bank-fix-save"]').click();
- assert.equal(await page.evaluate(()=>S.transactions.length),1,'Unchecked external origin cannot post');
+ assert.equal(await page.evaluate(()=>S.transactions.length),1,'Unchecked or malformed date cannot post');
  await page.locator('#bankFixExternalIncome').check();
+ await page.locator('[data-sanad-act="bank-fix-save"]').click();
+ assert.equal(await page.evaluate(()=>S.transactions.length),1,'External income confirmation alone must not approve invalid bank date');
+ await page.locator('#bankFixConfirmDate').check();
  await page.locator('[data-sanad-act="bank-fix-save"]').click();
  await page.waitForFunction(()=>S.transactions.length===2&&!_criticalMutationInFlight);
  await page.waitForFunction(()=>document.getElementById('sheet').dataset.sheetType==='bank-inbox'&&!SanadBankInbox.syncing);
