@@ -56,6 +56,7 @@ main{flex:1;overflow-y:auto;padding:0 16px 120px;-webkit-overflow-scrolling:touc
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;max-width:500px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface);border-top:1px solid var(--outline);padding:6px 0 calc(6px + env(safe-area-inset-bottom));z-index:30}
 .bottom-nav button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px 6px;color:var(--text-3);border-radius:12px;margin:0 2px}
 .bottom-nav button .ico{width:32px;height:22px;display:grid;place-items:center;font-size:18px;border-radius:12px}
+.bottom-nav button .ico svg{width:21px;height:21px;display:block;flex-shrink:0}
 .bottom-nav button span{font-size:10.5px;font-weight:500}
 .bottom-nav button.on{color:var(--primary)}
 .bottom-nav button.on .ico{background:var(--primary-soft)}
@@ -731,11 +732,11 @@ window.__sanadSplashBorn=performance.now();
   <main id="view"></main>
   <button type="button" class="fab" id="fab" onclick="openAddMenu()">＋</button>
   <nav class="bottom-nav" id="bottomNav">
-    <button type="button" data-tab="home" onclick="go('home')"><div class="ico">🏠</div><span>الرئيسية</span></button>
-    <button type="button" data-tab="tx" onclick="go('tx')"><div class="ico">📋</div><span>المعاملات</span></button>
-    <button type="button" data-tab="accounts" onclick="go('accounts')"><div class="ico">💳</div><span>الحسابات</span></button>
-    <button type="button" data-tab="subs" onclick="go('subs')"><div class="ico">📺</div><span>الالتزامات</span></button>
-    <button type="button" data-tab="rep" onclick="go('rep')"><div class="ico">📊</div><span>التقارير</span></button>
+    <button type="button" data-tab="home" onclick="go('home')"><div class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-8h6v8"/></svg></div><span>الرئيسية</span></button>
+    <button type="button" data-tab="tx" onclick="go('tx')"><div class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h16v18l-4-2-4 2-4-2-4 2V3z"/><path d="M8 8h8M8 12h8"/></svg></div><span>المعاملات</span></button>
+    <button type="button" data-tab="accounts" onclick="go('accounts')"><div class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="15" rx="2"/><path d="M2 10h20M16 15h3"/></svg></div><span>الحسابات</span></button>
+    <button type="button" data-tab="subs" onclick="go('subs')"><div class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M8 15h2"/></svg></div><span>الالتزامات</span></button>
+    <button type="button" data-tab="rep" onclick="go('rep')"><div class="ico"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M8 17v-6M13 17V8M18 17V5"/></svg></div><span>التقارير</span></button>
   </nav>
 </div>
 
