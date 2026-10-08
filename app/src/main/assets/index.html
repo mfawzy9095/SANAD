@@ -1854,14 +1854,19 @@ function viewHome(){
     const bal = heroBalanceView ? heroBalanceView.display : Finance.accountBalance(defaultAcc.id);
     const cInfo = countryInfo(defaultAcc.country);
     const inst = Finance.getInstitution(defaultAcc.institutionId);
+    const registryBank=inst&&inst.bankRegistryId&&typeof UaeBankRegistryCore!=='undefined'?UaeBankRegistryCore.get(inst.bankRegistryId):null;
+    const officialShort=registryBank&&UaeBankRegistryCore.bankShortName?UaeBankRegistryCore.bankShortName(registryBank):null;
+    const fullAccountName=String(defaultAcc.name||'');
+    const displayedAccountName=inst&&officialShort&&fullAccountName.includes(inst.name)?fullAccountName.replace(inst.name,officialShort):fullAccountName;
+    const accountTypeLabel=accountTypeInfo(defaultAcc.type).name;
     const quickAmountEye=S.settings.hideAmounts
       ? '<button type="button" class="amount-eye" data-sanad-act="amount-visibility" aria-label="'+(amountsMasked()?'إظهار المبالغ':'إخفاء المبالغ')+'" title="'+(amountsMasked()?'إظهار المبالغ':'إخفاء المبالغ')+'">'+(amountsMasked()?'👁️':'🙈')+'</button>'
       : '';
     heroHtml = '<div class="wallet-hero ' + maskCls + '" data-account-open="' + defaultAcc.id + '">' +
       '<div class="wh-link" data-act="go-accounts">كل الحسابات ›</div>' +
       '<div class="wh-top"><div class="wh-ico">' + institutionLogoHtml(inst,32,defaultAcc.icon) + '</div>' +
-        '<div style="flex:1;min-width:0"><div class="wh-name">' + cInfo.flag + ' ' + esc(defaultAcc.name) + '</div>' +
-          '<div class="wh-cur">' + (inst ? esc(inst.name) + ' · ' : '') + Finance.curInfo(defaultAcc.currency).name + '</div></div>' +
+        '<div style="flex:1;min-width:0"><div class="wh-name" title="'+esc(fullAccountName)+'">' + cInfo.flag + ' ' + esc(displayedAccountName) + '</div>' +
+          '<div class="wh-cur">' + esc(accountTypeLabel) + ' · ' + Finance.curInfo(defaultAcc.currency).name + '</div></div>' +
       '</div>' +
       '<div class="wh-balance-row"><div class="wh-bal amt-val">' + amtText(bal) + ' <span style="font-size:14px;opacity:.85">' + Finance.curSymbol(defaultAcc.currency) + '</span></div>' + quickAmountEye + '</div>' +
       '<div class="wh-sub">الحساب الأساسي في ' + esc(cInfo.name) + (heroBalanceView?' · '+(bal===null?'الرصيد غير مؤكد — راجع البداية والعمليات':'رصيد الحساب من السجل')+(heroBalanceView.observed!==null?' · آخر رصيد متاح بالرسالة '+amtText(heroBalanceView.observed):''):'') + '</div>' +
