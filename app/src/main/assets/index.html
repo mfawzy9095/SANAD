@@ -9795,6 +9795,7 @@ const SanadBankInbox = {
     const built=pairId?BankIngestionCore.pairOwnTransfer(item.parsed,S,{counterpartTransactionId:pairId,fromAccountId:route.fromAccount&&route.fromAccount.id,toAccountId:route.targetAccount&&route.targetAccount.id},buildOptions):BankMessageCore.buildTransaction(corrected,route,buildOptions);
     if(built.ok&&built.transaction.type==='expense'&&corrected.category!==draft.category)built.transaction.userCategoryConfirmed=true;
     if(built.ok&&egyptNbdCorrection)built.transaction.bankIssuerCorrection={from:draft.bankId,to:corrected.bankId,issuerCountry:chosenAccount.country,confirmedByUser:true,source:'manual-review',at:Date.now()};
+    if(built.ok&&fromUntrustedFile)built.transaction.bankImportSource='sms-xml-user-confirmed';
     if(built.ok&&manualCandidates.length)built.transaction.manualImportResolution={decision:'distinct-operation',candidateIds:manualCandidates.map(t=>t.id).sort(),source:'user-confirmation',at:Date.now()};
     if(built.ok&&!built.replacesTransactionId){
       const original=draft;
@@ -9870,6 +9871,9 @@ const SanadBankInbox = {
   async approve(id){
     const item=this.items.find(x=>String(x.native.id)===String(id));
     if(!item){await this.open();return;}
+    // Enforce file provenance at the write entrypoint, not just by hiding
+    // the quick-approve button in the review UI.
+    if(item.native?.importProvenance==='untrusted-sms-xml'){this.openCorrection(id);return;}
     const parsed=item.parsed;
     let plan=BankIngestionCore.plan(parsed,S,{uid});
     if(plan.action==='duplicate'){await this.ack([item.native.id]);await this.open();toast('العملية مضافة بالفعل');return;}
