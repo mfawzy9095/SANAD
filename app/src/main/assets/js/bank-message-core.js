@@ -371,6 +371,10 @@
       const ref=normalized.match(/(?:original\s+reference|مرجع\s+الشراء)\s*[:#\-]?\s*([A-Za-z0-9_-]{4,40})(?![A-Za-z0-9_-])/i);
       const date=normalized.match(/(?:purchase\s+date|تاريخ\s+الشراء)\s*[:\-]?\s*(\d{4}-\d{2}-\d{2})/i);
       const identity=parseGeneric(obj,normalized)||{};
+      const suffixProof=normalized.match(/(?:\bcard\b|بطاق\S*)[^.;\n]{0,70}?(?:ending(?:\s+(?:in|with))?|ends\s+with|last\s+4|المنته(?:ية|ي)\s+(?:بالرقم|ب)?|تنتهي\s+(?:ارقامها)?\s*ب?)\s*[:#-]?\s*(\d{4})(?![\dA-Za-z])/i);
+      // Settlement linking needs an explicit suffix assertion, not the generic
+      // purchase parser's nearby-number fallback (e.g. cardholder ID/year).
+      identity.cardLast4=suffixProof?suffixProof[1]:null;
       const labels=[/original\s+purchase|الشراء\s+الاصلي/gi,/settled\s+amount|settlement\s+principal|مبلغ\s+التسوية/gi,/total\s+fees|اجمالي\s+الرسوم/gi,/original\s+reference|مرجع\s+الشراء/gi,/purchase\s+date|تاريخ\s+الشراء/gi,/\bcard\b|بطاق\S*/gi];
       const repeated=labels.some(label=>(normalized.match(label)||[]).length>1);
       const complete=/purchase\s+settlement\s+(?:is\s+)?completed|settlement\s+of\s+(?:your\s+)?purchase\s+(?:is\s+)?completed|تمت\s+تسوية\s+الشراء/i.test(normalized);

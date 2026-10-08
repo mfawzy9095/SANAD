@@ -36,6 +36,9 @@ for(const suffix of [
  assert.equal(I.plan(candidate,before).action,'review','ambiguous settlement: '+suffix);
  assert.deepEqual(before.transactions[0].settlementStatus,'pending');
 }
+for(const label of ['Cardholder ID 4321.','Debit card issued in 4321.','Debit card ending 43210.']){
+ assert.equal(I.plan(parse(text.replace('Debit card ending 4321.',label)),before).action,'review','a nearby number is not a card suffix: '+label);
+}
 const unknown=M.parse({id:'unknown',sender:'1122',text,postedAt:1791547200000});assert.equal(I.plan(unknown,before).action,'review');
 assert.equal(M.parse({sender:'EmiratesNBD',text:text.replace('completed','pending')}).ignored,true);
 assert.equal(I.plan(parsed,{...before,transactions:[]}).action,'review','settlement before purchase is retained for review');

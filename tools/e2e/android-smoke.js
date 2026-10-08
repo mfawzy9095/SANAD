@@ -23,7 +23,7 @@ const trustFixtureRows=()=>{
 // Exercise the system notification's real PendingIntent through System UI.
 async function tapImportNotificationAction(label){
  adb('shell','cmd','statusbar','expand-notifications');
- for(let attempt=0;attempt<4;attempt++){
+ for(let attempt=0;attempt<6;attempt++){
   adb('shell','uiautomator','dump','/sdcard/sanad-qa-notifications.xml');
   const xml=adb('shell','cat','/sdcard/sanad-qa-notifications.xml');
   const nodes=xml.match(/<node\b[^>]*>/g)||[];
@@ -32,8 +32,15 @@ async function tapImportNotificationAction(label){
   if(hit&&tap(hit)){adb('shell','cmd','statusbar','collapse');return;}
   const title=nodes.findIndex(n=>n.includes('text="SANAD · قراءة الرسائل محليًا"'));
   const expand=(title>=0?nodes.slice(0,title).reverse():[]).find(n=>n.includes(':id/expand_button"')&&n.includes('clickable="true"'));
-  if(expand)tap(expand);
-  if(attempt===3)fs.writeFileSync(path.join(out,'notification-action-failure.xml'),xml);
+  if(expand&&expand.includes('content-desc="Expand"'))tap(expand);
+  else {
+   // Ongoing low-priority imports can sit below expanded Messages notifications.
+   // Scroll the real shade; do not substitute a direct JS/service invocation.
+   const bounds=nodes.map(n=>n.match(/bounds="\[\d+,\d+\]\[(\d+),(\d+)\]"/)).filter(Boolean);
+   const width=Math.max(...bounds.map(b=>+b[1])),height=Math.max(...bounds.map(b=>+b[2]));
+   adb('shell','input','swipe',String(Math.floor(width/2)),String(Math.floor(height*.84)),String(Math.floor(width/2)),String(Math.floor(height*.4)),'200');
+  }
+  if(attempt===5)fs.writeFileSync(path.join(out,'notification-action-failure.xml'),xml);
   await new Promise(r=>setTimeout(r,150));
  }
  throw Error('Import notification action not visible: '+label);
