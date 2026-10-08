@@ -9658,6 +9658,11 @@ const SanadBankInbox = {
     const chosenInstrument=sourceType==='instrument'?Finance.getInstrument(sourceId):null;
     const chosenAccount=Finance.getAccount(chosenInstrument?chosenInstrument.accountId:sourceId);
     if(!chosenAccount||chosenAccount.archived){toast('اختر حسابًا موجودًا');return;}
+    const chosenIssuer=Finance.getInstitution(chosenAccount.institutionId);
+    // A merchant currency or locale is not sufficient evidence to change issuer.
+    // Never attach a bank/provider's authenticated SMS to a different institution.
+    if(originalRecognized&&draft.bankId&&chosenIssuer&&chosenIssuer.bankRegistryId&&chosenIssuer.bankRegistryId!==draft.bankId){toast('البنك المختار لا يطابق البنك المثبت في الرسالة؛ لا يمكن ربطهما كعملية واحدة');return;}
+    if(originalRecognized&&draft.providerId&&chosenIssuer&&chosenIssuer.providerRegistryId&&chosenIssuer.providerRegistryId!==draft.providerId){toast('المحفظة المختارة لا تطابق مصدر الرسالة');return;}
     if(originalRecognized&&draft.country&&chosenAccount.country!==draft.country&&!document.getElementById('bankFixConfirmIssuer')?.checked){toast('أكّد بلد الحساب المختلف عن الرسالة');return;}
     if(originalRecognized&&currency!==draft.currency&&!document.getElementById('bankFixConfirmCurrency')?.checked){toast('أكّد تصحيح عملة العملية الأصلية');return;}
     const corrected=Object.assign({},draft,{kind,amount,currency,country:chosenAccount.country,confidence:1});
