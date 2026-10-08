@@ -58,7 +58,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.locator('#sheet [data-sanad-act="bank-sms-recent"]').click();
  // Report the actual scan outcome instead of losing 30s to an opaque timeout.
  // This remains a real browser/SMS-bridge import; never force a completed result.
- await page.waitForFunction(()=>!SanadBankInbox._recentStarting&&!SanadBankInbox.historicalImporting,{timeout:45000});
+ await page.waitForFunction(()=>!SanadBankInbox._recentStarting&&!SanadBankInbox.historicalImporting,null,{timeout:45000});
  const qaRecent=await page.evaluate(()=>({
    recent:SanadBankInbox.lastRecentImport?.status||null,
    lastHistorical:SanadBankInbox.lastHistoricalImport?.status||null,
