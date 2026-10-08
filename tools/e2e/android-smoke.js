@@ -156,6 +156,7 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  assert.equal(resumed.status,'complete');assert.equal(resumed.throughDate,beforeKill.throughDate);assert.equal(resumed.total.scanned,backgroundScan.total.scanned);
  assert.equal(await page.evaluate(()=>JSON.stringify(S.transactions)),txBeforeBackground);
  pass('Actual Android process force-stop and cold reopen retain cursor; bounded resume completes without loss or repeated posting');
+ fs.writeFileSync(path.join(out,'import-performance.json'),JSON.stringify({scope:'Android 35 emulator, native provider, 160 nonfinancial synthetic rows plus financial fixtures; elapsed stage timings, not Samsung measurements',background:backgroundScan,resumed},null,2));
 
  await page.waitForFunction(()=>Number(getComputedStyle(document.getElementById('toast')).opacity)<0.01&&Number(getComputedStyle(document.getElementById('backdrop')).opacity)<0.01&&Number(getComputedStyle(document.querySelector('#view .wallet-hero')||document.getElementById('view')).opacity)>0.99);
  await page.screenshot({path:path.join(out,'android-home.png')});assert.deepEqual(errors,[]);
