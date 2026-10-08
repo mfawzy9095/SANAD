@@ -252,7 +252,7 @@ function process(text,input,state){
 
 (function creditCardEditorUsesItsOwnRegistrySelection(){
   const html=fs.readFileSync(path.join(__dirname,'../../main/assets/index.html'),'utf8');
-  assert.ok(html.includes("bankRegistryPickerHtml(cardSelectedBankRegistryId,'cardBankRegistry')"),'credit card editor must use cardSelectedBankRegistryId');
+  assert.ok(html.includes("bankRegistryPickerHtml(cardSelectedBankRegistryId,'cardBankRegistry',data.country)"),'credit card editor must use its own selection and correct issuer country');
   assert.ok(!html.includes("bankRegistryPickerHtml(selectedBankRegistryId,'cardBankRegistry')"),'credit card editor must not reference the account-editor variable');
 })();
 
