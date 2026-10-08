@@ -54,7 +54,17 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.waitForFunction(()=>!document.getElementById('sanadBootSplash')||getComputedStyle(document.getElementById('sanadBootSplash')).visibility==='hidden');
  assert((await page.locator('#view').innerText()).length>30);
  assert.equal(await page.locator('#bottomNav .ico svg').count(),5,'All bottom navigation icons must render as local vector icons');
- assert((await page.locator('.quick-chip[data-quick] .ci svg').count())>=3,'Default expense category quick actions must use local vector icons');
+ const quickActionCount=await page.locator('.quick-chip[data-quick]').count();
+ if(quickActionCount===0){
+  // A newly onboarded user has no account and correctly sees the create-account
+  // empty state. Check the icon renderer directly instead of demanding a hidden
+  // quick-expense UI that would allow spending without a source account.
+  assert((await page.locator('[data-act="account-add-menu"]').count())>0,'Empty home must prompt for an account');
+  const sampleMarkup=await page.evaluate(()=>categoryIconHtml(Finance.getCat('expense','food'),20));
+  assert.match(sampleMarkup,/<svg\b/,'Default food icon must render as an offline vector');
+ }else{
+  assert((await page.locator('.quick-chip[data-quick] .ci svg').count())>=3,'Default expense category quick actions must use local vector icons');
+ }
  assert.equal(await page.locator('#topBar [data-act="open-settings"] svg').count(),1,'Home settings action must use accessible offline SVG icon');
  record('Boot, offline vector navigation, meaningful screen, IndexedDB and onboarding');
  await page.evaluate(()=>go('settings'));await page.locator('[data-sanad-act="bank-sms-config"]').click();
