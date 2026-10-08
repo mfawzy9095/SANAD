@@ -130,6 +130,12 @@ assert.equal(egyptNbd.recognized,true);
 assert.equal(egyptNbd.bankId,'emirates-nbd-egypt');
 assert.equal(egyptNbd.country,'EGY');
 assert.notEqual(egyptNbd.reviewReason,'issuer-jurisdiction-unconfirmed');
+for(const cur of ['EUR','MAD','USD']){
+  const abroad=fixtureParse({id:'uae-foreign-'+cur,postedAt:Date.UTC(2026,9,8),title:'EmiratesNBD',text:'Purchase '+cur+' 23.45 at SYNTHETIC INTERNATIONAL SHOP using debit card ending 3993'});
+  assert.equal(abroad.recognized,true);
+  assert.equal(abroad.bankId,'emirates-nbd');
+  assert.equal(abroad.country,'UAE','Spending currency '+cur+' must not change verified issuing bank');
+}
 assert.strictEqual(fixtureParse({text:'Your account 1234 was credited EGP 50.00'}).country,'EGY');
 assert.strictEqual(fixtureParse({text:'Purchase MAD 20.00 at TEST STORE on your credit card ending 9999'}).country,'MAR');
 
