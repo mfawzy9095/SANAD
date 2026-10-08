@@ -244,7 +244,22 @@
     const value='([\\d,]+(?:\\.\\d+)?)';
     const base={bankId,country:'EGY',currency:'EGP',confidence:0.99};
     m=x.match(/Your\s+Card\s*\*+\s*(\d{4})\s+was\s+debited\s+with\s+(EGP|USD|EUR|SAR|MAD|AED)\s*([\d,]+(?:\.\d+)?)\s+at\s+(.+?)\s+on\s+[\d/ :]+\.\s*Available\s+limit\s+is\s+(EGP|USD)\s*([\d,]+(?:\.\d+)?)/i);
-    if(m)return result(Object.assign(base,{kind:'purchase',direction:'debit',cardLast4:m[1],cardType:'credit_card',currency:m[2],amount:amount(m[3]),merchant:m[4].trim(),category:categoryForMerchant(m[4]),availableCredit:amount(m[6]),availableCreditCurrency:m[5]}),input,raw);
+    if(m){
+      const printed=x.match(/\bon\s+(\d{1,2}\/\d{1,2}\/\d{2}(?:\d{2})?)(?!\d)\s+(\d{1,2}:[0-5]\d)/i);
+      // This issuer adapter uses D/M/Y; the century of a two-digit year is
+      // anchored to received evidence rather than the machine's current date.
+      let printedDate=printed&&printed[1];
+      if(printedDate&&/\/\d{2}$/.test(printedDate)){
+        const receivedYear=new Date(Number(input.postedAt)||Date.now()).getUTCFullYear();
+        const shortYear=Number(printedDate.slice(-2));
+        let year=Math.floor(receivedYear/100)*100+shortYear;
+        if(year>receivedYear+1)year-=100;
+        printedDate=printedDate.slice(0,-2)+year;
+      }
+      const transactionDate=printedDate?isoDateFromDmy(printedDate):null;
+      const transactionTime=printed&&Number(printed[2].split(':')[0])<24?printed[2]:null;
+      return result(Object.assign(base,{kind:'purchase',direction:'debit',cardLast4:m[1],cardType:'credit_card',currency:m[2],amount:amount(m[3]),merchant:m[4].trim(),category:categoryForMerchant(m[4]),availableCredit:amount(m[6]),availableCreditCurrency:m[5],transactionDate,transactionTime,reviewReason:transactionDate&&transactionTime?null:'invalid-operation-date'}),input,raw);
+    }
     m=x.match(new RegExp('تم\\s+خصم\\s*(?:مبلغ\\s*)?(?:([A-Za-z]{3})\\s*)?'+value+'\\s*(?:([A-Za-z]{3})|'+local+')?\\s+من\\s+(بطاقة\\s+الائتمان|بطاقة\\s+الخصم\\s+المباشر|البطاقه|البطاقة).*?(\\d{4})\\s+عند\\s+(.+?)\\s+يوم[\\s\\S]*?المتاح\\s*'+value+'(?:\\s*(?:([A-Za-z]{3})|'+local+'))?(?![\\d.,])','i'));
     if(m){const credit=m[4].includes('الائتمان'),debit=m[4].includes('المباشر');const b=Object.assign(base,{kind:/\bATM(?:\b|(?=\d))/i.test(m[6])?'cash_withdrawal':'purchase',direction:'debit',currency:m[1]||m[3]||'EGP',amount:amount(m[2]),cardLast4:m[5],cardType:credit?'credit_card':debit?'debit_card':null,merchant:m[6].trim(),category:categoryForMerchant(m[6])});if(credit){b.availableCredit=amount(m[7]);b.availableCreditCurrency=(m[8]||'EGP').toUpperCase();}else if(debit){b.availableBalance=amount(m[7]);b.availableBalanceCurrency=(m[8]||'EGP').toUpperCase();}return result(b,input,raw);}
     m=x.match(new RegExp('تم\\s+(تنفيذ|اضافة)\\s+تحويل\\s+لحظي\\s+(?:من\\s+حسابكم\\s+(?:رقم|المنتهي\\s+ب)|لحسابكم\\s+(?:رقم|المنتهي\\s+ب))\\s*(\\d+)\\s+بمبلغ\\s*'+value+'\\s*'+local,'i'));

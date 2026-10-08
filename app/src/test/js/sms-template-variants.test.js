@@ -41,3 +41,16 @@ const differentBalanceCurrency=M.parse({sender:'BanK-AlAhly',text:'تم خصم 6
 assert.equal(differentBalanceCurrency.amount,63.25);
 assert.equal(differentBalanceCurrency.currency,'EGP');
 assert.equal(differentBalanceCurrency.availableBalanceCurrency,'USD','explicit observed balance currency must not be relabeled');
+
+// Egyptian foreign purchases retain issuer identity and the bank's printed D/M/Y date.
+{
+ const M=require('../../main/assets/js/bank-message-core'),assert=require('assert/strict');
+ const state={institutions:[{id:'egypt',bankRegistryId:'nbe-egypt',country:'EGY'}],accounts:[{id:'credit',institutionId:'egypt',type:'credit',country:'EGY',currency:'EGP'}],paymentInstruments:[{id:'card',accountId:'credit',institutionId:'egypt',type:'credit_card',last4:'4321'}],transactions:[]};
+ for(const date of ['15/06/2026','15/06/26']){
+  const p=M.parse({id:'synthetic-foreign-'+date,sender:'BanK-AlAhly',text:'Your Card ****4321 was debited with USD 23.45 at SYNTHETIC STORE on '+date+' 12:30. Available limit is EGP 9000.00',postedAt:Date.UTC(2026,5,17)});
+  assert.equal(p.transactionDate,'2026-06-15');assert.equal(p.transactionTime,'12:30');assert.equal(p.country,'EGY');assert.equal(p.availableCreditCurrency,'EGP');
+  const route=M.resolveRoute(p,state),built=M.buildTransaction(p,route,{allowPendingSettlement:true});assert.equal(route.status,'routed');assert.equal(built.ok,true);assert.equal(built.transaction.date,'2026-06-15');assert.equal(built.transaction.amount,23.45);assert.equal(built.transaction.currency,'USD');assert.equal(built.transaction.walletAmount,null);
+ }
+ const bad=M.parse({sender:'BanK-AlAhly',text:'Your Card ****4321 was debited with USD 23.45 at SYNTHETIC STORE on 29/02/25 12:30. Available limit is EGP 9000.00'});
+ assert.equal(bad.reviewReason,'invalid-operation-date');
+}
