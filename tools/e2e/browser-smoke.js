@@ -38,6 +38,17 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.goto(process.env.SANAD_QA_URL||'http://127.0.0.1:8765');
  await page.waitForFunction(()=>typeof S!=='undefined'&&S.ready&&typeof SanadV9!=='undefined'&&SanadV9.initialized);
  assert.match(await page.title(),/SANAD/);
+ // Correct date input must reject impossible dates instead of creating a
+ // malformed/empty field and silently shifting the transaction date.
+ const reviewDates=await page.evaluate(()=>({
+   valid:bankReviewDateInputValue('2026-02-28',Date.UTC(2026,9,8,12)),
+   invalid:bankReviewDateInputValue('2026-02-30',Date.UTC(2026,9,8,12)),
+   malformed:bankReviewDateInputValue('08/10/2026',Date.UTC(2026,9,8,12))
+ }));
+ assert.equal(reviewDates.valid,'2026-02-28');
+ assert.match(reviewDates.invalid,/^\\d{4}-\\d{2}-\\d{2}$/);
+ assert.notEqual(reviewDates.invalid,'2026-02-30');
+ assert.equal(reviewDates.invalid,reviewDates.malformed);
  if(await page.locator('#onboard').isVisible())await page.locator('[onclick="onboardSkip()"]').click();
  await page.waitForFunction(()=>!document.getElementById('app').hidden);
  await page.waitForFunction(()=>!document.getElementById('sanadBootSplash')||getComputedStyle(document.getElementById('sanadBootSplash')).visibility==='hidden');
