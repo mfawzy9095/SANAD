@@ -6,6 +6,7 @@ const {execFileSync}=require('child_process');
 const fs=require('fs'),path=require('path'),assert=require('assert/strict');
 const {findAppTarget}=require('./android-devtools-target');
 const {notificationExpand}=require('./android-notification-target');
+const {readNotificationHierarchy}=require('./android-notification-dump');
 const pkg=process.env.SANAD_QA_PACKAGE||'com.sanad.v9test.forensicqa.stable',out=process.env.SANAD_QA_OUTPUT||'/tmp/sanad-android-qa';fs.mkdirSync(out,{recursive:true});
 const results=[],errors=[];let browser,page;
 const adb=(...args)=>execFileSync('adb',args,{encoding:'utf8'}).trim();
@@ -25,8 +26,15 @@ const trustFixtureRows=()=>{
 async function locateImportNotificationAction(label){
  adb('shell','cmd','statusbar','expand-notifications');
  for(let attempt=0;attempt<6;attempt++){
-  adb('shell','uiautomator','dump','/sdcard/sanad-qa-notifications.xml');
-  const xml=adb('shell','cat','/sdcard/sanad-qa-notifications.xml');
+  const dumpAttempts=[];
+  const xml=await readNotificationHierarchy({
+    adb,
+    wait:ms=>new Promise(r=>setTimeout(r,ms)),
+    onAttempt:entry=>{
+      dumpAttempts.push(entry);
+      fs.writeFileSync(path.join(out,'notification-'+label+'-'+attempt+'-dump-attempts.json'),JSON.stringify(dumpAttempts,null,2));
+    }
+  });
   fs.writeFileSync(path.join(out,'notification-'+label+'-'+attempt+'.xml'),xml);
   const nodes=xml.match(/<node\b[^>]*>/g)||[];
   const hit=nodes.find(n=>n.includes('text="'+label+'"'));
@@ -38,6 +46,7 @@ async function locateImportNotificationAction(label){
    // Ongoing low-priority imports can sit below expanded Messages notifications.
    // Scroll the real shade; do not substitute a direct JS/service invocation.
    const bounds=nodes.map(n=>n.match(/bounds="\[\d+,\d+\]\[(\d+),(\d+)\]"/)).filter(Boolean);
+   if(!bounds.length){await new Promise(r=>setTimeout(r,300));continue;}
    const width=Math.max(...bounds.map(b=>+b[1])),height=Math.max(...bounds.map(b=>+b[2]));
    adb('shell','input','swipe',String(Math.floor(width/2)),String(Math.floor(height*.84)),String(Math.floor(width/2)),String(Math.floor(height*.4)),'200');
   }
