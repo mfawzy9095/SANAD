@@ -9088,7 +9088,7 @@ const SanadBankInbox = {
         if(prior){ackIds.push(n.id);if(prior.action==='dismissed'||prior.action==='ignored')summary.ignored++;else summary.duplicates++;continue;}
         const parseStarted=clock();
         const parsed=BankMessageCore.parse(n)||{recognized:false,reason:'unrecognized'};
-        const evidence={id:n.id,sender:n.title,postedAt:n.postedAt,text:n.text,source:n.packageName,at:Date.now(),stage:'posting'};
+        const evidence={id:n.id,sender:n.title,postedAt:n.postedAt,text:n.text,source:n.importProvenance||n.packageName,at:Date.now(),stage:'posting'};
         const record=(action,reason,tx)=>decisions.push(Object.assign({},evidence,{action,reason,transactionId:tx&&tx.id||null,parsed:{recognized:!!parsed.recognized,kind:parsed.kind||null,amount:parsed.amount,currency:parsed.currency,bankId:parsed.bankId,providerId:parsed.providerId,transactionRef:parsed.transactionRef}}));
         if(parsed&&parsed.ignored&&!BankIngestionCore.reviewHold(workingState,n.id)){summary.timings.parsePlanMs+=clock()-parseStarted;record('ignored',parsed.reason);terminal.push({id:String(n.id),action:'ignored'});ackIds.push(n.id);summary.ignored++;continue;}
         if(!parsed||!parsed.recognized){
@@ -9100,6 +9100,8 @@ const SanadBankInbox = {
         }
         summary.parsed++;
         let plan=BankIngestionCore.plan(parsed,workingState,{uid});
+        // User-selected SMS XML is not an authenticated bank notification.
+        if(n.importProvenance==='untrusted-sms-xml'&&plan.action!=='duplicate')plan={action:'review',reason:'file-import-human-confirmation-required'};
         summary.timings.parsePlanMs+=clock()-parseStarted;
         if(plan.action==='duplicate'){
           record('duplicate',plan.reason,{id:plan.existingTransactionId});terminal.push({id:String(n.id),action:'duplicate',transactionId:plan.existingTransactionId});ackIds.push(n.id);summary.duplicates++;continue;
@@ -9505,6 +9507,7 @@ const SanadBankInbox = {
     await this.importHistoricalSms(pendingDays,pendingOptions);
   },
   canManualApprove(item){
+    if(item?.native?.importProvenance==='untrusted-sms-xml')return false;
     if(!item||!item.parsed||!item.parsed.recognized)return false;
     if(item.plan&&['possible-own-transfer','possible-manual-duplicate','possible-duplicate','incoming-origin-unconfirmed','repair-destination-unconfirmed','repair-evidence-match-review'].includes(item.plan.reason))return false;
     if(item.plan&&item.plan.action==='auto-save')return true;
@@ -9570,7 +9573,7 @@ const SanadBankInbox = {
       '<div class="sheet-head"><button type="button" class="close" data-sanad-act="bank-inbox"><span>‹</span></button><h2>تعديل وربط العملية</h2><div style="width:36px"></div></div>'+
       '<div class="sheet-body">'+
         '<div class="help-box"><span class="hi">🧠</span><div class="ht"><b>مراجعة بشرية</b>حدد التفاصيل بنفسك؛ لا تُستخدم الرسالة غير المعروفة لتعلّم قواعد تلقائية.</div></div>'+ 
-        (!item.parsed||!item.parsed.recognized?'<label><input id="bankFixManualProof" type="checkbox"> أؤكد أني راجعت الرسالة وأدخلت البيانات الحقيقية بنفسي</label>':'')+
+        (!item.parsed||!item.parsed.recognized||item.native.importProvenance==='untrusted-sms-xml'?'<label><input id="bankFixManualProof" type="checkbox"> أؤكد أني راجعت الرسالة مع مصدر مستقل؛ ملف SMS لا يثبت صحة البنك والمبلغ</label>':'')+
         '<label><input id="bankFixConfirmIssuer" type="checkbox"> أؤكد المؤسسة وبلد الحساب، حتى لو اختلفا عن الاستنتاج الآلي</label>'+
         '<div class="field"><label>نوع العملية</label><select id="bankFixKind">'+kindOpts+'</select></div>'+
         '<div class="field"><label>تاريخ العملية</label><input type="date" id="bankFixDate" value="'+esc(p.transactionDate||localDateTimeInput(Number(p.postedAt)||Date.now()).slice(0,10))+'"><div class="field-hint">يمكن أن يختلف تاريخ الاستلام عن تاريخ الحركة المصرفية؛ تحقق من المصدر.</div></div>'+
@@ -9638,7 +9641,8 @@ const SanadBankInbox = {
     const item=this.items.find(x=>String(x.native.id)===String(id));
     if(!item){toast('تعذر العثور على العملية');return;}
     const originalRecognized=!!(item.parsed&&item.parsed.recognized);
-    if(!originalRecognized&&!document.getElementById('bankFixManualProof')?.checked){toast('راجع الرسالة وأكد الإدخال اليدوي');return;}
+    const fromUntrustedFile=item.native?.importProvenance==='untrusted-sms-xml';
+    if((!originalRecognized||fromUntrustedFile)&&!document.getElementById('bankFixManualProof')?.checked){toast('راجع البيانات وتأكد من المصدر قبل الحفظ');return;}
     const draft=this.correctionDraft(item);
     const manualLinkId=String((document.getElementById('bankFixManualLink')||{}).value||'');
     if(manualLinkId){
@@ -9742,11 +9746,11 @@ const SanadBankInbox = {
         S.transactions[index]=built.transaction;
       }else{
         S.transactions.push(built.transaction);
-        if(originalRecognized&&!confirmIdentity&&built.transaction.settlementStatus!=='pending'&&currency===draft.currency&&chosenAccount.country===draft.country)BankIngestionCore.learnFromApproval(S,corrected,route,{uid,kind});
+        if(originalRecognized&&!fromUntrustedFile&&!confirmIdentity&&built.transaction.settlementStatus!=='pending'&&currency===draft.currency&&chosenAccount.country===draft.country)BankIngestionCore.learnFromApproval(S,corrected,route,{uid,kind});
       }
       BankIngestionCore.rememberEventDecision(S,String(item.native.id),'saved',Date.now(),built.transaction.id,{decisionSource:'user-confirmation'});
-      if(originalRecognized&&chosenAccount.country===draft.country)this.learnSourceAlias(item,route);
-      if(built.transaction.settlementStatus!=='pending')this.applyReconciliation(corrected,{transaction:built.transaction,observationAccountId:built.observationAccountId});
+      if(originalRecognized&&!fromUntrustedFile&&chosenAccount.country===draft.country)this.learnSourceAlias(item,route);
+      if(!fromUntrustedFile&&built.transaction.settlementStatus!=='pending')this.applyReconciliation(corrected,{transaction:built.transaction,observationAccountId:built.observationAccountId});
       return true;
     });
     if(!result.ok){render();toast('تعذر حفظ التصحيح');return;}
