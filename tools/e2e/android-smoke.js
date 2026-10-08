@@ -162,6 +162,14 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  adb('shell','am','start','-n',pkg+'/com.sanad.v9test.MainActivity');
  pass('Native foreground SMS import completes while app is behind HOME; actual count, unchanged ledger, service cleanup');
  for(const [label,status] of [['إيقاف مؤقت','paused'],['إلغاء','cancelled']]){
+  // On a fast emulator, shell input tap can be slower than the remainder of
+  // a 165-message provider scan. Force realistic slow page yields for CANCEL
+  // only; keep the native SMS provider, foreground service, System UI
+  // PendingIntent action and durable checkpoint entirely real.
+  if(status==='cancelled')await page.evaluate(()=>{
+    window.qaNativeOriginalYieldUi=SanadBankInbox.yieldUi;
+    SanadBankInbox.yieldUi=async function(ms){return window.qaNativeOriginalYieldUi.call(this,Math.max(Number(ms)||0,700));};
+  });
   // Prepare the real shade before starting this short scan. UIAutomator discovery
   // took longer than the entire repeated 165-row scan in the retained failure.
   // The prior HOME -> am start command can return before Activity.onStart clears
@@ -196,6 +204,10 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
   }else{
    assert.equal(await page.evaluate(()=>SanadBankInbox.importHistoricalSms(0,{resume:true})),null,'Cancelled checkpoint must not resume');
   }
+  if(status==='cancelled')await page.evaluate(()=>{
+    SanadBankInbox.yieldUi=window.qaNativeOriginalYieldUi;
+    delete window.qaNativeOriginalYieldUi;
+  });
   pass('Actual notification action '+status+' preserves durable decisions'+(status==='paused'?' and resumes to the range end':' and disables resume'));
  }
 
