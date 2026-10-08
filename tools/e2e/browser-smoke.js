@@ -190,7 +190,11 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.evaluate(()=>go('settings'));await page.locator('[data-sanad-act="lang"][data-value="en"]').click();
  await page.waitForFunction(()=>document.documentElement.dir==='ltr');await page.locator('[data-sanad-act="theme"][data-value="dark"]').click();
  await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
- await page.evaluate(()=>go('home'));await stableHome();await page.screenshot({path:path.join(output,'mobile-en-dark.png')});record('English LTR and dark theme');
+ await page.evaluate(()=>go('home'));await stableHome();
+ const englishHero=await page.locator('.wallet-hero .wh-sub').innerText();
+ assert.match(englishHero,/Primary account in/,'Primary account status should be English');
+ assert(!/[\u0600-\u06FF]/.test(englishHero),'Financial status description must not mix Arabic text into English view');
+ await page.screenshot({path:path.join(output,'mobile-en-dark.png')});record('English LTR, translated primary-balance status and dark theme');
  for(const width of [360,1280]){await page.setViewportSize({width,height:852});await stableHome();assert(await page.evaluate(()=>{const a=document.querySelector('.wh-link').getBoundingClientRect(),b=document.querySelector('.wh-name').getBoundingClientRect();return a.bottom<=b.top;}),'long account name must not overlap the account link');assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:path.join(output,'viewport-'+width+'.png')});}
  record('360/393/1280 widths without page overflow');
 
