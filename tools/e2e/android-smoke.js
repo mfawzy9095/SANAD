@@ -5,6 +5,7 @@
 const {execFileSync}=require('child_process');
 const fs=require('fs'),path=require('path'),assert=require('assert/strict');
 const {findAppTarget}=require('./android-devtools-target');
+const {notificationExpand}=require('./android-notification-target');
 const pkg=process.env.SANAD_QA_PACKAGE||'com.sanad.v9test.forensicqa.stable',out=process.env.SANAD_QA_OUTPUT||'/tmp/sanad-android-qa';fs.mkdirSync(out,{recursive:true});
 const results=[],errors=[];let browser,page;
 const adb=(...args)=>execFileSync('adb',args,{encoding:'utf8'}).trim();
@@ -26,12 +27,12 @@ async function tapImportNotificationAction(label){
  for(let attempt=0;attempt<6;attempt++){
   adb('shell','uiautomator','dump','/sdcard/sanad-qa-notifications.xml');
   const xml=adb('shell','cat','/sdcard/sanad-qa-notifications.xml');
+  fs.writeFileSync(path.join(out,'notification-'+label+'-'+attempt+'.xml'),xml);
   const nodes=xml.match(/<node\b[^>]*>/g)||[];
   const hit=nodes.find(n=>n.includes('text="'+label+'"'));
   const tap=node=>{const b=node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);if(!b)return false;adb('shell','input','tap',String(Math.floor((+b[1]+ +b[3])/2)),String(Math.floor((+b[2]+ +b[4])/2)));return true;};
   if(hit&&tap(hit)){adb('shell','cmd','statusbar','collapse');return;}
-  const title=nodes.findIndex(n=>n.includes('text="SANAD · قراءة الرسائل محليًا"'));
-  const expand=(title>=0?nodes.slice(0,title).reverse():[]).find(n=>n.includes(':id/expand_button"')&&n.includes('clickable="true"'));
+  const expand=notificationExpand(nodes,'SANAD · قراءة الرسائل محليًا');
   if(expand&&expand.includes('content-desc="Expand"'))tap(expand);
   else {
    // Ongoing low-priority imports can sit below expanded Messages notifications.

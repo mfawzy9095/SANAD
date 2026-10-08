@@ -1,0 +1,11 @@
+'use strict';
+const assert=require('assert/strict');
+const {notificationExpand}=require('../../../../tools/e2e/android-notification-target');
+const title='<node text="SANAD" bounds="[68,366][211,390]">';
+const other='<node resource-id="android:id/expand_button" clickable="true" content-desc="Expand" bounds="[233,436][304,492]">';
+const own='<node resource-id="android:id/expand_button" clickable="true" content-desc="Expand" bounds="[248,346][304,434]">';
+assert.equal(notificationExpand([title,own,other],'SANAD'),own,'Android can put the expand control AFTER its title');
+assert.equal(notificationExpand([other,own,title],'SANAD'),own,'Match the title row, not traversal order');
+assert.equal(notificationExpand([title,other],'SANAD'),undefined,'Never expand another notification');
+assert.equal(notificationExpand([own],'SANAD'),undefined);
+console.log('Notification expand: matching header geometry in either traversal order');
