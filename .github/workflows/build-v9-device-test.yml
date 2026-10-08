@@ -669,6 +669,7 @@ jobs:
           node app/src/test/js/payment-context-regression.test.js
           node app/src/test/js/sms-template-variants.test.js
           node app/src/test/js/android-devtools-target.test.js
+          node app/src/test/js/android-notification-target.test.js
           node app/src/test/js/fx-card-identity.test.js
           node app/src/test/js/account-identity-binding.test.js
           node app/src/test/js/import-resume.test.js
