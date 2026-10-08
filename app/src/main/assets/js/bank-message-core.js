@@ -109,7 +109,10 @@
     // The settlement/purchase currency does not identify the legal issuer.
     // Emirates NBD UAE and Emirates NBD Egypt share brand/source aliases;
     // generic EGP bank messages need an explicit institution choice.
-    const issuerCountry=base.country||(institution&&institution.country)||countryForCurrency(resolvedCurrency)||'OTHER';
+    const knownIssuerCountry=institution?(institution.country||(resolvedBank?'UAE':null)):null;
+    // Once an issuer is verified in the registry, a foreign transaction currency
+    // must never override its jurisdiction (EUR/MAD/KWD purchases included).
+    const issuerCountry=knownIssuerCountry||base.country||countryForCurrency(resolvedCurrency)||'OTHER';
     const ambiguousIssuer=resolvedBank==='emirates-nbd'&&resolvedCurrency==='EGP'&&!base.country;
 
     const parsed=Object.assign({recognized:true,ignored:false,eventId:input&&input.id?String(input.id):null,postedAt:Number(input&&input.postedAt)||Date.now(),
