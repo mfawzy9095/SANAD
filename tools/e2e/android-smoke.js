@@ -164,7 +164,18 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  for(const [label,status] of [['إيقاف مؤقت','paused'],['إلغاء','cancelled']]){
   // Prepare the real shade before starting this short scan. UIAutomator discovery
   // took longer than the entire repeated 165-row scan in the retained failure.
-  assert.equal(await page.evaluate(()=>AndroidBridge.beginSmsImportForeground()),true);
+  // The prior HOME -> am start command can return before Activity.onStart clears
+  // backgroundedAtMs. Wait for actual WebView visibility and then retry the
+  // native foreground-service eligibility check for a bounded interval.
+  // Keep real System UI action taps and all financial/durable assertions below.
+  await page.waitForFunction(()=>document.visibilityState==='visible');
+  let serviceStarted=false;
+  for(let resumeAttempt=0;resumeAttempt<30;resumeAttempt++){
+   serviceStarted=await page.evaluate(()=>AndroidBridge.beginSmsImportForeground());
+   if(serviceStarted)break;
+   await new Promise(r=>setTimeout(r,100));
+  }
+  assert.equal(serviceStarted,true,'Foreground import must start once Activity has resumed');
   const actionNode=await locateImportNotificationAction(label);
   const actionBounds=actionNode.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
   assert(actionBounds,'Real System UI action must have visible bounds');
