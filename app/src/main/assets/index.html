@@ -9297,7 +9297,7 @@ const SanadBankInbox = {
       total=nodes.length;
       if(total>100000)throw Error('too-many-messages');
       const map=new Map((this.smsReviewEvents||[]).map(row=>[String(row.id),row]));
-      const financeCue=/\\b(?:purchase|debited|credited|deposit|transfer|transaction|payment|refund|withdrawal|balance|salary)\\b|(?:شراء|خصم|ايداع|إيداع|تحويل|سحب|راتب|مرتب|مدفوع|رصيد)/i;
+      const financeCue=/\b(?:purchase|debited|credited|deposit|transfer|transaction|payment|refund|withdrawal|balance|salary)\b|(?:شراء|خصم|ايداع|إيداع|تحويل|سحب|راتب|مرتب|مدفوع|رصيد)/i;
       const fingerprint=(text)=>{
         let h=14695981039346656037n;
         for(let i=0;i<text.length;i++)h=BigInt.asUintN(64,(h^BigInt(text.charCodeAt(i)))*1099511628211n);
@@ -9735,11 +9735,11 @@ const SanadBankInbox = {
     const kind=((document.getElementById('bankFixKind')||{}).value||draft.kind);
     const selectedDate=String(document.getElementById('bankFixDate')?.value||'');
     const selectedClock=String(document.getElementById('bankFixTime')?.value||'');
-    const parsedDate=/^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(selectedDate);
+    const parsedDate=/^(\d{4})-(\d{2})-(\d{2})$/.exec(selectedDate);
     if(!parsedDate){toast('اختر تاريخًا صالحًا');return;}
     const validDate=new Date(Date.UTC(Number(parsedDate[1]),Number(parsedDate[2])-1,Number(parsedDate[3])));
     if(!Number.isFinite(validDate.getTime())||validDate.toISOString().slice(0,10)!==selectedDate){toast('التاريخ غير صالح');return;}
-    if(selectedClock&&!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(selectedClock)){toast('وقت العملية غير صحيح');return;}
+    if(selectedClock&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(selectedClock)){toast('وقت العملية غير صحيح');return;}
     const dateConfirmed=!!document.getElementById('bankFixConfirmDate')?.checked;
     if(originalRecognized&&['ambiguous-date','invalid-operation-date'].includes(draft.reviewReason)&&!dateConfirmed){toast('أكّد التاريخ الصحيح قبل إضافة العملية');return;}
     const amount=Number((document.getElementById('bankFixAmount')||{}).value);
