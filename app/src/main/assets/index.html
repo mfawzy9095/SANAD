@@ -4894,9 +4894,9 @@ function bankUiShort(bank){return UaeBankRegistryCore.bankShortName?UaeBankRegis
 function providerUiName(provider){return UaeBankRegistryCore.providerDisplayName?UaeBankRegistryCore.providerDisplayName(provider,registryUiLang()):(provider&&provider.name||'');}
 function providerUiShort(provider){return UaeBankRegistryCore.providerShortName?UaeBankRegistryCore.providerShortName(provider):(provider&&provider.name||'');}
 function bankRegistryOptions(selectedId){
-  return '<option value="">— اختر البنك من سجل المصرف المركزي —</option>' +
-    UaeBankRegistryCore.list().map(b =>
-      '<option value="' + esc(b.id) + '"' + (selectedId === b.id ? ' selected' : '') + '>' + esc(bankUiName(b)+' · '+bankUiShort(b)) + '</option>'
+  return '<option value="">— اختر بنكًا حسب بلد الإصدار —</option>' +
+    (UaeBankRegistryCore.listAll?UaeBankRegistryCore.listAll():UaeBankRegistryCore.list()).map(b =>
+      '<option value="' + esc(b.id) + '"' + (selectedId === b.id ? ' selected' : '') + '>' + esc((countryInfo(b.country||'UAE').name||b.country||'UAE')+' · '+bankUiName(b)+' · '+bankUiShort(b)) + '</option>'
     ).join('');
 }
 function financialInstitutionMark(label,size=34,isWallet=false){
@@ -4909,10 +4909,10 @@ function financialInstitutionMark(label,size=34,isWallet=false){
 function bankLogoHtml(bank,size=34){return financialInstitutionMark(bank?(bank.short||bank.name):'Bank',size,false);}
 function bankRegistryPickerHtml(selectedId,targetId){
   const selected=selectedId?UaeBankRegistryCore.get(selectedId):null;
-  const rows=UaeBankRegistryCore.list().map(b=>{
+  const rows=(UaeBankRegistryCore.listAll?UaeBankRegistryCore.listAll():UaeBankRegistryCore.list()).map(b=>{
     const display=bankUiName(b),short=bankUiShort(b);
-    const search=UaeBankRegistryCore.normalize([b.name,display,short].concat(b.aliases||[]).join(' '));
-    return '<button type="button" data-bank-option="'+esc(b.id)+'" data-bank-target="'+esc(targetId)+'" data-bank-search="'+esc(search)+'" style="width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border:0;border-bottom:1px solid var(--border);background:'+(selectedId===b.id?'var(--primary-soft)':'transparent')+';text-align:start;color:var(--text)">'+bankLogoHtml(b,36)+'<span style="min-width:0"><b style="display:block;font-size:13px">'+esc(display)+'</b><small style="color:var(--text-3)">'+esc(short+(display!==b.name?' · '+b.name:''))+'</small></span></button>';
+    const search=UaeBankRegistryCore.normalize([b.name,display,short,b.country||'UAE'].concat(b.aliases||[]).join(' '));
+    return '<button type="button" data-bank-option="'+esc(b.id)+'" data-bank-target="'+esc(targetId)+'" data-bank-search="'+esc(search)+'" style="width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border:0;border-bottom:1px solid var(--border);background:'+(selectedId===b.id?'var(--primary-soft)':'transparent')+';text-align:start;color:var(--text)">'+bankLogoHtml(b,36)+'<span style="min-width:0"><b style="display:block;font-size:13px">'+esc(display)+'</b><small style="color:var(--text-3)">'+esc((countryInfo(b.country||'UAE').name||b.country||'UAE')+' · '+short+(display!==b.name?' · '+b.name:''))+'</small></span></button>';
   }).join('');
   return '<select id="'+esc(targetId)+'" hidden>'+bankRegistryOptions(selectedId)+'</select>'+
     '<div data-bank-selected-for="'+esc(targetId)+'" style="display:flex;align-items:center;gap:10px;padding:9px 10px;margin-bottom:8px;border:1px solid var(--border);border-radius:12px;background:var(--surface)">'+
@@ -9661,11 +9661,15 @@ const SanadBankInbox = {
     const chosenIssuer=Finance.getInstitution(chosenAccount.institutionId);
     // A merchant currency or locale is not sufficient evidence to change issuer.
     // Never attach a bank/provider's authenticated SMS to a different institution.
-    if(originalRecognized&&draft.bankId&&chosenIssuer&&chosenIssuer.bankRegistryId&&chosenIssuer.bankRegistryId!==draft.bankId){toast('البنك المختار لا يطابق البنك المثبت في الرسالة؛ لا يمكن ربطهما كعملية واحدة');return;}
+    const egyptNbdCorrection=originalRecognized&&draft.reviewReason==='issuer-jurisdiction-unconfirmed'&&draft.bankId==='emirates-nbd'&&chosenIssuer&&chosenIssuer.bankRegistryId==='emirates-nbd-egypt'&&!!document.getElementById('bankFixConfirmIssuer')?.checked;
+    if(originalRecognized&&draft.bankId&&chosenIssuer&&chosenIssuer.bankRegistryId&&chosenIssuer.bankRegistryId!==draft.bankId&&!egyptNbdCorrection){toast('لا يمكن ربط الرسالة ببنك مختلف دون دليل هوية صريح');return;}
     if(originalRecognized&&draft.providerId&&chosenIssuer&&chosenIssuer.providerRegistryId&&chosenIssuer.providerRegistryId!==draft.providerId){toast('المحفظة المختارة لا تطابق مصدر الرسالة');return;}
     if(originalRecognized&&draft.country&&chosenAccount.country!==draft.country&&!document.getElementById('bankFixConfirmIssuer')?.checked){toast('أكّد بلد الحساب المختلف عن الرسالة');return;}
     if(originalRecognized&&currency!==draft.currency&&!document.getElementById('bankFixConfirmCurrency')?.checked){toast('أكّد تصحيح عملة العملية الأصلية');return;}
+    const issuerVerified=!!document.getElementById('bankFixConfirmIssuer')?.checked;
     const corrected=Object.assign({},draft,{kind,amount,currency,country:chosenAccount.country,confidence:1});
+    if(egyptNbdCorrection)corrected.bankId='emirates-nbd-egypt';
+    if(draft.reviewReason==='issuer-jurisdiction-unconfirmed'&&issuerVerified&&chosenIssuer&&chosenIssuer.bankRegistryId===corrected.bankId)corrected.reviewReason=null;
     if(['purchase','bill_payment','mobile_recharge'].includes(kind)){
       corrected.direction='debit';corrected.merchant=party;corrected.category=category;
     }else if(['deposit','salary','refund','incoming_transfer'].includes(kind)){
@@ -9693,6 +9697,7 @@ const SanadBankInbox = {
     if(pairId&&kind!=='internal_transfer'){toast('اختر تحويل بين حساباتي للربط بالطرف المحفوظ');return;}
     const built=pairId?BankIngestionCore.pairOwnTransfer(item.parsed,S,{counterpartTransactionId:pairId,fromAccountId:route.fromAccount&&route.fromAccount.id,toAccountId:route.targetAccount&&route.targetAccount.id},buildOptions):BankMessageCore.buildTransaction(corrected,route,buildOptions);
     if(built.ok&&built.transaction.type==='expense'&&corrected.category!==draft.category)built.transaction.userCategoryConfirmed=true;
+    if(built.ok&&egyptNbdCorrection)built.transaction.bankIssuerCorrection={from:draft.bankId,to:corrected.bankId,issuerCountry:chosenAccount.country,confirmedByUser:true,source:'manual-review',at:Date.now()};
     if(built.ok&&manualCandidates.length)built.transaction.manualImportResolution={decision:'distinct-operation',candidateIds:manualCandidates.map(t=>t.id).sort(),source:'user-confirmation',at:Date.now()};
     if(built.ok&&!built.replacesTransactionId){
       const original=draft;
