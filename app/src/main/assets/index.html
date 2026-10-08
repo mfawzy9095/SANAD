@@ -1210,7 +1210,8 @@ const Finance = {
   ensureRegisteredBank(bankId,country){
     const bank = UaeBankRegistryCore.get(bankId);
     if (!bank) return null;
-    const c = country || 'UAE';
+    const c = country || bank.country || 'UAE';
+    if((bank.country||'UAE')!==c)return null;
     const existing = this.findRegisteredBank(bankId,c);
     if (existing){
       if (!existing.bankRegistryId) existing.bankRegistryId = bankId;
@@ -4893,9 +4894,9 @@ function bankUiName(bank){return UaeBankRegistryCore.bankDisplayName?UaeBankRegi
 function bankUiShort(bank){return UaeBankRegistryCore.bankShortName?UaeBankRegistryCore.bankShortName(bank):(bank&&bank.name||'');}
 function providerUiName(provider){return UaeBankRegistryCore.providerDisplayName?UaeBankRegistryCore.providerDisplayName(provider,registryUiLang()):(provider&&provider.name||'');}
 function providerUiShort(provider){return UaeBankRegistryCore.providerShortName?UaeBankRegistryCore.providerShortName(provider):(provider&&provider.name||'');}
-function bankRegistryOptions(selectedId){
+function bankRegistryOptions(selectedId,country){
   return '<option value="">— اختر بنكًا حسب بلد الإصدار —</option>' +
-    (UaeBankRegistryCore.listAll?UaeBankRegistryCore.listAll():UaeBankRegistryCore.list()).map(b =>
+    (UaeBankRegistryCore.listAll?UaeBankRegistryCore.listAll():UaeBankRegistryCore.list()).filter(b=>!country||(b.country||'UAE')===country).map(b =>
       '<option value="' + esc(b.id) + '"' + (selectedId === b.id ? ' selected' : '') + '>' + esc((countryInfo(b.country||'UAE').name||b.country||'UAE')+' · '+bankUiName(b)+' · '+bankUiShort(b)) + '</option>'
     ).join('');
 }
@@ -4907,14 +4908,14 @@ function financialInstitutionMark(label,size=34,isWallet=false){
     '<span style="line-height:1;font-family:system-ui,sans-serif;font-size:'+Math.max(7,Math.round(size*.2))+'px;font-weight:800;letter-spacing:.02em;direction:ltr">'+esc(initials)+'</span></span>';
 }
 function bankLogoHtml(bank,size=34){return financialInstitutionMark(bank?(bank.short||bank.name):'Bank',size,false);}
-function bankRegistryPickerHtml(selectedId,targetId){
+function bankRegistryPickerHtml(selectedId,targetId,country='UAE'){
   const selected=selectedId?UaeBankRegistryCore.get(selectedId):null;
   const rows=(UaeBankRegistryCore.listAll?UaeBankRegistryCore.listAll():UaeBankRegistryCore.list()).map(b=>{
     const display=bankUiName(b),short=bankUiShort(b);
     const search=UaeBankRegistryCore.normalize([b.name,display,short,b.country||'UAE'].concat(b.aliases||[]).join(' '));
-    return '<button type="button" data-bank-option="'+esc(b.id)+'" data-bank-target="'+esc(targetId)+'" data-bank-search="'+esc(search)+'" style="width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border:0;border-bottom:1px solid var(--border);background:'+(selectedId===b.id?'var(--primary-soft)':'transparent')+';text-align:start;color:var(--text)">'+bankLogoHtml(b,36)+'<span style="min-width:0"><b style="display:block;font-size:13px">'+esc(display)+'</b><small style="color:var(--text-3)">'+esc((countryInfo(b.country||'UAE').name||b.country||'UAE')+' · '+short+(display!==b.name?' · '+b.name:''))+'</small></span></button>';
+    return '<button type="button" data-bank-option="'+esc(b.id)+'" data-bank-country="'+esc(b.country||'UAE')+'" '+((b.country||'UAE')===country?'':'hidden')+' data-bank-target="'+esc(targetId)+'" data-bank-search="'+esc(search)+'" style="width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border:0;border-bottom:1px solid var(--border);background:'+(selectedId===b.id?'var(--primary-soft)':'transparent')+';text-align:start;color:var(--text)">'+bankLogoHtml(b,36)+'<span style="min-width:0"><b style="display:block;font-size:13px">'+esc(display)+'</b><small style="color:var(--text-3)">'+esc((countryInfo(b.country||'UAE').name||b.country||'UAE')+' · '+short+(display!==b.name?' · '+b.name:''))+'</small></span></button>';
   }).join('');
-  return '<select id="'+esc(targetId)+'" hidden>'+bankRegistryOptions(selectedId)+'</select>'+
+  return '<select id="'+esc(targetId)+'" hidden>'+bankRegistryOptions(selectedId,country)+'</select>'+
     '<div data-bank-selected-for="'+esc(targetId)+'" style="display:flex;align-items:center;gap:10px;padding:9px 10px;margin-bottom:8px;border:1px solid var(--border);border-radius:12px;background:var(--surface)">'+
       bankLogoHtml(selected,36)+'<div style="min-width:0"><b style="display:block">'+esc(selected?bankUiName(selected):'لم يتم اختيار بنك')+'</b><small style="color:var(--text-3)">'+esc(selected?bankUiShort(selected):'يمكنك البحث بالاسم أو الاختصار')+'</small></div></div>'+
     '<input type="search" data-bank-filter="'+esc(targetId)+'List" placeholder="ابحث عن البنك… مثل ENBD أو ADCB" autocomplete="off" style="margin-bottom:8px">'+
@@ -4924,7 +4925,8 @@ function filterBankRegistryList(listId,query){
   const list=document.getElementById(listId);
   if(!list)return;
   const q=UaeBankRegistryCore.normalize(query||'');
-  list.querySelectorAll('[data-bank-option]').forEach(row=>{row.hidden=!!q&&!String(row.dataset.bankSearch||'').includes(q);});
+  const country=(document.getElementById(listId.startsWith('wBank')?'wCountry':'cardCountry')||{}).value||S.activeCountry;
+  list.querySelectorAll('[data-bank-option]').forEach(row=>{row.hidden=row.dataset.bankCountry!==country||(!!q&&!String(row.dataset.bankSearch||'').includes(q));});
 }
 function chooseBankRegistryOption(targetId,bankId){
   const sel=document.getElementById(targetId),bank=UaeBankRegistryCore.get(bankId);
@@ -4987,12 +4989,16 @@ function refreshOfficialBankField(kind,country){
   const providerWrap = document.getElementById('wProviderRegistryWrap');
   const providerSel = document.getElementById('wProviderRegistry');
   const refs = document.getElementById('wBankRefsWrap');
-  if (wrap) wrap.hidden = country !== 'UAE' || isWallet;
+  if (wrap) wrap.hidden = !['UAE','EGY'].includes(country) || isWallet;
   if (providerWrap) providerWrap.hidden = country !== 'UAE' || !isWallet;
-  if (refs && !isCard) refs.hidden = country !== 'UAE' || isWallet;
-  if (sel && country === 'UAE' && !isWallet){
-    const current = sel.value || '';
-    sel.innerHTML = bankRegistryOptions(current);
+  if (refs && !isCard) refs.hidden = !['UAE','EGY'].includes(country) || isWallet;
+  if (sel && ['UAE','EGY'].includes(country) && !isWallet){
+    const current=sel.value||'',bank=UaeBankRegistryCore.get(current);
+    const valid=bank&&(bank.country||'UAE')===country?current:'';
+    sel.innerHTML=bankRegistryOptions(valid,country);
+    const list=document.getElementById(sel.id+'List');
+    if(list)list.querySelectorAll('[data-bank-option]').forEach(row=>{row.hidden=row.dataset.bankCountry!==country;});
+    if(!valid){const label=document.querySelector('[data-bank-selected-for="'+sel.id+'"]');if(label)label.innerHTML=bankLogoHtml(null,36)+'<span>اختر البنك حسب بلد الإصدار</span>';}
   }
   if (providerSel && country === 'UAE' && isWallet){
     const current = providerSel.value || '';
@@ -5206,8 +5212,8 @@ function openAccountSheet(id, presetType, preserve){
       '<div class="field"><label>اسم الحساب</label><input type="text" id="wName" maxlength="30" value="' + esc(data.name) + '" placeholder="ADCB Current"></div>' +
       '<div class="field"><label>البلد</label><div class="country-picker">' + countryOpts + '</div>' +
         '<input type="hidden" id="wCountry" value="' + data.country + '"></div>' +
-      '<div class="field" id="wBankRegistryWrap"' + (data.country === 'UAE' && type !== 'ewallet' ? '' : ' hidden') + '><label>البنك في الإمارات</label>' +
-        bankRegistryPickerHtml(selectedBankRegistryId,'wBankRegistry') +
+      '<div class="field" id="wBankRegistryWrap"' + (['UAE','EGY'].includes(data.country) && type !== 'ewallet' ? '' : ' hidden') + '><label>البنك حسب بلد الإصدار</label>' +
+        bankRegistryPickerHtml(selectedBankRegistryId,'wBankRegistry',data.country) +
         '<div class="field-hint">القائمة من سجل البنوك المرخصة لدى مصرف الإمارات المركزي.</div></div>' +
       '<div class="field" id="wProviderRegistryWrap"' + (data.country === 'UAE' && type === 'ewallet' ? '' : ' hidden') + '><label>مزود المحفظة الإلكترونية</label>' +
         providerRegistryPickerHtml(selectedProviderRegistryId,'wProviderRegistry') +
@@ -5216,7 +5222,7 @@ function openAccountSheet(id, presetType, preserve){
         '<select id="wInst">' + instOptions + '</select>' +
         '<input type="text" id="wInstName" value="' + esc((preserve && preserve.institutionName) || '') + '" placeholder="جهة أخرى غير موجودة بالقائمة" maxlength="40" style="margin-top:8px">' +
         '<div class="field-hint">لو اخترت بنكًا رسميًا بالأعلى، له الأولوية.</div></div>' +
-      '<div class="field" id="wBankRefsWrap"' + (data.country === 'UAE' && type !== 'ewallet' ? '' : ' hidden') + '><label>مراجع الحساب في رسائل البنك (اختياري)</label>' +
+      '<div class="field" id="wBankRefsWrap"' + (['UAE','EGY'].includes(data.country) && type !== 'ewallet' ? '' : ' hidden') + '><label>مراجع الحساب في رسائل البنك (اختياري)</label>' +
         '<input type="text" id="wBankRefs" maxlength="140" value="' + esc(bankRefsValue) + '" placeholder="مثال: 1801, 012XXX50XXX01">' +
         '<div class="field-hint">اكتب آخر أرقام أو الشكل المقنّع الذي يظهر في رسائل البنك. يمكن إضافة أكثر من مرجع بفاصلة.</div></div>' +
       '<div class="field"><label>النوع</label><select id="wType" ' + (typeSelectDisabled ? 'disabled' : '') + '>' +
@@ -5267,6 +5273,8 @@ async function saveAccount(id){
   const i = document.getElementById('wIco').value || '🏦';
   const c = document.getElementById('wCol').value || '#00695C';
   const bankRefs = parseBankRefsInput((document.getElementById('wBankRefs') || {}).value || '');
+  const requestedBank=UaeBankRegistryCore.get((document.getElementById('wBankRegistry')||{}).value||'');
+  if(requestedBank&&(['UAE','EGY'].includes(country))&&(requestedBank.country||'UAE')!==country){toast('بلد إصدار البنك لا يطابق بلد الحساب');return;}
   if (!name){ toast('أدخل اسم الحساب'); return; }
   if (type === 'credit'){ toast('بطاقات الائتمان تُنشأ من قسم البطاقات'); return; }
   if (id && hasLinkedDebitCards(id)){
@@ -5331,7 +5339,7 @@ async function saveAccount(id){
     const instEl = document.getElementById('wInst');
     institutionId = instEl ? (instEl.value || null) : null;
     const officialEl = document.getElementById('wBankRegistry');
-    const officialBankId = officialEl && country === 'UAE' && type !== 'ewallet' ? (officialEl.value || null) : null;
+    const officialBankId = officialEl && ['UAE','EGY'].includes(country) && type !== 'ewallet' ? (officialEl.value || null) : null;
     const providerEl = document.getElementById('wProviderRegistry');
     const officialProviderId = providerEl && country === 'UAE' && type === 'ewallet' ? (providerEl.value || null) : null;
     const newInstName = ((document.getElementById('wInstName') || {}).value || '').trim();
@@ -6323,9 +6331,9 @@ function openInstrumentSheet(id, presetType, preserve){
       ((isDebit || isWalletCard) ? linkedField : '') +
       (showCountryPicker ? '<div class="field"><label>البلد</label><div class="country-picker">' + countryOpts + '</div>' +
         '<input type="hidden" id="cardCountry" value="' + data.country + '"></div>' : '') +
-      (showInstField ? '<div class="field" id="cardBankRegistryWrap"' + (data.country === 'UAE' ? '' : ' hidden') + '><label>البنك في الإمارات</label>' +
-        bankRegistryPickerHtml(cardSelectedBankRegistryId,'cardBankRegistry') +
-        '<div class="field-hint">القائمة الرسمية للبنوك المرخصة؛ تستخدم أيضًا لتوجيه رسائل البنك.</div></div>' +
+      (showInstField ? '<div class="field" id="cardBankRegistryWrap"' + (['UAE','EGY'].includes(data.country) ? '' : ' hidden') + '><label>البنك حسب بلد الإصدار</label>' +
+        bankRegistryPickerHtml(cardSelectedBankRegistryId,'cardBankRegistry',data.country) +
+        '<div class="field-hint">اختر المؤسسة حسب بلد إصدار البطاقة؛ الاسم التجاري وحده لا يثبت هوية البنك.</div></div>' +
         '<div class="field"><label>مؤسسة مخصصة (اختياري)</label><select id="cardInst">' + instOptions + '</select>' +
         '<input type="text" id="cardInstName" placeholder="جهة أخرى غير موجودة بالقائمة" maxlength="40" style="margin-top:8px"></div>' : '') +
       amountFields +
@@ -6501,7 +6509,8 @@ async function saveCard(id, presetType){
     const instNameEl = document.getElementById('cardInstName');
     const newInstName = instNameEl && instNameEl.value ? (instNameEl.value || '').trim() : '';
     const officialEl = document.getElementById('cardBankRegistry');
-    const officialBankId = officialEl && country === 'UAE' ? (officialEl.value || null) : null;
+    const officialBankId = officialEl && ['UAE','EGY'].includes(country) ? (officialEl.value || null) : null;
+    if(officialBankId&&(UaeBankRegistryCore.get(officialBankId)?.country||'UAE')!==country)return false;
     if (officialBankId && !isDebit && !isWalletCard) institutionId = Finance.ensureRegisteredBank(officialBankId, country);
     else if (newInstName && !isDebit && !isWalletCard) institutionId = Finance.ensureInstitution(newInstName, country, 'bank');
     if (institutionId && !isDebit && !isWalletCard){
