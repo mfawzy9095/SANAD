@@ -930,6 +930,16 @@ function txTimeValue(t){ return StateCore.txTimeValue(t); }
 function compareTxDesc(a,b){ return StateCore.compareTxDesc(a,b); }
 function ymKey(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1); }
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g,m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+// Consistent local vector icons for built-in finance categories. Custom categories
+// retain their own user-selected symbol instead of guessing a financial meaning.
+const SANAD_CATEGORY_ICON_PATHS=Object.freeze({food:'M4 3v8m4-8v8M6 3v18M10 11H2M18 3c-3 3-3 8 0 9h2v9',transport:'M5 16H3v-5l2-5h14l2 5v5h-2M5 16h14M7 16v2m10-2v2M5 11h14',bills:'M6 2h9l4 4v16H6zM15 2v4h4M9 11h7M9 15h7M9 19h5',shopping:'M5 9h14l1 12H4L5 9zM9 10V7a3 3 0 0 1 6 0v3',health:'M20 5c-2-2-6-2-8 1-2-3-6-3-8-1-5 5 3 12 8 16 5-4 13-11 8-16zM6 12h3l2-3 2 6 2-3h3',fun:'M6 9h12c3 0 5 6 3 9-2 3-5 0-7-1h-4c-2 1-5 4-7 1-2-3 0-9 3-9zM8 12v4M6 14h4M16 13h.01M18 15h.01',edu:'m2 9 10-5 10 5-10 5-10-5zM6 12v5c3 3 9 3 12 0v-5M22 9v7',home:'m3 10 9-7 9 7v10H3V10zM9 20v-8h6v8',cafe:'M4 7h13v8a6 6 0 0 1-12 0V7zM17 9h2a3 3 0 0 1 0 6h-2M3 22h17',grocery:'M3 3h2l3 12h11l3-9H6M9 21h.01M18 21h.01',subs:'M4 5h16v16H4zM4 10h16M8 3v4M16 3v4M9 15h6',transferFee:'M3 9 12 4l9 5M5 11v8M10 11v8M14 11v8M19 11v8M3 21h18',externalTransfer:'M14 7a4 4 0 1 0-8 0 4 4 0 0 0 8 0M3 20v-2c0-4 3-6 7-6M16 11l5 5-5 5M21 16H12',debtInterest:'M4 20 20 4M7 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4M17 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4',other:'M3 12 12 3h8a1 1 0 0 1 1 1v8l-9 9-9-9zM17 7h.01',salary:'M4 7h16v14H4zM9 7V4h6v3M4 12h16M10 16h4',bonus:'M4 9h16v12H4zM3 5h18v4H3zM12 5v16M5 5c-5-4 4-7 7 0M19 5c5-4-4-7-7 0',freelance:'M3 5h18v13H3zM8 22h8M12 18v4M8 9l-2 2 2 2M16 9l2 2-2 2',gift:'M4 9h16v12H4zM3 5h18v4H3zM12 5v16M5 5c-5-4 4-7 7 0M19 5c5-4-4-7-7 0',rent:'m3 10 9-7 9 7v10H3V10zM9 20v-8h6v8'});
+function categoryIconHtml(category,size=20){
+  const key=String(category&&category.id||''),path=SANAD_CATEGORY_ICON_PATHS[key];
+  if(!path)return esc(category&&category.i||'');
+  const px=Math.max(14,Math.min(32,Number(size)||20));
+  return '<svg aria-hidden="true" focusable="false" width="'+px+'" height="'+px+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="'+path+'"/></svg>';
+}
+
 function fmt(n){ if(n===null||n===undefined||!Number.isFinite(Number(n)))return 'غير معروف'; return (Math.round((Number(n)||0)*100)/100).toLocaleString('en-US',{maximumFractionDigits:2}); }
 function buzz(ms){ if (navigator.vibrate) try { navigator.vibrate(ms||6); } catch(e){} }
 function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
@@ -1957,7 +1967,7 @@ function viewHome(){
           ? 'تجاوزت الحد بـ ' + amtFull(a.spent - a.limit, a.cur)
           : 'باقي ' + amtFull(a.limit - a.spent, a.cur);
         return '<div class="' + cls + '"><span class="al-ico">' + ico + '</span>' +
-          '<div class="al-body"><b>' + c.i + ' ' + esc(c.n) + '</b><span class="amt-val">' + txt + '</span></div></div>';
+          '<div class="al-body"><b>' + categoryIconHtml(c,18) + ' ' + esc(c.n) + '</b><span class="amt-val">' + txt + '</span></div></div>';
       }).join('');
   })();
   let savingHtml = '';
@@ -2169,7 +2179,7 @@ function recurringCardHtml(r, days){
   return '<div class="sub-card ' + (urgent ? 'urgent' : '') + ' ' + (paused || invalid ? 'paused' : '') + '" data-rec-open="' + r.id + '">' +
     '<div class="si" style="background:' + c.c + '22;color:' + c.c + '">' + (r.icon || '🔁') + '</div>' +
     '<div class="s-info"><b>' + esc(r.name) + badge + '</b>' +
-      '<span><span data-no-i18n>' + c.i + '</span> <span>' + esc(c.n) + '</span> · <span data-no-i18n>' + esc(srcName) + '</span> · <span>' + (r.frequency === 'yearly' ? 'سنوي' : 'شهري') + '</span> ' + typeIcon + '</span></div>' +
+      '<span><span data-no-i18n>' + categoryIconHtml(c,17) + '</span> <span>' + esc(c.n) + '</span> · <span data-no-i18n>' + esc(srcName) + '</span> · <span>' + (r.frequency === 'yearly' ? 'سنوي' : 'شهري') + '</span> ' + typeIcon + '</span></div>' +
     '<div class="s-amt"><b class="amt-val">' + (r.type === 'income' ? '+' : '−') + amtFull(r.amount, origCur) + '</b>' +
       '<span>' + (paused ? '—' : 'يوم ' + r.day) + '</span></div></div>';
 }
@@ -3422,7 +3432,7 @@ function renderTxSheet(){
   const cats = Finance.allCats(kind);
   const catChips = cats.map(c =>
     '<button type="button" class="cat-chip-s ' + (f.cat === c.id ? 'on' : '') + '" data-txcat="' + c.id + '">' +
-      '<span class="ci">' + c.i + '</span><span>' + esc(c.n) + '</span></button>').join('');
+      '<span class="ci">' + categoryIconHtml(c,19) + '</span><span>' + esc(c.n) + '</span></button>').join('');
   const curOpts = Object.values(CURRENCIES).map(c =>
     '<button type="button" class="chip ' + (f.currency === c.code ? 'on' : '') + '" data-txcur="' + c.code + '" style="padding:6px 12px;font-size:12.5px">' +
       c.flag + ' ' + Finance.curSymbol(c.code) + '</button>').join('');
