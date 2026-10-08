@@ -125,6 +125,9 @@
       availableBalance:base.availableBalance==null?null:Number(base.availableBalance),availableCredit:base.availableCredit==null?null:Number(base.availableCredit),
       raw:String(raw),confidence:Number(base.confidence||0.95)},base);
     if(ambiguousIssuer){
+      // A parser family may already have filled `country` from EGP. Remove
+      // that guess: it is not issuer evidence, even for a trusted sender.
+      parsed.country='OTHER';
       parsed.issuerCountryAmbiguous=true;
       if(!parsed.reviewReason)parsed.reviewReason='issuer-jurisdiction-unconfirmed';
     }
