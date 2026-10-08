@@ -1859,6 +1859,11 @@ function viewHome(){
     const fullAccountName=String(defaultAcc.name||'');
     const displayedAccountName=inst&&officialShort&&fullAccountName.includes(inst.name)?fullAccountName.replace(inst.name,officialShort):fullAccountName;
     const accountTypeLabel=accountTypeInfo(defaultAcc.type).name;
+    const heroEnglish=S.settings&&S.settings.language==='en';
+    const localizedCountry=heroEnglish?({UAE:'UAE',EGY:'Egypt',MAR:'Morocco'}[defaultAcc.country]||defaultAcc.country):cInfo.name;
+    const heroBalanceText=heroBalanceView?(bal===null?(heroEnglish?'Balance unconfirmed — review opening balance and transactions':'الرصيد غير مؤكد — راجع البداية والعمليات'):(heroEnglish?'Ledger balance':'رصيد الحساب من السجل')):'';
+    const heroObservedText=heroBalanceView&&heroBalanceView.observed!==null?(heroEnglish?' · Latest balance reported by bank: ':' · آخر رصيد متاح بالرسالة ')+amtText(heroBalanceView.observed):'';
+    const heroSubtitle=(heroEnglish?'Primary account in ':'الحساب الأساسي في ')+localizedCountry+(heroBalanceView?' · '+heroBalanceText+heroObservedText:'');
     const quickAmountEye=S.settings.hideAmounts
       ? '<button type="button" class="amount-eye" data-sanad-act="amount-visibility" aria-label="'+(amountsMasked()?'إظهار المبالغ':'إخفاء المبالغ')+'" title="'+(amountsMasked()?'إظهار المبالغ':'إخفاء المبالغ')+'">'+(amountsMasked()?'👁️':'🙈')+'</button>'
       : '';
@@ -1869,7 +1874,7 @@ function viewHome(){
           '<div class="wh-cur">' + esc(accountTypeLabel) + ' · ' + Finance.curInfo(defaultAcc.currency).name + '</div></div>' +
       '</div>' +
       '<div class="wh-balance-row"><div class="wh-bal amt-val">' + amtText(bal) + ' <span style="font-size:14px;opacity:.85">' + Finance.curSymbol(defaultAcc.currency) + '</span></div>' + quickAmountEye + '</div>' +
-      '<div class="wh-sub">الحساب الأساسي في ' + esc(cInfo.name) + (heroBalanceView?' · '+(bal===null?'الرصيد غير مؤكد — راجع البداية والعمليات':'رصيد الحساب من السجل')+(heroBalanceView.observed!==null?' · آخر رصيد متاح بالرسالة '+amtText(heroBalanceView.observed):''):'') + '</div>' +
+      '<div class="wh-sub">' + esc(heroSubtitle) + '</div>' +
     '</div>';
   } else {
     heroHtml = '<div class="card" style="text-align:center;padding:20px">' +
