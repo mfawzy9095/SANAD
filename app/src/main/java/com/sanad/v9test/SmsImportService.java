@@ -64,6 +64,7 @@ public final class SmsImportService extends Service {
                 .setContentTitle("SANAD · قراءة الرسائل محليًا")
                 .setContentText("قُرئ " + scanned + " · أُضيف " + added + " · للمراجعة " + review)
                 .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true)
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setProgress(total > 0 ? (int)Math.min(Integer.MAX_VALUE, total) : 0,
                         (int)Math.min(Integer.MAX_VALUE, scanned), total < 0)

@@ -368,10 +368,11 @@
       const original=normalized.match(/(?:original\s+purchase|الشراء\s+الاصلي)\s*[:\-]?\s*([A-Z]{3})\s*(\d+(?:\.\d+)?)/i);
       const settled=normalized.match(/(?:settled\s+amount\s+excluding\s+fees|settlement\s+principal\s+excluding\s+fees|مبلغ\s+التسوية\s+بدون\s+الرسوم)\s*[:\-]?\s*([A-Z]{3})\s*(\d+(?:\.\d+)?)/i);
       const fee=normalized.match(/(?:total\s+fees|اجمالي\s+الرسوم)\s*[:\-]?\s*([A-Z]{3})\s*(\d+(?:\.\d+)?)/i);
-      const ref=normalized.match(/(?:original\s+reference|مرجع\s+الشراء)\s*[:#\-]?\s*([A-Za-z0-9_-]{4,40})/i);
+      const ref=normalized.match(/(?:original\s+reference|مرجع\s+الشراء)\s*[:#\-]?\s*([A-Za-z0-9_-]{4,40})(?![A-Za-z0-9_-])/i);
       const date=normalized.match(/(?:purchase\s+date|تاريخ\s+الشراء)\s*[:\-]?\s*(\d{4}-\d{2}-\d{2})/i);
       const identity=parseGeneric(obj,normalized)||{};
-      const repeated=/(?:original\s+purchase|الشراء\s+الاصلي)[\s\S]*(?:original\s+purchase|الشراء\s+الاصلي)|(?:settled\s+amount|settlement\s+principal|مبلغ\s+التسوية)[\s\S]*(?:settled\s+amount|settlement\s+principal|مبلغ\s+التسوية)|(?:total\s+fees|اجمالي\s+الرسوم)[\s\S]*(?:total\s+fees|اجمالي\s+الرسوم)/i.test(normalized);
+      const labels=[/original\s+purchase|الشراء\s+الاصلي/gi,/settled\s+amount|settlement\s+principal|مبلغ\s+التسوية/gi,/total\s+fees|اجمالي\s+الرسوم/gi,/original\s+reference|مرجع\s+الشراء/gi,/purchase\s+date|تاريخ\s+الشراء/gi,/\bcard\b|بطاق\S*/gi];
+      const repeated=labels.some(label=>(normalized.match(label)||[]).length>1);
       const complete=/purchase\s+settlement\s+(?:is\s+)?completed|settlement\s+of\s+(?:your\s+)?purchase\s+(?:is\s+)?completed|تمت\s+تسوية\s+الشراء/i.test(normalized);
       parsed=result({kind:'purchase_settlement',direction:'debit',bankId:bank,providerId:provider,
         currency:settled?settled[1].toUpperCase():(original?original[1].toUpperCase():'AED'),amount:settled?amount(settled[2]):(original?amount(original[2]):0),
@@ -380,7 +381,7 @@
         originalPurchaseRef:ref?ref[1]:null,originalPurchaseDate:date?date[1]:null,
         settlementFee:fee?amount(fee[2]):null,settlementFeeCurrency:fee?fee[1].toUpperCase():null,
         executionStatus:complete?'completed':'unknown',confidence:0.99,
-        reviewReason:!repeated&&complete&&original&&settled&&fee&&ref&&date&&identity.cardLast4?null:'settlement-evidence-incomplete'},obj,raw);
+        reviewReason:repeated?'settlement-evidence-ambiguous':complete&&original&&settled&&fee&&ref&&date&&identity.cardLast4?null:'settlement-evidence-incomplete'},obj,raw);
       family='purchase-settlement';
     }
     if(!parsed&&/refund\s+request|request\s+(?:for\s+)?(?:a\s+)?refund|طلب\s+استرداد|فاتور|\bbill\b|\binvoice\b|تعبئة|\bnol\b/i.test(normalized)){
@@ -392,7 +393,7 @@
     }
     if(!parsed)return review('unrecognized');
     if(!parsed.transactionRef){const ref=normalized.match(/\b(?:TR\s+REF|transaction\s+(?:id|reference)|reference|TID|ref)\s*[:#-]?\s*([A-Za-z0-9_-]{4,40})/i);if(ref)parsed.transactionRef=ref[1];}
-    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.13-financial-contract';parsed.executionStatus=parsed.executionStatus||'completed';
+    parsed.formatFamily=family;parsed.raw=raw;parsed.parserVersion='9.2.14-financial-contract';parsed.executionStatus=parsed.executionStatus||'completed';
     // Card-acquiring language also describes wallet funding; ownership/purpose is not in the merchant label.
     if(parsed.kind==='purchase'&&/^(?:e\s*(?:&|and)\s*money|du\s*pay)(?:\s*[,;]|\s*$)/i.test(parsed.merchant||''))parsed.reviewReason='wallet-funding-purpose-unconfirmed';
     if(parsed.kind==='investment_sale'){parsed.reviewReason='investment-non-money-review';return parsed;}

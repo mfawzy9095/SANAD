@@ -23,6 +23,19 @@ assert.equal(I.applyPlan(state,plan),false,'stale plan must not append or overwr
 for(const [from,to] of [['Settled amount excluding fees:','Settled amount:'],['FXTEST01','DIFFERENT'],['2026-10-06','2026-10-05'],['EUR 23.45','EUR 23.46'],['4321','9876'],['Total fees: AED 1.25.',''],['Total fees: AED 1.25.','Total fees: USD 1.25.']]){
  const candidate=parse(text.replace(from,to));assert.equal(I.plan(candidate,before).action,'review');assert.deepEqual(state.transactions.length,1);
 }
+// Composite evidence cannot choose the first identity/date/reference and ignore the rest.
+for(const suffix of [
+ ' Original reference: OTHERREF.',
+ ' مرجع الشراء: OTHERREF.',
+ ' Purchase date: 2026-10-05.',
+ ' تاريخ الشراء: 2026-10-05.',
+ ' Debit card ending 9876.',
+ ' بطاقة الخصم المنتهية بالرقم 9876.'
+]){
+ const candidate=parse(text+suffix,'composite');
+ assert.equal(I.plan(candidate,before).action,'review','ambiguous settlement: '+suffix);
+ assert.deepEqual(before.transactions[0].settlementStatus,'pending');
+}
 const unknown=M.parse({id:'unknown',sender:'1122',text,postedAt:1791547200000});assert.equal(I.plan(unknown,before).action,'review');
 assert.equal(M.parse({sender:'EmiratesNBD',text:text.replace('completed','pending')}).ignored,true);
 assert.equal(I.plan(parsed,{...before,transactions:[]}).action,'review','settlement before purchase is retained for review');

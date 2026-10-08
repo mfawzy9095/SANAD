@@ -20,6 +20,24 @@ const trustFixtureRows=()=>{
  console.log('Synthetic provider rows after fixture update:',updated);
  ids.forEach(id=>assert(updated.split('\n').some(row=>row.includes('_id='+id+',')&&row.includes('EmiratesNBD')),'Provider address must match trusted fixture id '+id));
 };
+// Exercise the system notification's real PendingIntent through System UI.
+async function tapImportNotificationAction(label){
+ adb('shell','cmd','statusbar','expand-notifications');
+ for(let attempt=0;attempt<4;attempt++){
+  adb('shell','uiautomator','dump','/sdcard/sanad-qa-notifications.xml');
+  const xml=adb('shell','cat','/sdcard/sanad-qa-notifications.xml');
+  const nodes=xml.match(/<node\b[^>]*>/g)||[];
+  const hit=nodes.find(n=>n.includes('text="'+label+'"'));
+  const tap=node=>{const b=node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);if(!b)return false;adb('shell','input','tap',String(Math.floor((+b[1]+ +b[3])/2)),String(Math.floor((+b[2]+ +b[4])/2)));return true;};
+  if(hit&&tap(hit)){adb('shell','cmd','statusbar','collapse');return;}
+  const title=nodes.findIndex(n=>n.includes('text="SANAD · قراءة الرسائل محليًا"'));
+  const expand=(title>=0?nodes.slice(0,title).reverse():[]).find(n=>n.includes(':id/expand_button"')&&n.includes('clickable="true"'));
+  if(expand)tap(expand);
+  if(attempt===3)fs.writeFileSync(path.join(out,'notification-action-failure.xml'),xml);
+  await new Promise(r=>setTimeout(r,150));
+ }
+ throw Error('Import notification action not visible: '+label);
+}
 const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);};
 (async()=>{
  adb('shell','am','start','-n',pkg+'/com.sanad.v9test.MainActivity');
@@ -135,6 +153,25 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  assert(!adb('shell','dumpsys','activity','services',pkg).includes('isForeground=true'),'Foreground service stops after completion');
  adb('shell','am','start','-n',pkg+'/com.sanad.v9test.MainActivity');
  pass('Native foreground SMS import completes while app is behind HOME; actual count, unchanged ledger, service cleanup');
+ for(const [label,status] of [['إيقاف مؤقت','paused'],['إلغاء','cancelled']]){
+  await page.evaluate(()=>{window.qaImportDone=false;SanadBankInbox.importHistoricalSms(0,{fromDate:1}).then(()=>{window.qaImportDone=true;});});
+  await page.waitForFunction(()=>SanadBankInbox.historicalImporting&&SanadBankInbox.historicalProgress?.scanned>=20);
+  await tapImportNotificationAction(label);
+  await page.waitForFunction(()=>window.qaImportDone);
+  const stopped=await page.evaluate(()=>SanadExtStorage.get('bankImportActive',null));
+  assert.equal(stopped.status,status);assert(stopped.total.scanned>0&&stopped.total.scanned<backgroundScan.total.scanned,'Notification action must interrupt actual unfinished reading');
+  assert.equal(await page.evaluate(()=>JSON.stringify(S.transactions)),txBeforeBackground);
+  adb('shell','am','start','-n',pkg+'/com.sanad.v9test.MainActivity');
+  if(status==='paused'){
+   await page.evaluate(()=>SanadBankInbox.importHistoricalSms(0,{resume:true}));
+   assert.equal(await page.evaluate(()=>SanadBankInbox.lastHistoricalImport.status),'complete');
+   assert.equal(await page.evaluate(()=>SanadBankInbox.lastHistoricalImport.total.scanned),backgroundScan.total.scanned);
+  }else{
+   assert.equal(await page.evaluate(()=>SanadBankInbox.importHistoricalSms(0,{resume:true})),null,'Cancelled checkpoint must not resume');
+  }
+  pass('Actual notification action '+status+' preserves durable decisions'+(status==='paused'?' and resumes to the range end':' and disables resume'));
+ }
+
 
  await page.evaluate(()=>{SanadBankInbox.importHistoricalSms(0,{fromDate:1});});
  await page.waitForFunction(()=>SanadBankInbox.historicalImporting&&SanadBankInbox.historicalProgress?.scanned>=20);

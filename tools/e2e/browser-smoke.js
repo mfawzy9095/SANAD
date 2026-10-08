@@ -282,6 +282,17 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.waitForFunction(()=>document.getElementById('sheet').dataset.sheetType==='bank-inbox'&&!SanadBankInbox.syncing&&S.transactions.some(t=>t.bankImportEventId==='qa-late-original'));
  const autoId=await page.evaluate(()=>S.transactions.find(t=>t.bankImportEventId==='qa-late-original').id);
  await page.evaluate(()=>{const date=S.transactions.find(t=>t.bankImportEventId==='qa-late-original').date;window.__qaRows=[{id:'qa-late-proof',title:'EmiratesNBD',packageName:'sms:ENBD',postedAt:Date.now(),text:'Purchase settlement completed. Original purchase: USD 10.00. Original reference: AUTOFX01. Purchase date: '+date+'. Settled amount excluding fees: AED 37.00. Total fees: AED 1.00. Debit card ending 6452.'}];});
+ const settlementProof=await page.evaluate(()=>window.__qaRows[0]);
+ await page.evaluate(()=>{window.__qaRows=[{...window.__qaRows[0],id:'qa-composite-proof',text:window.__qaRows[0].text+' Original reference: DIFFERENT01.'}];});
+ await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
+ assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).settlementStatus,autoId),'pending');
+ assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),null);
+ assert.equal(await page.evaluate(()=>SanadBankInbox.items.find(x=>x.native.id==='qa-composite-proof').plan.reason),'settlement-evidence-ambiguous');
+ await page.reload();await page.waitForFunction(()=>S.ready&&SanadV9.initialized);
+ assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).settlementStatus,autoId),'pending');
+ assert.equal(await page.evaluate(async()=>(await SanadExtStorage.get('bankSmsReviewEvents',[])).some(x=>x.id==='qa-composite-proof')),true);
+ record('Composite settlement evidence remains durable review; pending purchase and unknown balance survive restart');
+ await page.evaluate(proof=>{window.__qaRows=[{...proof,postedAt:Date.now()}];},settlementProof);
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
  assert.equal(await page.evaluate(()=>S.transactions.length),autoBefore.count+1);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),Math.round((autoBefore.balance-38)*100)/100);
