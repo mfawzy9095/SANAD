@@ -608,6 +608,10 @@
   });
   // Regional sender evidence from the user's corpus; separate from the CBUAE bank list.
   const REGIONAL_BANKS=Object.freeze([
+    // Separate legal issuer from Emirates NBD UAE. Egypt bank is an Egyptian S.A.E.
+    // Only Egypt-qualified aliases resolve automatically; the bare shared brand
+    // must never choose an issuer country by transaction currency.
+    {id:'emirates-nbd-egypt',name:'Emirates NBD Egypt S.A.E.',country:'EGY',aliases:['Emirates NBD Egypt','Emirates NBD Bank Egypt','ENBD Egypt','الإمارات دبي الوطني مصر','بنك الامارات دبي الوطني مصر'],short:'ENBD Egypt'},
     {id:'nbe-egypt',name:'National Bank of Egypt',country:'EGY',aliases:['BanK-AlAhly','Bank AlAhly','البنك الاهلي المصري']},
     {id:'fab-misr',name:'FABMISR',country:'EGY',aliases:['FABMISR','FAB Misr']},
     {id:'bank-audi-egypt',name:'Bank Audi Egypt',country:'EGY',aliases:['Bank Audi']},
@@ -727,6 +731,7 @@
     return p?(p.short||p.name):'';
   }
   function list(){return BANKS.slice().sort((a,b)=>{if(!!a.popular!==!!b.popular)return a.popular?-1:1;return a.name.localeCompare(b.name,'en');});}
+  function listAll(){return BANKS.concat(REGIONAL_BANKS).slice().sort((a,b)=>{if(!!a.popular!==!!b.popular)return a.popular?-1:1;return a.name.localeCompare(b.name,'en');});}
   function listProviders(){return PAYMENT_PROVIDERS.slice().sort((a,b)=>{if(!!a.popular!==!!b.popular)return a.popular?-1:1;return a.name.localeCompare(b.name,'en');});}
   function search(query){
     const q=normalize(query);
@@ -767,5 +772,5 @@
     }
     return best;
   }
-  return Object.freeze({SOURCE,BANKS,REGIONAL_BANKS,REGIONAL_PROVIDERS,BANK_LOCALIZATION,PAYMENT_PROVIDERS,CBUAE_SVF_LICENSEES,LOGO_DOMAINS,list,listProviders,search,searchProviders,get,getProvider,detect,detectProvider,normalize,logoDomain,initials,bankDisplayName,bankShortName,providerDisplayName,providerShortName});
+  return Object.freeze({SOURCE,BANKS,REGIONAL_BANKS,REGIONAL_PROVIDERS,BANK_LOCALIZATION,PAYMENT_PROVIDERS,CBUAE_SVF_LICENSEES,LOGO_DOMAINS,list,listAll,listProviders,search,searchProviders,get,getProvider,detect,detectProvider,normalize,logoDomain,initials,bankDisplayName,bankShortName,providerDisplayName,providerShortName});
 });
