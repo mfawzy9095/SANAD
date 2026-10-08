@@ -1,9 +1,9 @@
-# SANAD 9.2.12 — Financial review QA batch
+# SANAD 9.2.14 — Financial QA (not a production release)
 
 Local Android personal finance app with accounts, cards, income/expenses,
 transfers, receipts, reminders, biometric/device lock and bank-message import.
 
-Financial stability phase remains OPEN. See [9.2.12 pending FX settlement](docs/financial-closure/9.2.12-pending-settlement.md). See [9.2.11 SMS template variants](docs/financial-closure/9.2.11-sms-variants.md), [9.2.10 review-reason follow-up](docs/financial-closure/9.2.10-review-reasons.md) and [9.2.9 evidence and remaining blockers](docs/financial-closure/9.2.9-review-batch.md). See [financial contract](docs/financial-closure/CONTRACT.md) and [defect register](docs/financial-closure/DEFECTS.md). CI emulator uses a distinct `.forensicqa.ci` debug-signed harness; delivered `.forensicqa.stable` must use the existing private QA certificate.
+Financial stability phase remains OPEN. The current development branch is **not a verified signed production release**. Review [worldwide release acceptance gates](docs/financial-closure/WORLDWIDE-RELEASE-GATES.md) before any distribution. See [9.2.12 pending FX settlement](docs/financial-closure/9.2.12-pending-settlement.md). See [9.2.11 SMS template variants](docs/financial-closure/9.2.11-sms-variants.md), [9.2.10 review-reason follow-up](docs/financial-closure/9.2.10-review-reasons.md) and [9.2.9 evidence and remaining blockers](docs/financial-closure/9.2.9-review-batch.md). See [financial contract](docs/financial-closure/CONTRACT.md) and [defect register](docs/financial-closure/DEFECTS.md). CI emulator uses a distinct `.forensicqa.ci` debug-signed harness; delivered `.forensicqa.stable` must use the existing private QA certificate.
 
 ## Current delivery
 - Development: `feature-v9.2-ui-features` only.
@@ -16,6 +16,12 @@ Financial stability phase remains OPEN. See [9.2.12 pending FX settlement](docs/
 
 ## Daily use
 Use **+ → SMS refresh** to scan recent transactions. Settings provides historical
+SMS import **and local SMS Backup XML file import**. XML is an untrusted input: it is
+loaded into the review queue only, with an explicit manual source confirmation
+before any posting, and it never feeds automatic account balances or learning.
+The built-in manual ledger currently supports a limited, explicit currency set;
+**global bank SMS support and licensed official bank logo packaging are not complete**.
+Settings provides historical
 SMS import. The first refresh scans 30 days; later scans start from the last
 completed scan with one day of overlap. A full review queue stops the historical
 scan without discarding messages. Review pending items before continuing.
