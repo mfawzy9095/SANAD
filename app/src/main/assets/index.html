@@ -9757,7 +9757,10 @@ const SanadBankInbox = {
     if(!Number.isFinite(validDate.getTime())||validDate.toISOString().slice(0,10)!==selectedDate){toast('التاريخ غير صالح');return;}
     if(selectedClock&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(selectedClock)){toast('وقت العملية غير صحيح');return;}
     const dateConfirmed=!!document.getElementById('bankFixConfirmDate')?.checked;
-    if(originalRecognized&&['ambiguous-date','invalid-operation-date'].includes(draft.reviewReason)&&!dateConfirmed){toast('أكّد التاريخ الصحيح قبل إضافة العملية');return;}
+    const sourceDate=String(draft.transactionDate||'');
+    const invalidSourceDate=!!sourceDate&&bankReviewDateInputValue(sourceDate,draft.postedAt)!==sourceDate;
+    const correctedSourceDate=!!sourceDate&&selectedDate!==sourceDate;
+    if(originalRecognized&&(['ambiguous-date','invalid-operation-date'].includes(draft.reviewReason)||invalidSourceDate||correctedSourceDate)&&!dateConfirmed){toast('أكّد التاريخ الصحيح من الرسالة أو كشف الحساب قبل إضافة العملية');return;}
     const amount=Number((document.getElementById('bankFixAmount')||{}).value);
     const currency=((document.getElementById('bankFixCurrency')||{}).value||draft.currency);
     const sourceRaw=((document.getElementById('bankFixSource')||{}).value||'');
