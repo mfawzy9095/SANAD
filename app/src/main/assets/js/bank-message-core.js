@@ -106,9 +106,13 @@
     const resolvedCurrency=String(base.currency||'AED').toUpperCase();
     const resolvedBank=base.bankId||bankIdFrom(input,raw),resolvedProvider=base.providerId||providerIdFrom(input,raw);
     const institution=resolvedBank?Banks.get(resolvedBank):(resolvedProvider&&Banks.getProvider?Banks.getProvider(resolvedProvider):null);
-    const issuerCountry=base.country||(resolvedBank==='emirates-nbd'&&resolvedCurrency==='EGP'?'EGY':(institution&&(institution.country||'UAE')))||countryForCurrency(resolvedCurrency);
+    // The settlement/purchase currency does not identify the legal issuer.
+    // Emirates NBD UAE and Emirates NBD Egypt share brand/source aliases;
+    // generic EGP bank messages need an explicit institution choice.
+    const issuerCountry=base.country||(institution&&institution.country)||countryForCurrency(resolvedCurrency)||'OTHER';
+    const ambiguousIssuer=resolvedBank==='emirates-nbd'&&resolvedCurrency==='EGP'&&!base.country;
 
-    return Object.assign({recognized:true,ignored:false,eventId:input&&input.id?String(input.id):null,postedAt:Number(input&&input.postedAt)||Date.now(),
+    const parsed=Object.assign({recognized:true,ignored:false,eventId:input&&input.id?String(input.id):null,postedAt:Number(input&&input.postedAt)||Date.now(),
       bankId:resolvedBank,providerId:resolvedProvider,kind:base.kind,direction:base.direction||null,amount:Number(base.amount),
       currency:resolvedCurrency,country:issuerCountry,transactionCountry:null,merchant:base.merchant||'',category:base.category||'other',
       cardFirst4:base.cardFirst4||null,cardLast4:base.cardLast4||null,cardNetwork:base.cardNetwork||null,accountRef:base.accountRef||null,accountSuffix:base.accountSuffix||suffix(base.accountRef),
@@ -120,6 +124,11 @@
       availableBalanceCurrency:base.availableBalanceCurrency||resolvedCurrency,availableCreditCurrency:base.availableCreditCurrency||resolvedCurrency,
       availableBalance:base.availableBalance==null?null:Number(base.availableBalance),availableCredit:base.availableCredit==null?null:Number(base.availableCredit),
       raw:String(raw),confidence:Number(base.confidence||0.95)},base);
+    if(ambiguousIssuer){
+      parsed.issuerCountryAmbiguous=true;
+      if(!parsed.reviewReason)parsed.reviewReason='issuer-jurisdiction-unconfirmed';
+    }
+    return parsed;
   }
   function humanizeCompactName(value){
     return String(value||'').replace(/[_-]+/g,' ').replace(/([a-z])([A-Z])/g,'$1 $2').replace(/\s+/g,' ').trim();
