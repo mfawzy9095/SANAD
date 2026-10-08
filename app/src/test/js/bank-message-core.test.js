@@ -123,7 +123,7 @@ assert(nbdRegistry.listAll().some(b=>b.id==='emirates-nbd-egypt'));
 const sharedNbd=fixtureParse({id:'uae-egp',postedAt:Date.UTC(2026,8,8),title:'EmiratesNBD',text:'Purchase EGP 20.00 at SYNTHETIC SHOP using debit card ending 3993'});
 assert.equal(sharedNbd.recognized,true);
 assert.equal(sharedNbd.bankId,'emirates-nbd');
-assert.equal(sharedNbd.country,'UAE');
+assert.equal(sharedNbd.country,'OTHER','EGP spending cannot identify the bank\'s legal jurisdiction');
 assert.equal(sharedNbd.reviewReason,'issuer-jurisdiction-unconfirmed');
 const egyptNbd=fixtureParse({id:'egypt-egp',postedAt:Date.UTC(2026,8,8),title:'Emirates NBD Egypt',text:'Purchase EGP 20.00 at SYNTHETIC SHOP using debit card ending 3993'});
 assert.equal(egyptNbd.recognized,true);
