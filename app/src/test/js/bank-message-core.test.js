@@ -114,6 +114,22 @@ assert.strictEqual(pkgWallet.providerId,'du-pay');
 assert.strictEqual(P.countryForCurrency('AED'),'UAE');
 assert.strictEqual(P.countryForCurrency('EGP'),'EGY');
 assert.strictEqual(P.countryForCurrency('MAD'),'MAR');
+// The two Emirates NBD legal issuers share a brand: never infer the Egyptian
+// bank from purchase currency, including an EGP-denominated UAE card charge.
+const nbdRegistry=require('../../main/assets/js/uae-bank-registry-core.js');
+assert.equal(nbdRegistry.get('emirates-nbd').country||'UAE','UAE');
+assert.equal(nbdRegistry.get('emirates-nbd-egypt').country,'EGY');
+assert(nbdRegistry.listAll().some(b=>b.id==='emirates-nbd-egypt'));
+const sharedNbd=fixtureParse({id:'uae-egp',postedAt:Date.UTC(2026,8,8),title:'EmiratesNBD',text:'Purchase EGP 20.00 at SYNTHETIC SHOP using debit card ending 3993'});
+assert.equal(sharedNbd.recognized,true);
+assert.equal(sharedNbd.bankId,'emirates-nbd');
+assert.equal(sharedNbd.country,'UAE');
+assert.equal(sharedNbd.reviewReason,'issuer-jurisdiction-unconfirmed');
+const egyptNbd=fixtureParse({id:'egypt-egp',postedAt:Date.UTC(2026,8,8),title:'Emirates NBD Egypt',text:'Purchase EGP 20.00 at SYNTHETIC SHOP using debit card ending 3993'});
+assert.equal(egyptNbd.recognized,true);
+assert.equal(egyptNbd.bankId,'emirates-nbd-egypt');
+assert.equal(egyptNbd.country,'EGY');
+assert.notEqual(egyptNbd.reviewReason,'issuer-jurisdiction-unconfirmed');
 assert.strictEqual(fixtureParse({text:'Your account 1234 was credited EGP 50.00'}).country,'EGY');
 assert.strictEqual(fixtureParse({text:'Purchase MAD 20.00 at TEST STORE on your credit card ending 9999'}).country,'MAR');
 
