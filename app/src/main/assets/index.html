@@ -9573,6 +9573,9 @@ const SanadBankInbox = {
         (!item.parsed||!item.parsed.recognized?'<label><input id="bankFixManualProof" type="checkbox"> أؤكد أني راجعت الرسالة وأدخلت البيانات الحقيقية بنفسي</label>':'')+
         '<label><input id="bankFixConfirmIssuer" type="checkbox"> أؤكد المؤسسة وبلد الحساب، حتى لو اختلفا عن الاستنتاج الآلي</label>'+
         '<div class="field"><label>نوع العملية</label><select id="bankFixKind">'+kindOpts+'</select></div>'+
+        '<div class="field"><label>تاريخ العملية</label><input type="date" id="bankFixDate" value="'+esc(p.transactionDate||localDateTimeInput(Number(p.postedAt)||Date.now()).slice(0,10))+'"><div class="field-hint">يمكن أن يختلف تاريخ الاستلام عن تاريخ الحركة المصرفية؛ تحقق من المصدر.</div></div>'+
+        '<div class="field"><label>وقت العملية (إن عُرف)</label><input type="time" id="bankFixTime" value="'+esc(/^([01]\\d|2[0-3]):[0-5]\\d$/.test(p.transactionTime||'')?p.transactionTime:'')+'"></div>'+
+        '<label><input type="checkbox" id="bankFixConfirmDate"> أؤكد التاريخ/الوقت المختارين من بيانات العملية أو كشف الحساب</label>'+
         (p.kind==='salary'&&p.accountRef?'<div class="field"><label><input id="bankFixConfirmAccountIdentity" type="checkbox"> هل الحساب الوارد في الرسالة هو حسابك المرتبط بهذا الكارت؟</label><div class="field-hint">أؤكد ربط المرجع '+esc(p.accountRef)+' بحساب المصدر المختار في نفس البنك والعملة. الرسائل الأقدم تظل للمراجعة، والإيداع العام لا يصبح مرتبًا.</div></div>':'')+
         pairHtml+
         manualLinkHtml+
@@ -9655,6 +9658,15 @@ const SanadBankInbox = {
     const manualCandidates=originalRecognized?BankIngestionCore.manualDuplicateCandidates(item.parsed,S):[];
     if(manualCandidates.length&&!(document.getElementById('bankFixDistinctOperation')||{}).checked){toast('اربط العملية الموجودة أو أكد أنها حركة أخرى مستقلة');return;}
     const kind=((document.getElementById('bankFixKind')||{}).value||draft.kind);
+    const selectedDate=String(document.getElementById('bankFixDate')?.value||'');
+    const selectedClock=String(document.getElementById('bankFixTime')?.value||'');
+    const parsedDate=/^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(selectedDate);
+    if(!parsedDate){toast('اختر تاريخًا صالحًا');return;}
+    const validDate=new Date(Date.UTC(Number(parsedDate[1]),Number(parsedDate[2])-1,Number(parsedDate[3])));
+    if(!Number.isFinite(validDate.getTime())||validDate.toISOString().slice(0,10)!==selectedDate){toast('التاريخ غير صالح');return;}
+    if(selectedClock&&!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(selectedClock)){toast('وقت العملية غير صحيح');return;}
+    const dateConfirmed=!!document.getElementById('bankFixConfirmDate')?.checked;
+    if(originalRecognized&&['ambiguous-date','invalid-operation-date'].includes(draft.reviewReason)&&!dateConfirmed){toast('أكّد التاريخ الصحيح قبل إضافة العملية');return;}
     const amount=Number((document.getElementById('bankFixAmount')||{}).value);
     const currency=((document.getElementById('bankFixCurrency')||{}).value||draft.currency);
     const sourceRaw=((document.getElementById('bankFixSource')||{}).value||'');
@@ -9676,7 +9688,8 @@ const SanadBankInbox = {
     if(originalRecognized&&draft.country&&chosenAccount.country!==draft.country&&!document.getElementById('bankFixConfirmIssuer')?.checked){toast('أكّد بلد الحساب المختلف عن الرسالة');return;}
     if(originalRecognized&&currency!==draft.currency&&!document.getElementById('bankFixConfirmCurrency')?.checked){toast('أكّد تصحيح عملة العملية الأصلية');return;}
     const issuerVerified=!!document.getElementById('bankFixConfirmIssuer')?.checked;
-    const corrected=Object.assign({},draft,{kind,amount,currency,country:chosenAccount.country,confidence:1});
+    const corrected=Object.assign({},draft,{kind,amount,currency,country:chosenAccount.country,confidence:1,transactionDate:selectedDate,transactionTime:selectedClock||null});
+    if(['ambiguous-date','invalid-operation-date'].includes(draft.reviewReason)&&dateConfirmed)corrected.reviewReason=null;
     if(egyptNbdCorrection)corrected.bankId='emirates-nbd-egypt';
     if(draft.reviewReason==='issuer-jurisdiction-unconfirmed'&&issuerVerified&&chosenIssuer&&chosenIssuer.bankRegistryId===corrected.bankId)corrected.reviewReason=null;
     if(['purchase','bill_payment','mobile_recharge'].includes(kind)){
@@ -9691,7 +9704,7 @@ const SanadBankInbox = {
     const route=BankIngestionCore.routeFromManualChoice(corrected,S,{sourceType,sourceId,targetAccountId:targetId});
     if(!route||route.status!=='routed'){toast(this.reasonLabel((route&&route.reason)||'manual-route-invalid'));return;}
     const feeInput=String((document.getElementById('bankFixFee')||{}).value||'').trim();
-    const buildOptions={uid};
+    const buildOptions={uid,date:selectedDate};
     const settlementInput=String((document.getElementById('bankFixSettlement')||{}).value||'').trim();
     if(settlementInput)buildOptions.confirmedSettlementAmount=settlementInput;
     if(document.getElementById('bankFixRetainPending')?.checked)buildOptions.allowPendingSettlement=true;
