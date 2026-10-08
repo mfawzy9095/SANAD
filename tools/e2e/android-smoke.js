@@ -22,7 +22,7 @@ const trustFixtureRows=()=>{
  ids.forEach(id=>assert(updated.split('\n').some(row=>row.includes('_id='+id+',')&&row.includes('EmiratesNBD')),'Provider address must match trusted fixture id '+id));
 };
 // Exercise the system notification's real PendingIntent through System UI.
-async function tapImportNotificationAction(label){
+async function locateImportNotificationAction(label){
  adb('shell','cmd','statusbar','expand-notifications');
  for(let attempt=0;attempt<6;attempt++){
   adb('shell','uiautomator','dump','/sdcard/sanad-qa-notifications.xml');
@@ -31,7 +31,7 @@ async function tapImportNotificationAction(label){
   const nodes=xml.match(/<node\b[^>]*>/g)||[];
   const hit=nodes.find(n=>n.includes('text="'+label+'"'));
   const tap=node=>{const b=node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);if(!b)return false;adb('shell','input','tap',String(Math.floor((+b[1]+ +b[3])/2)),String(Math.floor((+b[2]+ +b[4])/2)));return true;};
-  if(hit&&tap(hit)){adb('shell','cmd','statusbar','collapse');return;}
+  if(hit)return hit;
   const expand=notificationExpand(nodes,'SANAD · قراءة الرسائل محليًا');
   if(expand&&expand.includes('content-desc="Expand"'))tap(expand);
   else {
@@ -162,9 +162,17 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  adb('shell','am','start','-n',pkg+'/com.sanad.v9test.MainActivity');
  pass('Native foreground SMS import completes while app is behind HOME; actual count, unchanged ledger, service cleanup');
  for(const [label,status] of [['إيقاف مؤقت','paused'],['إلغاء','cancelled']]){
+  // Prepare the real shade before starting this short scan. UIAutomator discovery
+  // took longer than the entire repeated 165-row scan in the retained failure.
+  assert.equal(await page.evaluate(()=>AndroidBridge.beginSmsImportForeground()),true);
+  const actionNode=await locateImportNotificationAction(label);
+  const actionBounds=actionNode.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+  assert(actionBounds,'Real System UI action must have visible bounds');
   await page.evaluate(()=>{window.qaImportDone=false;SanadBankInbox.importHistoricalSms(0,{fromDate:1}).then(()=>{window.qaImportDone=true;});});
   await page.waitForFunction(()=>SanadBankInbox.historicalImporting&&SanadBankInbox.historicalProgress?.scanned>=20);
-  await tapImportNotificationAction(label);
+  assert.equal(await page.evaluate(()=>window.qaImportDone),false,'Scan must still be active immediately before the real action tap');
+  adb('shell','input','tap',String(Math.floor((+actionBounds[1]+ +actionBounds[3])/2)),String(Math.floor((+actionBounds[2]+ +actionBounds[4])/2)));
+  adb('shell','cmd','statusbar','collapse');
   await page.waitForFunction(()=>window.qaImportDone);
   const stopped=await page.evaluate(()=>SanadExtStorage.get('bankImportActive',null));
   assert.equal(stopped.status,status);assert(stopped.total.scanned>0&&stopped.total.scanned<backgroundScan.total.scanned,'Notification action must interrupt actual unfinished reading');
