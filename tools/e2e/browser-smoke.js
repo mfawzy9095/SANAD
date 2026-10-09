@@ -54,6 +54,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.waitForFunction(()=>!document.getElementById('sanadBootSplash')||getComputedStyle(document.getElementById('sanadBootSplash')).visibility==='hidden');
  assert((await page.locator('#view').innerText()).length>30);
  assert.equal(await page.locator('#bottomNav .ico svg').count(),5,'All bottom navigation icons must render as local vector icons');
+ assert.equal(await page.locator('#bottomNav [data-tab="settings"] .ico[data-r25-gear="true"] svg').count(),1,'Settings must show the persistent gear, not the obsolete sun icon');
  const quickActionCount=await page.locator('.quick-chip[data-quick]').count();
  if(quickActionCount===0){
   // A newly onboarded user has no account and correctly sees the create-account
@@ -292,6 +293,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  record('Full restore blocked during an unfinished financial write');
  await page.evaluate(()=>go('home'));await stableHome();await page.screenshot({path:path.join(output,'mobile-ar.png')});
  for(const tab of ['tx','accounts','rep','settings','home']){await page.locator('#bottomNav [data-tab="'+tab+'"]').click();assert((await page.locator('#view').innerText()).length>0);}
+ assert.equal(await page.locator('#bottomNav [data-tab="settings"] .ico[data-r25-gear="true"] svg').count(),1,'Repeated navigation must preserve settings gear icon');
  record('All primary tabs respond without blank pages');
 
  // Every major financial screen retains its original delegated actions,
