@@ -8935,7 +8935,7 @@ const SanadBankInbox = {
       const detail=row.type==='merchant'?row.merchant+' · '+Finance.getCat('expense',row.category).n:row.type==='identity'?row.reference:row.type==='template'?this.kindLabel(row.kind):row.source;
       return '<div class="card" style="padding:14px"><b>'+title+' · '+(row.enabled?'مفعّل':'متوقف')+'</b><div>'+esc(detail||'')+'</div><div>'+esc([inst?.name,a?.name,row.currency,row.country].filter(Boolean).join(' · '))+'</div><button class="btn" data-sanad-act="bank-learning-toggle" data-learning-type="'+esc(row.type)+'" data-id="'+esc(row.id)+'" data-enabled="'+(!row.enabled)+'" data-page="'+Math.floor(start/size)+'">'+(row.enabled?'إيقاف هذا التعلم':'تفعيل هذا التعلم')+'</button></div>';
     }).join('');
-    openSheet('<div class="sheet-head"><button class="close" data-act="close-sheet">×</button><h2>الروابط والتعلم</h2></div><div class="sheet-body"><div class="help-box">راجع النطاق قبل التفعيل. الإيقاف يحفظ القرار ويوقف الاستفادة منه لاحقًا؛ لا يغيّر العمليات القديمة. إعادة تفعيل هوية أو قالب لا تعتمد الرسائل التاريخية تلقائيًا.</div>'+content+(!rows.length?'<div class="empty">لا يوجد تعلم محفوظ</div>':'')+'<div>'+Math.min(start+size,rows.length)+' / '+rows.length+'</div>'+(start?'<button class="btn" data-sanad-act="bank-learning" data-page="'+(start/size-1)+'">السابق</button>':'')+(start+size<rows.length?'<button class="btn" data-sanad-act="bank-learning" data-page="'+(start/size+1)+'">التالي</button>':'')+'</div>','bank-learning');
+    openSheet('<div class="sheet-head"><button class="close" data-act="close-sheet">×</button><h2>الروابط والتعلم</h2></div><div class="sheet-body"><div class="help-box"><b>يعني إيه الربط والتعلّم؟</b><p>لما تؤكد إن رسالة تخص حسابًا أو بطاقة معينة، سند يقدر يتعرف على نفس المصدر في المرات الجاية. ويتذكر كمان تصنيف التجار اللي أكدتها.</p><p><b>إيقاف قاعدة</b> يمنع الاستفادة منها مستقبلاً لكنه لا يحذف عمليات قديمة. إعادة التفعيل لا تعتمد رسائل تاريخية تلقائيًا.</p></div>'+content+(!rows.length?'<div class="empty">لا يوجد تعلم محفوظ</div>':'')+'<div>'+Math.min(start+size,rows.length)+' / '+rows.length+'</div>'+(start?'<button class="btn" data-sanad-act="bank-learning" data-page="'+(start/size-1)+'">السابق</button>':'')+(start+size<rows.length?'<button class="btn" data-sanad-act="bank-learning" data-page="'+(start/size+1)+'">التالي</button>':'')+'</div>','bank-learning');
   },
   async toggleLearning(el){
     const type=el.dataset.learningType,id=el.dataset.id,enabled=el.dataset.enabled==='true';
@@ -9282,7 +9282,7 @@ const SanadBankInbox = {
   configuredSmsStart(){
     const n=Number(S.settings&&S.settings.bankSmsStartAt);if(Number.isFinite(n)&&n>0)return n;
     // Freeze the initial default until it can be persisted. Never move it at midnight.
-    if(!this._defaultSmsStartAt)this._defaultSmsStartAt=Date.now()-30*86400000;
+    if(!this._defaultSmsStartAt)this._defaultSmsStartAt=Date.now()-7*86400000;
     return this._defaultSmsStartAt;
   },
   async ensureSmsStart(){
@@ -9416,18 +9416,18 @@ const SanadBankInbox = {
     const percent=known&&hp.totalCount>0?Math.floor(hp.scanned*100/hp.totalCount):null;
     const date=v=>v?new Date(v).toLocaleDateString('ar-EG'):'أقدم رسالة';
     panel.innerHTML='<strong>قراءة الرسائل محليًا</strong><div>'+esc(date(hp.fromDate))+' — '+esc(date(hp.throughDate))+'</div>'+
-      '<div>قُرئ '+Number(hp.scanned||0)+(known?' من '+hp.totalCount:'')+(percent!==null?' · '+percent+'٪':'')+' · وصل إلى '+esc(date(hp.reachedAt))+'</div>'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span>قُرئ '+Number(hp.scanned||0)+(known?' من '+hp.totalCount:'')+' · وصل إلى '+esc(date(hp.reachedAt))+'</span><b style="font-size:18px;color:var(--primary)" aria-label="نسبة التقدم">'+(percent!==null?percent+'٪':'جارٍ الفحص')+'</b></div>'+
       '<div>مضاف '+Number(hp.added||0)+' · تسويات '+Number(hp.updated||0)+' · مكرر '+Number(hp.duplicates||0)+' · للمراجعة '+Number(hp.review||0)+'</div>'+
-      (percent!==null?'<progress max="'+hp.totalCount+'" value="'+hp.scanned+'" aria-label="الرسائل المقروءة" style="width:100%"></progress>':'')+
+      (percent!==null?'<progress max="'+hp.totalCount+'" value="'+hp.scanned+'" aria-label="الرسائل المقروءة" style="width:100%;height:12px;accent-color:var(--primary)"></progress>':'')+
       (Number.isFinite(hp.etaSeconds)?'<div>المتبقي تقديريًا: '+Math.ceil(hp.etaSeconds/60)+' دقيقة</div>':'')+
       '<small>'+(hp.foreground?'الاستيراد يعمل بإشعار Android؛ بعد إنهاء العملية استكمله من النقطة المحفوظة.':'احتفظ بالتطبيق مفتوحًا؛ الاستكمال متاح من النقطة المحفوظة.')+' اكتمال القراءة لا يعني اكتمال المراجعة المالية.</small>'+
       '<div class="quick-add"><button type="button" class="btn" data-sanad-act="bank-sms-pause">إيقاف مؤقت</button><button type="button" class="btn" data-sanad-act="bank-sms-cancel">إلغاء</button></div>';
   },
   homeImportHtml(){
     const running=this.historicalImporting,stats=this.historicalProgress||{},last=this.lastRecentImport||{},total=last.total||{};
-    const label=running?'إيقاف فحص الرسائل':'تحديث الرسائل';
-    const detail=running?('فُحص '+Number(stats.scanned||0)+' · أضيف '+Number(stats.added||0)):last.at?('آخر تحديث: '+Number(total.added||0)+' مضافة · '+Number(total.duplicates||0)+' مكررة · '+Number(total.review||0)+' للمراجعة'+(last.status==='complete'?'':' · الفحص لم يكتمل')):'اسحب العمليات الحديثة من SMS؛ استيراد التاريخ القديم متاح مرة واحدة من الإعدادات.';
-    return '<div style="margin-top:10px"><div class="quick-add"><button type="button" class="quick-chip more" data-sanad-act="bank-sms-recent">'+this.icon('message')+' '+(running?label:'سحب الرسائل')+'</button><button type="button" class="quick-chip" data-sanad-act="bank-inbox">'+this.icon('inbox')+' مراجعة الرسائل</button></div><div style="font-size:12px;color:var(--text-2);margin-top:6px">'+esc(detail)+'</div></div>';
+    const label=running?'إيقاف فحص الرسائل':'تحديث آخر 7 أيام';
+    const detail=running?('فُحص '+Number(stats.scanned||0)+' · أضيف '+Number(stats.added||0)):last.at?('آخر تحديث: '+Number(total.added||0)+' مضافة · '+Number(total.duplicates||0)+' مكررة · '+Number(total.review||0)+' للمراجعة'+(last.status==='complete'?'':' · الفحص لم يكتمل')):'اقرأ آخر 7 أيام بسرعة؛ يمكنك اختيار فترة أقدم من الإعدادات.';
+    return '<div style="margin-top:10px"><div class="quick-add"><button type="button" class="quick-chip more" data-sanad-act="bank-sms-recent">'+this.icon('message')+' '+(running?label:'آخر 7 أيام')+'</button><button type="button" class="quick-chip" data-sanad-act="bank-inbox">'+this.icon('inbox')+' مراجعة الرسائل</button></div><div style="font-size:12px;color:var(--text-2);margin-top:6px">'+esc(detail)+'</div></div>';
   },
   async refreshRecentSms(){
     if(this.historicalImporting){this.cancelHistoricalImport('user');return null;}
@@ -9439,7 +9439,10 @@ const SanadBankInbox = {
       const previous=await SanadExtStorage.get('bankImportLastRecent',null);
       const floor=this.configuredSmsStart();
       const compatible=BankIngestionCore.compatibleScanCheckpoint(previous,floor);
-      const fromDate=BankIngestionCore.recentScanStart(compatible,Date.now(),floor);
+      const now=Date.now();
+      // Quick scans cover a bounded week; explicit historical scans remain available.
+      // A paused scan resumes from its durable checkpoint rather than this quick window.
+      const fromDate=Math.max(now-7*86400000,BankIngestionCore.recentScanStart(compatible,now,floor));
       return await this.importHistoricalSms(0,{mode:'recent',fromDate,configuredStartAt:floor});
     }finally{this._recentStarting=false;}
   },
@@ -9629,13 +9632,16 @@ const SanadBankInbox = {
     const groups=S.accounts.filter(a=>a&&!a.archived).map(acc=>{
       const cards=S.paymentInstruments.filter(i=>i&&!i.archived&&i.accountId===acc.id);
       const institution=(S.institutions||[]).find(i=>i.id===acc.institutionId);
-      const bank=institution&&institution.bankRegistryId&&typeof UaeBankRegistryCore!=='undefined'?UaeBankRegistryCore.get(institution.bankRegistryId):null;
-      const short=bank&&typeof bankUiShort==='function'?bankUiShort(bank):'';
-      let rows=cardMessage?'':option('account:'+acc.id,acc.name+' ('+acc.currency+')');
-      rows+=cards.map(i=>option('instrument:'+i.id,(short?short+' · ':'')+({'debit_card':'خصم','credit_card':'ائتمان','wallet_card':'محفظة','prepaid_card':'مسبق الدفع'}[i.type]||'كارت')+' ••••'+(i.last4||'غير معلوم')+' ('+acc.currency+')')).join('');
-      return rows?'<optgroup label="'+esc((countryInfo(acc.country).name||acc.country)+' · '+acc.name+' ('+acc.currency+')')+'">'+rows+'</optgroup>':'';
+      const bank=institution&&institution.bankRegistryId?UaeBankRegistryCore.get(institution.bankRegistryId):null;
+      const provider=institution&&institution.providerRegistryId&&UaeBankRegistryCore.getProvider?UaeBankRegistryCore.getProvider(institution.providerRegistryId):null;
+      const short=bank?bankUiShort(bank):(provider?providerUiShort(provider):(institution?.name||acc.name||'حساب'));
+      const accountKind=({bank:'حساب بنكي',credit:'حساب سداد بطاقة',ewallet:'حساب محفظة'}[acc.type]||'حساب');
+      // Account = transfer/repayment, card = actual instrument used in purchases.
+      let rows=cardMessage?'':option('account:'+acc.id,short+' · '+accountKind+' ('+acc.currency+')');
+      rows+=cards.map(i=>option('instrument:'+i.id,short+' · '+({'debit_card':'بطاقة خصم','credit_card':'بطاقة ائتمان','wallet_card':'بطاقة محفظة','prepaid_card':'بطاقة مسبقة الدفع'}[i.type]||'بطاقة')+' ••••'+(i.last4||'غير معلوم')+' ('+acc.currency+')')).join('');
+      return rows?'<optgroup label="'+esc(short+' · '+(countryInfo(acc.country).name||acc.country)+' · '+acc.currency)+'">'+rows+'</optgroup>':'';
     });
-    return '<option value="">— اختر الحساب / الكارت —</option>'+groups.join('');
+    return '<option value="">— اختر الحساب أو البطاقة —</option>'+groups.join('');
   },
   correctionTargetOptions(parsed,selected){
     return '<option value="">— بدون / غير مطلوب —</option>'+S.accounts.filter(a=>a&&!a.archived).map(a=>
@@ -9885,12 +9891,16 @@ const SanadBankInbox = {
       const merchant=p.merchant?'<div style="font-size:12px;color:var(--text-2);margin-top:3px">'+esc(p.merchant)+'</div>':'';
       const source=this.routeLabel({native:n,parsed:p,route:r,plan});
       const canApprove=this.canManualApprove(item);
+      const postedAt=Number(n.postedAt);
+      const receivedAt=Number.isFinite(postedAt)&&postedAt>0?new Date(postedAt).toLocaleString('ar-AE',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'التاريخ غير متاح';
+      const bankTime=p.transactionDate?(' · وقت العملية: '+p.transactionDate+(p.transactionTime?' '+p.transactionTime:'')):'';
       return '<div class="card" style="padding:14px;margin-bottom:10px">' +
         '<div style="display:flex;justify-content:space-between;gap:10px"><div><b>' + esc(bank?bank.name:(provider?provider.name:(n.title||'إشعار مالي'))) + '</b>' +
         '<div style="font-size:12px;color:var(--text-2);margin-top:3px">' + esc(p.recognized?this.kindLabel(p.kind):'صيغة غير معروفة') + '</div></div>' +
         '<b class="amt-val">' + amount + '</b></div>' + merchant +
+        '<div style="font-size:12px;margin-top:6px;color:var(--text-2)">استلام الرسالة: '+esc(receivedAt)+esc(bankTime)+'</div>' +
         '<div style="font-size:12px;margin-top:8px;color:'+(canApprove?'var(--success)':'var(--warn)')+'">' + source + '</div>' +
-        '<div style="font-size:11px;color:var(--text-3);margin-top:8px;direction:auto;white-space:normal">' + esc(String(n.text||'').slice(0,260)) + '</div>' +
+        '<details style="margin-top:8px;font-size:12px;color:var(--text-2)"><summary style="cursor:pointer">عرض نص الرسالة الأصلية</summary><p style="white-space:normal;direction:auto;overflow-wrap:anywhere">'+esc(String(n.text||'').slice(0,1000))+'</p></details>' +
         '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">' +
           (canApprove?'<button type="button" class="btn primary" data-sanad-act="bank-approve" data-id="'+esc(n.id)+'" style="margin:0;flex:1;min-width:110px">اعتماد وإضافة</button>':'') +
           '<button type="button" class="btn" data-sanad-act="bank-fix" data-id="'+esc(n.id)+'" style="margin:0;flex:1;min-width:110px">'+this.icon('edit')+' '+(p.recognized?'تعديل وربط':'إدخال يدوي آمن')+'</button>' +
@@ -9900,7 +9910,7 @@ const SanadBankInbox = {
     const last=this.lastSummary||{};
     const autoNote=last.added?'<div class="help-box"><span class="hi">✅</span><div class="ht"><b>تمت المزامنة تلقائيًا</b>أضيف '+last.added+' عملية'+(last.discovered?' · واكتُشف '+last.discovered+' حساب/كارت جديد':'')+(last.reconcileWarnings?' · '+last.reconcileWarnings+' رصيد يحتاج مراجعة':'')+'</div></div>':'';
     openSheet('<div class="sheet-head"><button type="button" class="close" data-act="close-sheet">✕</button><h2>مراجعة العمليات</h2><button type="button" class="close" data-sanad-act="bank-refresh" title="تحديث">↻</button></div>' +
-      '<div class="sheet-body">' +
+      '<div class="sheet-body"><div class="field-hint">راجع المبلغ والتاريخ والحساب. افتح «تعديل وربط» لو المصدر غير واضح. العمليات المشكوك فيها لا تُعتمد تلقائيًا.</div>' +
       (!enabled?'<div class="help-box warn"><span class="hi">🔔</span><div class="ht"><b>الوصول غير مفعّل</b>فعّل Notification Access لكي يلتقط SANAD العمليات الجديدة.</div></div>':'') +
       autoNote +
       (total?'<div class="field-hint" role="status">عرض '+(pageIndex*pageSize+1)+'–'+Math.min(total,(pageIndex+1)*pageSize)+' من '+total+'</div>':'') +
