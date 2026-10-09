@@ -12,6 +12,9 @@ const W=window.SanadV252;
 W.settingsTop=()=>'';
 const tr=(ar,en)=>S.settings?.language==='en'?en:ar;
 const ic=name=>window.SanadV25Icons?.vector?.(name)||'<span aria-hidden="true">•</span>';
+const settingsIcon=document.querySelector('#bottomNav [data-tab="settings"] .ico');
+if(settingsIcon)settingsIcon.innerHTML='<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v2M12 19.5v2M21.5 12h-2M4.5 12h-2M18.72 5.28l-1.42 1.42M6.7 17.3l-1.42 1.42M18.72 18.72l-1.42-1.42M6.7 6.7 5.28 5.28"/></svg>';
+
 const n=value=>value===null||value===undefined||!Number.isFinite(Number(value))?'غير مؤكد':amtText(value);
 const money=(val,cur)=>val===null||val===undefined||!Number.isFinite(Number(val))?tr('غير مؤكد','Unconfirmed'):n(val)+' '+esc(Finance.curSymbol(cur));
 const frame=(name,sub,body)=>'<section class="r25-page" id="r25'+name+'"><header class="r25-page-title"><h2>'+esc(tr(name==='Home'?'الرئيسية':name==='Wallet'?'محفظتي':name==='Tx'?'العمليات':name==='Reports'?'التقارير':'الإعدادات',name))+'</h2><span>'+esc(sub||countryInfo(S.activeCountry).name)+'</span></header>'+body+'</section>';
