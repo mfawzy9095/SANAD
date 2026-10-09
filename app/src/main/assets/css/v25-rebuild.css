@@ -175,3 +175,8 @@ main#view{padding:7px 13px calc(124px + env(safe-area-inset-bottom));overflow-x:
 @media(max-width:355px){main#view{padding-inline:10px}#sanadScanDialog{padding-inline:9px}#sanadScanDialog .sanad-scan-metric span{font-size:9px}#sanadScanDialog .sanad-scan-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.r25-hero strong{font-size:23px}.r25-hero-bottom button{padding:8px}.r25-report-filter{grid-template-columns:minmax(0,1fr)}}
 @media(max-height:600px){#sanadScanDialog .sanad-scan-art{display:none!important}#sanadScanDialog .sanad-scan-metrics{margin:6px 0}#sanadScanDialog .sanad-scan-caption{display:none}}
 @media(prefers-reduced-motion:reduce){#sanadScanDialog .sanad-scan-art,#sanadScanDialog .sanad-scan-art:after{animation:none!important}}
+
+.r25-inline-options{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:11px 13px;border-bottom:1px solid var(--r25-line);font-size:13px;font-weight:800;color:var(--r25-ink)}
+.r25-inline-options>div{display:flex;gap:5px;background:var(--r25-line);border-radius:10px;padding:3px}
+.r25-inline-options button{border:0;border-radius:8px;padding:9px 10px;background:transparent;color:var(--r25-muted);font-size:11px;font-weight:900}
+.r25-inline-options button[aria-pressed=true]{background:var(--r25-paper);color:var(--r25-primary);box-shadow:var(--r25-shadow)}
