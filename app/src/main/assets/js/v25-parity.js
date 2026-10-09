@@ -15,6 +15,7 @@ const tr=(ar,en)=>S.settings&&S.settings.language==='en'?en:ar;
 const countryBar=()=>'<div class="v252-country" role="group" aria-label="'+tr('اختيار البلد','Select country')+'">'+
   [['UAE','الإمارات','UAE'],['EGY','مصر','Egypt'],['MAR','المغرب','Morocco']].map(([code,ar,en])=>
     '<button type="button" data-v252-country="'+code+'" class="'+(S.activeCountry===code?'active':'')+'" aria-pressed="'+(S.activeCountry===code)+'">'+tr(ar,en)+'</button>').join('')+'</div>';
+V.countryBar=()=>countryBar();
 function title(text){return '<div class="v25-page-head"><h2>'+text+'</h2><small>'+esc(countryInfo(S.activeCountry).name)+'</small></div>'}
 function subhead(heading,action,label){
   return '<div class="v25-heading"><h3>'+heading+'</h3>'+(action?'<button type="button" '+action+'>'+label+'</button>':'')+'</div>';
@@ -104,7 +105,7 @@ V.walletView=function(){
       '<div class="v25-payment-card-head"><div><b>'+esc(a?.name||'الحساب')+'</b><small>'+esc(i.name)+'</small></div><span class="v25-card-type">'+esc(cardTypeShortLabel(i.type))+'</span></div>'+
       '<div class="v25-payment-card-number">'+esc(maskedCardNumber(i)||'•••• •••• •••• ••••')+'</div>'+
       '<div class="v25-payment-card-foot"><div><small>'+(debt?'الائتمان المتاح':'الرصيد المرتبط')+'</small><b class="amt-val">'+money(amount,a?.currency||'AED')+'</b></div>'+
-      '<div class="v25-card-network">'+esc(network)+'</div></div></div>';
+      '<div class="v25-card-network">'+cardNetworkLogoHtml(i.network)+'</div></div></div>';
   }).join('');
   return '<section class="v25-page" id="v252Wallet">'+title(tr('محفظتي','My wallet'))+countryBar()+
     '<div class="v252-section"><h3>البنوك والمحافظ</h3><small class="v252-hint">اضغط على البنك لاختياره</small></div>'+
@@ -132,7 +133,17 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('[data-act="go-tx"]'))return;
   e.preventDefault();go('tx');
 },true);
-// Remove flag icons only from the UI; country state remains unchanged.
+// Keep country filtering at the top of all financial/report screens, not only
+// the wallet. This is a presentation wrapper and never persists country changes.
+const oldRender=render;
+render=function(){
+  oldRender();
+  const target=document.getElementById('view');
+  if(target&&['tx','rep','subs'].includes(S.tab)&&!target.querySelector(':scope > .v252-country')){
+    target.insertAdjacentHTML('afterbegin',countryBar());
+  }
+};
+// Remove flags in presentation, never modify account country metadata.
 const oldStrip=V.stripFlags.bind(V);
 V.stripFlags=function(root){oldStrip(root);};
 })();
