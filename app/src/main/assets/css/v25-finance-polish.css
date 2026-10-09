@@ -1,0 +1,56 @@
+/* Consistent V25 financial flows without altering underlying actions/data. */
+#view{scrollbar-width:thin;scrollbar-color:var(--outline) transparent}
+#view .filter-row{margin:11px 0 13px;gap:9px;align-items:center}
+#view .search-wrap input{height:44px;min-height:44px;border-radius:12px;border:1px solid var(--outline);padding-inline-start:42px;background:var(--surface);font-size:13px}
+#view .search-wrap .icon{display:grid;place-items:center;inset-inline-start:13px}
+#view .filter-btn{height:44px;width:44px;min-width:44px;border-radius:12px;border-color:var(--outline)}
+#view .filter-row+.day-head,#view .day-head{font-size:12px;font-weight:800;padding:12px 5px 7px}
+#view .tx-list{border:1px solid var(--outline);border-radius:15px;box-shadow:var(--shadow-1)}
+#view .tx-item{min-height:66px;padding:12px 11px;gap:9px}
+#view .tx-item .ic{width:37px;height:37px;min-width:37px;border-radius:11px}
+#view .tx-item .info b{font-size:13px;font-weight:800}
+#view .tx-item .info span{font-size:11px}
+#view .tx-item .amt{font-size:clamp(11px,3.2vw,14px);overflow-wrap:anywhere}
+#view .sec{margin:17px 2px 8px}
+#view .sec h2{font-weight:900;font-size:14px}
+#view .tabs{border:1px solid var(--outline);border-radius:12px;gap:2px;margin:10px 0;padding:4px;background:var(--surface-2)}
+#view .tabs button{border-radius:9px;font-size:12px;padding:11px 4px;min-height:41px}
+#view .tabs button.on{background:var(--surface);font-weight:900;box-shadow:0 2px 9px #073a4210}
+#view .tab-row{gap:7px;margin:10px 0}
+#view .tab-chip{border-radius:10px;padding:10px 11px;font-size:12px;font-weight:800}
+#view .month-picker{max-width:100%;border:1px solid var(--outline);background:var(--surface);border-radius:11px;padding:3px}
+#view .month-picker .arrow{min-width:30px}
+#view .card{border:1px solid var(--outline);border-radius:15px;box-shadow:var(--shadow-1);min-width:0}
+#view .list{border:1px solid var(--outline);border-radius:15px;overflow:hidden}
+#view .list-item{padding:12px;gap:11px;min-height:60px}
+#view .li-ico{height:37px;width:37px;flex:0 0 37px;border-radius:11px;background:var(--primary-soft);color:var(--primary)}
+#view .list-item .li-body b{font-weight:800;font-size:13px}
+#view .list-item .li-body span{font-size:11px;line-height:1.5}
+#view .country-picker .country-opt{border-radius:10px;border:1px solid var(--outline);flex:1;min-width:75px;justify-content:center;padding:10px 5px;font-weight:800}
+#view .country-picker .country-opt.on{border:1px solid var(--primary);background:var(--primary-soft);color:var(--primary)}
+#view .country-opt .flag,#view .tab-chip .flag{display:none!important}
+#view .help-box{border-radius:13px;border:1px solid var(--outline);min-width:0}
+#view .empty .em{display:inline-flex;align-items:center;justify-content:center;width:49px;height:49px;font-size:0;color:var(--primary);background:var(--primary-soft);border-radius:15px}
+#view .empty .em svg{height:23px;width:23px}
+#view svg.v25-ui-icon,.sheet svg.v25-ui-icon{height:20px;width:20px;display:inline-block;vertical-align:middle;stroke:currentColor;fill:none;stroke-width:1.85;stroke-linecap:round;stroke-linejoin:round}
+#view .li-ico svg.v25-ui-icon{width:20px;height:20px}
+.sheet .pc-ico svg.v25-ui-icon{width:25px;height:25px}
+#view .tx-item .ic svg.v25-ui-icon{width:19px;height:19px}
+#view .tx-item-wrap{min-width:0}
+.sheet .sheet-head{padding:13px 14px 8px;min-width:0}
+.sheet .sheet-head h2{font-size:clamp(15px,4.5vw,18px);font-weight:900;line-height:1.4;min-width:0}
+.sheet .sheet-body{padding-inline:13px;overflow-x:hidden}
+.sheet .pick-list{gap:9px}
+.sheet .pick-card{padding:16px 9px;min-width:0;border:1px solid var(--outline);border-radius:13px}
+.sheet .pick-card .pc-ico{font-size:0;line-height:1}
+.sheet .pick-card .pc-name{font-size:12px;font-weight:900}
+.sheet .pick-card .pc-desc{font-size:10px;line-height:1.5}
+.sheet .amount-display .num{font-size:clamp(28px,9vw,40px)}
+#view> .v252-country{margin-top:8px}
+#view .v25-page-head small{font-size:11px}
+@media(max-width:359px){
+ #view .tx-item .info b{font-size:12px}
+ #view .tx-item .amt{font-size:11px}
+ #view .tab-chip{padding:9px 6px;font-size:11px}
+ .sheet .pick-card{padding:12px 6px}
+}
