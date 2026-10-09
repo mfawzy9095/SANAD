@@ -410,6 +410,27 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.evaluate(()=>closeSheet());
  assert.equal(await page.evaluate(()=>S.transactions.length),ledgerBeforeXml);
  record('Untrusted SMS XML: local parse, progress, human-only review, no ledger posting on forced sync, repeat dedup');
+ // Visual and interaction QA for the actual packaged modal, using only synthetic sample statistics.
+ const beforeImportModal=await page.evaluate(()=>JSON.stringify(S.transactions));
+ await page.evaluate(()=>{
+   SanadSmsImportUI.start('recent');
+   SanadSmsImportUI.progress({scanned:1260,totalCount:3000,financialCandidates:340,added:95,review:48,duplicates:21,updated:2},'تحليل الرسائل المالية');
+ });
+ assert.equal(await page.locator('#sanadScanOverlay').isVisible(),true);
+ assert.equal(await page.locator('#sanadScanPercent').innerText(),'42٪');
+ await page.screenshot({path:path.join(output,'sms-import-progress.png')});
+ await page.locator('#sanadScanHide').click();
+ assert.equal(await page.locator('#sanadScanOverlay').isVisible(),false);
+ assert.equal(await page.locator('#sanadScanMini').isVisible(),true);
+ await page.locator('#sanadScanMini').click();
+ assert.equal(await page.locator('#sanadScanOverlay').isVisible(),true);
+ await page.evaluate(()=>SanadSmsImportUI.finish({status:'complete',total:{scanned:3000,financialCandidates:740,added:105,review:51,duplicates:37,updated:2},totalCount:3000}));
+ assert.equal(await page.locator('#sanadScanPercent').innerText(),'100٪');
+ await page.screenshot({path:path.join(output,'sms-import-finished.png')});
+ await page.locator('#sanadScanDone').click();
+ assert.equal(await page.locator('#sanadScanOverlay').isVisible(),false);
+ assert.equal(await page.evaluate(()=>JSON.stringify(S.transactions)),beforeImportModal);
+ record('SMS progress modal: 42% synthetic visual, minimize/reopen, 100% completed and no ledger mutation');
  const perfContext=await browser.newContext(),perfPage=await perfContext.newPage();perfPage.on('pageerror',e=>errors.push(e.message));
  await perfPage.goto(process.env.SANAD_QA_URL||'http://127.0.0.1:8765');await perfPage.waitForFunction(()=>typeof S!=='undefined'&&S.ready&&SanadV9.initialized);
  if(await perfPage.locator('#onboard').isVisible())await perfPage.locator('[onclick="onboardSkip()"]').click();await perfPage.waitForFunction(()=>!document.getElementById('app').hidden&&(!document.getElementById('sanadBootSplash')||getComputedStyle(document.getElementById('sanadBootSplash')).visibility==='hidden')&&!_criticalMutationInFlight&&!_dataReplacementInFlight&&!_financialFlowInFlight&&!SanadBankInbox.syncing&&!SanadBankInbox.historicalImporting&&!SanadBankInbox._recentStarting);
