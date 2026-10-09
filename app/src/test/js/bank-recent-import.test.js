@@ -108,7 +108,7 @@ async function scenario(status,mode='recent',permission=true,extra={}){
 assert(html.includes('Math.max(now-7*86400000,BankIngestionCore.recentScanStart(compatible,now,floor))'));
 assert(html.includes('استلام الرسالة: '));
 assert(html.includes('عرض نص الرسالة الأصلية'));
-assert(html.includes('aria-label="نسبة التقدم"'));
+assert(html.includes('aria-label="نسبة فحص الرسائل"'),'modal exposes accessible native progressbar');
 assert(html.includes('data-sanad-act="bank-fix"'));
 {
  const a=html.indexOf('function bankTxSourceHtml(t,acc,card){'),b=html.indexOf('function txRowHtml(t, withSwipe){',a);
