@@ -143,5 +143,75 @@ document.addEventListener('click',e=>{
  const chip=e.target.closest('[data-r25-filter]');
  if(chip){e.preventDefault();e.stopPropagation();S.filter.type=chip.dataset.r25Filter||null;render();return;}
 },true);
+
+/* Card deck layout mirrors the approved V25 prototype: one central card,
+   adjacent cards partially visible, mouse/touch swipe, accessible pager.
+   Card/account IDs come from the finance engine; selection does not write data. */
+const baseWallet=W.walletView.bind(W);
+let ignoreCardClickUntil=0;
+W.walletView=function(){
+ const box=document.createElement('div');box.innerHTML=baseWallet();
+ const strip=box.querySelector('#v252CardStrip');
+ if(!strip)return box.innerHTML;
+ const cards=[...strip.querySelectorAll('[data-v252-card]')];
+ const selected=Math.max(0,cards.findIndex(x=>x.dataset.v252Card===W.cardId));
+ strip.classList.remove('v252-strip');strip.classList.add('r25-card-deck');
+ strip.setAttribute('aria-label','البطاقات المرتبطة بالحساب');
+ cards.forEach((el,i)=>{
+   const offset=i-selected,d=Math.abs(offset);
+   const dx=(offset<0?1:-1)*Math.min(d,3)*52;
+   const scale=1-Math.min(d,3)*0.065;
+   el.style.transform='translate3d('+dx+'%, '+(Math.min(d,3)*6)+'px, 0) scale('+scale+')';
+   el.style.zIndex=String(100-d);
+   el.style.opacity=d>2?'0':'1';
+   el.style.pointerEvents=d<2?'auto':'none';
+   el.setAttribute('aria-pressed',String(i===selected));
+   el.dataset.r25CardIndex=String(i);
+ });
+ const pager=document.createElement('div');pager.className='r25-card-pager';
+ const make=(label,step)=>'<button type="button" data-r25-card-step="'+step+'" aria-label="'+label+'"'+(selected+step<0||selected+step>=cards.length?' disabled':'')+'>'+ (step<0?'›':'‹')+'</button>';
+ pager.innerHTML=make('البطاقة السابقة',-1)+
+ '<div class="r25-card-dots">'+cards.map((el,i)=>'<button type="button" aria-label="البطاقة '+(i+1)+'" aria-pressed="'+(i===selected)+'" data-r25-card-index="'+i+'"></button>').join('')+'</div>'+
+ make('البطاقة التالية',1);
+ strip.insertAdjacentElement('afterend',pager);
+ return box.innerHTML;
+};
+W.card=function(id){
+ if(performance.now()<ignoreCardClickUntil)return;
+ const cards=Finance.getCountryInstruments(S.activeCountry).filter(i=>!i.archived);
+ if(!cards.some(i=>i.id===id))return;
+ if(this.cardId===id){this.cardDetails(id);return;}
+ this.cardId=id;render();
+};
+let touchStart=null;
+document.addEventListener('pointerdown',e=>{
+ const deck=e.target.closest('#v252CardStrip.r25-card-deck');
+ if(!deck||!e.isPrimary)return;
+ touchStart={x:e.clientX,y:e.clientY,id:e.pointerId,deck};
+},true);
+document.addEventListener('pointerup',e=>{
+ if(!touchStart||touchStart.id!==e.pointerId)return;
+ const start=touchStart;touchStart=null;
+ if(!start.deck.isConnected)return;
+ const dx=e.clientX-start.x,dy=e.clientY-start.y;
+ if(Math.abs(dx)<35||Math.abs(dx)<Math.abs(dy)*1.2)return;
+ ignoreCardClickUntil=performance.now()+400;
+ const cards=[...start.deck.querySelectorAll('[data-v252-card]')];
+ const i=cards.findIndex(x=>x.dataset.v252Card===W.cardId);
+ const next=Math.max(0,Math.min(cards.length-1,i+(dx>0?1:-1)));
+ if(cards[next]){W.cardId=cards[next].dataset.v252Card;render();}
+},true);
+document.addEventListener('pointercancel',()=>{touchStart=null;},true);
+document.addEventListener('click',e=>{
+ const step=e.target.closest('[data-r25-card-step]'),dot=e.target.closest('[data-r25-card-index]');
+ if(!step&&!dot)return;
+ e.preventDefault();e.stopPropagation();
+ const cards=[...document.querySelectorAll('#v252CardStrip [data-v252-card]')];
+ let i=cards.findIndex(x=>x.dataset.v252Card===W.cardId);
+ if(step)i=Math.max(0,Math.min(cards.length-1,i+Number(step.dataset.r25CardStep)));
+ else i=Number(dot.dataset.r25CardIndex);
+ if(cards[i]){W.cardId=cards[i].dataset.v252Card;render();}
+},true);
+
 window.SanadV25Rebuild={previous,version:'v25-structural-rebuild-1'};
 })();
