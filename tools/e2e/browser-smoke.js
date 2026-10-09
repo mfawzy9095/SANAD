@@ -120,7 +120,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.locator('#wBalance').fill('1.66');await page.locator('#wOpeningKnown').check();
  await page.locator('[data-act="save-account"]').click();await page.waitForFunction(id=>S.accounts.find(a=>a.id===id)?.openingBalanceKnown===true&&S.accounts.find(a=>a.id===id)?.openingBalance===1.66&&!_criticalMutationInFlight,bankId);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),9101.66);
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});
  await page.waitForFunction(()=>!SanadBankInbox._recentStarting&&!SanadBankInbox.historicalImporting);
  assert.equal(await page.evaluate(()=>S.transactions.length),2);record('Plus SMS scan, salary/deposit discovery, balance and repeat deduplication');
  const centralGuard=await page.evaluate(async()=>{
@@ -217,8 +217,8 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
 
  await page.evaluate(()=>{window.__qaRows.push({id:'qa-after-scan',title:'Emirates NBD',packageName:'sms:ENBD',postedAt:Date.now(),text:'لقد تم ايداع AED 10.00 في رقم حسابك 012XXX50XXX01 OBP TR REF QAAFTERSCAN01. الرصيد المتوفر هو AED 9,031.66'});});
  const beforeRecent=await page.evaluate(()=>S.transactions.length);
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeRecent);
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeRecent);
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});assert.equal(await page.evaluate(()=>S.transactions.length),beforeRecent);
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});assert.equal(await page.evaluate(()=>S.transactions.length),beforeRecent);
  assert.equal(await page.evaluate(()=>SanadBankInbox.smsReviewEvents.filter(r=>r.id==='qa-after-scan').length),1,'Repeated import retains one unresolved review');
  await page.evaluate(()=>SanadBankInbox.openCorrection('qa-after-scan'));
  await page.locator('#bankFixExternalIncome').check();
@@ -226,7 +226,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.waitForFunction(n=>S.transactions.length===n+1&&!_criticalMutationInFlight,beforeRecent);
  await page.evaluate(()=>closeSheet());
 
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeRecent+1);
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});assert.equal(await page.evaluate(()=>S.transactions.length),beforeRecent+1);
  record('New unresolved inbound remains one review across repeats, then posts once after origin confirmation');
  await page.evaluate(()=>go('settings'));
  await page.locator('details.bank-sync-advanced').evaluate(el=>{el.open=true;});await page.locator('[data-sanad-act="bank-support-export"]').click();
@@ -240,29 +240,29 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(()=>Object.keys(S.settings.bankEventDecisions).length),decisionCount);
  const txBeforeReload=await page.evaluate(()=>S.transactions.length);
  await page.evaluate(()=>{window.__qaRows=[{id:'qa-after-scan',title:'Emirates NBD',postedAt:Date.now()-1000,packageName:'sms:ENBD',text:'لقد تم ايداع AED 10.00 في رقم حسابك 012XXX50XXX01 OBP TR REF QAAFTERSCAN01. الرصيد المتوفر هو AED 9,031.66'}];});
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),txBeforeReload);
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});assert.equal(await page.evaluate(()=>S.transactions.length),txBeforeReload);
  record('Durable event decisions survive reload and prevent repeated posting');
  await page.evaluate(()=>{window.__qaRows=[{id:'qa-dismiss',title:'ENBD',postedAt:Date.now()-1000,packageName:'sms:ENBD',text:'Bank transfer: incomplete financial details'}];});
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert(await page.evaluate(()=>SanadBankInbox.smsReviewEvents.some(r=>r.id==='qa-dismiss')));
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});assert(await page.evaluate(()=>SanadBankInbox.smsReviewEvents.some(r=>r.id==='qa-dismiss')));
  await page.evaluate(()=>SanadBankInbox.dismiss('qa-dismiss'));await page.reload();await page.waitForFunction(()=>S.ready&&SanadV9.initialized);
  await page.evaluate(()=>{window.__qaRows=[{id:'qa-dismiss',title:'ENBD',postedAt:Date.now()-1000,packageName:'sms:ENBD',text:'Bank transfer: incomplete financial details'}];});
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>SanadBankInbox.smsReviewEvents.some(r=>r.id==='qa-dismiss')),false);
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});assert.equal(await page.evaluate(()=>SanadBankInbox.smsReviewEvents.some(r=>r.id==='qa-dismiss')),false);
  record('Dismissed review stays dismissed after reload and provider rescan');
  const expandedFloor=await page.evaluate(async()=>{const floor=S.settings.bankSmsStartAt-86400000;const result=await commitCriticalMutation(()=>{S.settings.bankSmsStartAt=floor;return true;});if(!result.ok)throw Error('test range write failed');window.__qaFail='query-failed';return floor;});
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>SanadBankInbox.lastRecentImport.scannedThrough),0);
- await page.evaluate(()=>{window.__qaFail=null;window.__qaRows=[];});await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});assert.equal(await page.evaluate(()=>SanadBankInbox.lastRecentImport.scannedThrough),0);
+ await page.evaluate(()=>{window.__qaFail=null;window.__qaRows=[];});await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});
  assert.equal(await page.evaluate(()=>SanadBankInbox.lastRecentImport.fromDate),expandedFloor);
  record('Failed expanded range retries from the saved start without inheriting old coverage');
 
  const beforeOutgoing=await page.evaluate(()=>S.transactions.length);
  await page.evaluate(()=>{window.__qaRows=[{id:'qa-outgoing-origin',title:'EmiratesNBD',packageName:'sms:ENBD',postedAt:Date.now()-1000,text:'تم خصم مبلغ AED 37.35 من حسابك 012XXX50XXX01 لتحويل الاموال'}];});
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeOutgoing);
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});assert.equal(await page.evaluate(()=>S.transactions.length),beforeOutgoing);
  await page.evaluate(()=>SanadBankInbox.openCorrection('qa-outgoing-origin'));
  await page.locator('[data-sanad-act="bank-fix-save"]').click();assert.equal(await page.evaluate(()=>S.transactions.length),beforeOutgoing);
  await page.locator('#bankFixExternalDestination').check();await page.locator('[data-sanad-act="bank-fix-save"]').click();
  await page.waitForFunction(n=>S.transactions.length===n+1&&!_criticalMutationInFlight,beforeOutgoing);
  assert.equal(await page.evaluate(()=>S.transactions.find(t=>t.bankImportEventId==='qa-outgoing-origin').economicOrigin.kind),'external-destination');
- await page.evaluate(()=>closeSheet());await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeOutgoing+1);
+ await page.evaluate(()=>closeSheet());await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});assert.equal(await page.evaluate(()=>S.transactions.length),beforeOutgoing+1);
  record('Outgoing direction needs per-event destination ownership confirmation and posts once');
  const legacyReview=await page.evaluate(async()=>{
    const t=S.transactions.find(t=>t.bankImportEventId==='qa-deposit'),before={id:t.id,amount:t.amount,count:S.transactions.length};
@@ -285,19 +285,19 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  const heldCount=await page.evaluate(()=>S.transactions.length);
  const heldRow={id:'qa-held-repair',title:'Emirates NBD',packageName:'sms:ENBD',postedAt:Date.now()-500,text:'تم ايداع الراتب AED 77.00 في حسابك .012XXX50XXX01 الرصيد المتوفر هو AED 9,001.66'};
  await page.evaluate(async row=>{const result=await commitCriticalMutation(()=>{S.settings.bankReviewHolds={...(S.settings.bankReviewHolds||{}),[row.id]:{reason:'repair-destination-unconfirmed',quarantinedTransactionId:'qa-original-quarantined-id',at:Date.now(),parserVersion:'9.2.7-financial-contract',decisionSource:'deterministic-contract'}};return true;});if(!result.ok)throw Error('review hold fixture rejected');window.__qaRows=[row];},heldRow);
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),heldCount);
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});assert.equal(await page.evaluate(()=>S.transactions.length),heldCount);
  await page.reload();await page.waitForFunction(()=>S.ready&&SanadV9.initialized);
- await page.evaluate(row=>{window.__qaRows=[row];},heldRow);await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
+ await page.evaluate(row=>{window.__qaRows=[row];},heldRow);await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});
  assert.equal(await page.evaluate(()=>S.transactions.length),heldCount);assert(await page.evaluate(()=>S.settings.bankReviewHolds['qa-held-repair']));
  await page.evaluate(()=>SanadBankInbox.openCorrection('qa-held-repair'));await page.locator('#bankFixSource').selectOption('account:'+bankId);await page.locator('[data-sanad-act="bank-fix-save"]').click();
  await page.waitForFunction(n=>S.transactions.length===n+1&&!_criticalMutationInFlight,heldCount);
  assert.equal(await page.evaluate(()=>S.settings.bankReviewHolds['qa-held-repair']),undefined);
  assert.equal(await page.evaluate(()=>S.transactions.find(t=>t.bankImportEventId==='qa-held-repair').id),'qa-original-quarantined-id');
- await page.evaluate(()=>closeSheet());await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),heldCount+1);
+ await page.evaluate(()=>closeSheet());await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});assert.equal(await page.evaluate(()=>S.transactions.length),heldCount+1);
  record('Repair quarantine survives reload/rescan; explicit correction posts once and clears the hold durably');
  const pendingBefore=await page.evaluate(()=>({count:S.transactions.length,balance:Finance.accountBalance(S.accounts.find(a=>a.bankRefs?.includes('012XXX50XXX01')).id)}));
  await page.evaluate(async id=>{const account=Finance.getAccount(id);const result=await commitCriticalMutation(()=>{S.paymentInstruments.push({id:'qa-pending-card',name:'Synthetic debit',type:'debit_card',country:account.country,accountId:id,institutionId:account.institutionId,last4:'6452'});return true;});if(!result.ok)throw Error('Pending fixture card rejected');window.__qaRows=[{id:'qa-pending-fx',title:'EmiratesNBD',postedAt:Date.now(),text:'Purchase EUR 23.45 at Synthetic Store using debit card ending 6452. Transaction reference PENDINGQA01'}];},bankId);
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});
  await page.evaluate(()=>SanadBankInbox.openCorrection('qa-pending-fx'));
  await page.locator('#bankFixAdvanced').evaluate(el=>{el.open=true;});await page.locator('#bankFixRetainPending').check();
  await page.locator('[data-sanad-act="bank-fix-save"]').click();
@@ -323,18 +323,18 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(confirmed.amount,23.45);assert.equal(confirmed.currency,'EUR');assert.equal(confirmed.bankPrincipalAmount,94.25);assert.equal(confirmed.bankSettlementAudit.length,1);
  await page.reload();await page.waitForFunction(()=>S.ready&&SanadV9.initialized);
  assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).walletAmount,pendingId),95.5);
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),pendingBefore.count+1);
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});assert.equal(await page.evaluate(()=>S.transactions.length),pendingBefore.count+1);
  record('Known foreign purchase retained without settlement; incomplete report; durable same-event settlement, exact fees and repeat deduplication');
  const autoBefore=await page.evaluate(id=>({count:S.transactions.length,balance:Finance.accountBalance(id)}),bankId);
  await page.evaluate(()=>{window.__qaRows=[{id:'qa-late-original',title:'EmiratesNBD',packageName:'sms:ENBD',postedAt:Date.now(),text:'Purchase USD 10.00 at Synthetic Late Shop using debit card ending 6452. Transaction reference AUTOFX01'}];});
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());await page.evaluate(()=>SanadBankInbox.openCorrection('qa-late-original'));
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});await page.evaluate(()=>SanadBankInbox.openCorrection('qa-late-original'));
  await page.locator('#bankFixAdvanced').evaluate(el=>{el.open=true;});await page.locator('#bankFixRetainPending').check();await page.locator('[data-sanad-act="bank-fix-save"]').click();
  await page.waitForFunction(()=>document.getElementById('sheet').dataset.sheetType==='bank-inbox'&&!SanadBankInbox.syncing&&S.transactions.some(t=>t.bankImportEventId==='qa-late-original'));
  const autoId=await page.evaluate(()=>S.transactions.find(t=>t.bankImportEventId==='qa-late-original').id);
  await page.evaluate(()=>{const date=S.transactions.find(t=>t.bankImportEventId==='qa-late-original').date;window.__qaRows=[{id:'qa-late-proof',title:'EmiratesNBD',packageName:'sms:ENBD',postedAt:Date.now(),text:'Purchase settlement completed. Original purchase: USD 10.00. Original reference: AUTOFX01. Purchase date: '+date+'. Settled amount excluding fees: AED 37.00. Total fees: AED 1.00. Debit card ending 6452.'}];});
  const settlementProof=await page.evaluate(()=>window.__qaRows[0]);
  await page.evaluate(()=>{window.__qaRows=[{...window.__qaRows[0],id:'qa-composite-proof',text:window.__qaRows[0].text+' Original reference: DIFFERENT01.'}];});
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});
  assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).settlementStatus,autoId),'pending');
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),null);
  assert.equal(await page.evaluate(()=>SanadBankInbox.items.find(x=>x.native.id==='qa-composite-proof').plan.reason),'settlement-evidence-ambiguous');
@@ -343,13 +343,13 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(async()=>(await SanadExtStorage.get('bankSmsReviewEvents',[])).some(x=>x.id==='qa-composite-proof')),true);
  record('Composite settlement evidence remains durable review; pending purchase and unknown balance survive restart');
  await page.evaluate(proof=>{window.__qaRows=[{...proof,postedAt:Date.now()}];},settlementProof);
- await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
+ await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});
  assert.equal(await page.evaluate(()=>S.transactions.length),autoBefore.count+1);
  assert.equal(await page.evaluate(id=>Finance.accountBalance(id),bankId),Math.round((autoBefore.balance-38)*100)/100);
  assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).bankSettlementEvidence.source,autoId),'bank-message');
  assert.equal(await page.evaluate(()=>SanadBankInbox.lastHistoricalImport.total.updated),1);
  assert.equal(await page.evaluate(()=>SanadBankInbox.lastHistoricalImport.total.added),0);
- await page.evaluate(()=>{const copy={...window.__qaRows[0],id:'qa-late-notification',postedAt:Date.now()};window.__qaRows.push(copy);});await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
+ await page.evaluate(()=>{const copy={...window.__qaRows[0],id:'qa-late-notification',postedAt:Date.now()};window.__qaRows.push(copy);});await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});
  await page.reload();await page.waitForFunction(()=>S.ready&&SanadV9.initialized);
  assert.equal(await page.evaluate(()=>S.transactions.length),autoBefore.count+1);assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).bankSettlementAudit.length,autoId),1);
  record('Late bank settlement replaces original purchase, counts an update, retains proof and survives cross-channel repeat/reload');
