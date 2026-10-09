@@ -17,7 +17,8 @@ function harness(options={}){
  let now=Date.UTC(2026,9,4,12),seq=0,disk=empty(),failFinance=false,failKey=null,writes=0;
  const store={},acks=[],queries=[];const initial=empty();initial.settings.bankSmsStartAt=now-30*86400000;
  class Clock extends Date{constructor(...v){super(...(v.length?v:[now]));}static now(){return now;}}
- const ctx={S:initial,Date:Clock,Set,Map,Number,Math,Object,Infinity,_dataReplacementInFlight:false,canWrite:()=>true,uid:p=>p+'_'+(++seq),toast(){},render(){},closeSheet(){},BankIngestionCore:I,BankMessageCore:M,FinanceCore:F,isFiniteNumberLike:v=>v!=null&&v!==''&&Number.isFinite(Number(v)),AndroidBridge:{acknowledgeBankNotifications:v=>acks.push(...JSON.parse(v))},SanadExtStorage:{get:async(k,f)=>k in store?clone(store[k]):f,set:async(k,v)=>{if(k===failKey)return false;store[k]=clone(v);return true;}}};
+ const scanUI={start(){},progress(){},finish(){},open(){}};
+  const ctx={SanadSmsImportUI:scanUI,S:initial,Date:Clock,Set,Map,Number,Math,Object,Infinity,_dataReplacementInFlight:false,canWrite:()=>true,uid:p=>p+'_'+(++seq),toast(){},render(){},closeSheet(){},BankIngestionCore:I,BankMessageCore:M,FinanceCore:F,isFiniteNumberLike:v=>v!=null&&v!==''&&Number.isFinite(Number(v)),AndroidBridge:{acknowledgeBankNotifications:v=>acks.push(...JSON.parse(v))},SanadExtStorage:{get:async(k,f)=>k in store?clone(store[k]):f,set:async(k,v)=>{if(k===failKey)return false;store[k]=clone(v);return true;}}};
  ctx.Finance={ensureAllPrimaries(){},getAccount:id=>ctx.S.accounts.find(x=>x.id===id)};
  ctx.SanadMoneyCore=Money;
  const mutator=Mutation.createMutationService({canWrite:()=>true,snapshotState:()=>clone(ctx.S),loadState:s=>{ctx.S=clone(s);},fingerprint:State.stateFingerprint,validateState:s=>Schema.validateStateStrict(s),writeSafetySnapshot:async()=>({ok:true}),verifiedWrite:async s=>{writes++;if(failFinance)return {ok:false,restored:true};disk=clone(s);return {ok:true};},tryRestore:async s=>{disk=clone(s);return true;}});
