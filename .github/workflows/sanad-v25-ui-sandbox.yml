@@ -113,7 +113,7 @@ jobs:
       - name: Download exact gated QA APK
         uses: actions/download-artifact@v4
         with:
-          name: SANAD-V9.2.14-ISOLATED-QA-APK
+          name: SANAD-V25-2-UI-INTEGRATION-BASELINE-APK
           path: device-apk
       - name: Enable KVM emulator acceleration
         run: |
