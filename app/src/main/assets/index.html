@@ -4824,14 +4824,37 @@ async function delBene(id){
   if (!result.ok){ render(); toast('تعذر الحفظ'); return; }
   closeSheet(); render(); toast('تم الحذف');
 }
+async function saveBeneficiarySort(ids){
+  if(!canWrite()||!Array.isArray(ids))return false;
+  const active=S.beneficiaries.filter(b=>!b.archived),existing=active.map(b=>b.id);
+  if(ids.length!==existing.length||new Set(ids).size!==ids.length||ids.some(id=>!existing.includes(id)))return false;
+  const result=await commitCriticalMutation(async()=>{
+    const byId=new Map(active.map(b=>[b.id,b]));
+    S.beneficiaries=ids.map(id=>byId.get(id)).concat(S.beneficiaries.filter(b=>b.archived));
+    return true;
+  });
+  if(!result.ok){toast('تعذر حفظ ترتيب الأشخاص، لم تتغير بيانات التحويلات');return false;}
+  return true;
+}
+async function beneficiarySortStep(button){
+  const row=button.closest('[data-bene-sort-item]'),list=row&&row.parentElement;
+  if(!row||!list)return;
+  const rows=Array.from(list.querySelectorAll('[data-bene-sort-item]'));
+  const i=rows.indexOf(row),next=i+Number(button.dataset.beneStep);
+  if(next<0||next>=rows.length)return;
+  if(next>i)rows[next].after(row);else rows[next].before(row);
+  const ids=Array.from(list.querySelectorAll('[data-bene-sort-item]')).map(el=>el.dataset.beneSortItem);
+  await saveBeneficiarySort(ids);openBeneficiariesManage();
+}
 function openBeneficiariesManage(){
   const active = S.beneficiaries.filter(b => !b.archived);
   const archived = S.beneficiaries.filter(b => b.archived);
-  const rows = active.map(b => {
+  const rows = active.map((b,i) => {
     const cInfo = countryInfo(b.country);
-    return '<div class="bene-row"><div class="be-ico">👤</div>' +
+    return '<div class="bene-row cat-sort-item" data-bene-sort-item="'+esc(b.id)+'"><button type="button" class="cat-sort-handle" data-bene-drag="'+esc(b.id)+'" aria-label="سحب لترتيب الشخص">⠿</button><div class="be-ico" style="font-size:16px">◉</div>' +
       '<div class="be-info"><b>' + esc(b.name) + '</b><span>' + cInfo.flag + ' ' + esc(cInfo.name) + ' · ' + Finance.curSymbol(b.defaultCurrency) + '</span></div>' +
-      '<button type="button" class="li-del" data-bene-edit="' + b.id + '">✏️</button></div>';
+      '<div class="cat-sort-tools"><button type="button" data-bene-step="-1" aria-label="تحريك لأعلى" '+(i===0?'disabled':'')+'>↑</button><button type="button" data-bene-step="1" aria-label="تحريك لأسفل" '+(i===active.length-1?'disabled':'')+'>↓</button></div>'+
+      '<button type="button" class="li-del" data-bene-edit="' + esc(b.id) + '" aria-label="تعديل الشخص">✎</button></div>';
   }).join('') || '<div class="empty" style="padding:24px"><p>لا يوجد أشخاص بعد</p></div>';
   const archivedRows = archived.length ? '<div class="sec" style="margin-top:18px"><h2>مؤرشفين</h2></div>' +
     '<div class="arch-list">' + archived.map(b =>
@@ -4843,8 +4866,7 @@ function openBeneficiariesManage(){
       '<h2>الأشخاص</h2>' +
       '<button type="button" class="close" data-act="open-bene-add" style="color:var(--primary)">＋</button></div>' +
     '<div class="sheet-body" style="padding:8px 20px 24px">' +
-      '<div class="help-box"><span class="hi">👤</span><div class="ht"><b>الأشخاص للتحويلات الخارجية</b>' +
-        'أضف الأشخاص الذين تحوّل لهم بشكل متكرر.</div></div>' + rows + archivedRows +
+      '<div class="help-box"><div class="ht"><b>الأشخاص للتحويلات الخارجية</b>أضف المستفيدين المتكررين. رتّبهم من علامة ⠿ أو بالسهمين؛ الأهم يظهر أولاً.</div></div><div data-bene-sort-list>' + rows + '</div>' + archivedRows +
     '</div>',
     'bene-manage'
   );
@@ -5991,11 +6013,12 @@ async function categorySortStep(button){
 }
 let categoryDragState=null;
 document.addEventListener('pointerdown',ev=>{
-  const handle=ev.target.closest('[data-cat-drag]');
+  const handle=ev.target.closest('[data-cat-drag],[data-bene-drag]');
   if(!handle||!canWrite()||ev.button!==0)return;
-  const row=handle.closest('[data-cat-sort-item]'),list=row&&row.parentElement;
+  const people=handle.hasAttribute('data-bene-drag');
+  const row=handle.closest(people?'[data-bene-sort-item]':'[data-cat-sort-item]'),list=row&&row.parentElement;
   if(!row||!list)return;
-  categoryDragState={pointerId:ev.pointerId,row,list,type:list.dataset.catSortList,startY:ev.clientY,moved:false};
+  categoryDragState={pointerId:ev.pointerId,row,list,people,type:people?'beneficiaries':list.dataset.catSortList,startY:ev.clientY,moved:false};
   try{handle.setPointerCapture(ev.pointerId);}catch(_){}
   row.classList.add('dragging');ev.preventDefault();
 },true);
@@ -6004,7 +6027,7 @@ document.addEventListener('pointermove',ev=>{
   if(!d||d.pointerId!==ev.pointerId)return;
   if(Math.abs(ev.clientY-d.startY)>6)d.moved=true;
   if(!d.moved)return;
-  const hit=document.elementFromPoint(ev.clientX,ev.clientY)?.closest('[data-cat-sort-item]');
+  const hit=document.elementFromPoint(ev.clientX,ev.clientY)?.closest(d.people?'[data-bene-sort-item]':'[data-cat-sort-item]');
   if(!hit||hit===d.row||hit.parentElement!==d.list)return;
   const middle=hit.getBoundingClientRect().top+hit.getBoundingClientRect().height/2;
   if(ev.clientY<middle)hit.before(d.row);else hit.after(d.row);
@@ -6015,11 +6038,16 @@ document.addEventListener('pointerup',async ev=>{
   if(!d||d.pointerId!==ev.pointerId)return;
   categoryDragState=null;d.row.classList.remove('dragging');
   if(!d.moved)return;
-  const ids=Array.from(d.list.querySelectorAll('[data-cat-sort-item]')).map(el=>el.dataset.catSortItem);
-  await saveCategorySort(d.type,ids);openCatsManage(d.type);
+  if(d.people){
+    const ids=Array.from(d.list.querySelectorAll('[data-bene-sort-item]')).map(el=>el.dataset.beneSortItem);
+    await saveBeneficiarySort(ids);openBeneficiariesManage();
+  }else{
+    const ids=Array.from(d.list.querySelectorAll('[data-cat-sort-item]')).map(el=>el.dataset.catSortItem);
+    await saveCategorySort(d.type,ids);openCatsManage(d.type);
+  }
 },true);
 document.addEventListener('pointercancel',()=>{
-  const d=categoryDragState;if(!d)return;categoryDragState=null;d.row.classList.remove('dragging');openCatsManage(d.type);
+  const d=categoryDragState;if(!d)return;categoryDragState=null;d.row.classList.remove('dragging');if(d.people)openBeneficiariesManage();else openCatsManage(d.type);
 },true);
 function openCatEdit(type, id){
   const isEdit = !!id;
@@ -7751,6 +7779,8 @@ document.addEventListener('click', e => {
       document.querySelectorAll('[data-cat-col]').forEach(el => el.classList.toggle('on', el === cCol)); return; }
     const saveC2 = t.closest('[data-act="save-cat"]');
     if (saveC2){ saveCat(saveC2.dataset.type, saveC2.dataset.id || null); return; }
+    const personMove=t.closest('[data-bene-step]');
+    if(personMove){beneficiarySortStep(personMove);return;}
     const catMove=t.closest('[data-cat-step]');
     if(catMove){categorySortStep(catMove);return;}
     const catAdd = t.closest('[data-cat-add]');
