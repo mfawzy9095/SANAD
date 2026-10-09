@@ -267,6 +267,23 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.evaluate(()=>go('home'));await stableHome();await page.screenshot({path:path.join(output,'mobile-ar.png')});
  for(const tab of ['tx','accounts','rep','settings','home']){await page.locator('#bottomNav [data-tab="'+tab+'"]').click();assert((await page.locator('#view').innerText()).length>0);}
  record('All primary tabs respond without blank pages');
+
+ // Every major financial screen retains its original delegated actions,
+ // but icon-only affordances must be offline SVG rather than emoji glyphs.
+ await page.evaluate(()=>go('settings'));
+ assert.equal(await page.locator('#view .li-ico svg.v25-ui-icon').count()>2,true,'Settings icons must be SVG');
+ await page.evaluate(()=>go('tx'));
+ assert.equal(await page.locator('#view .filter-row .search-wrap svg.v25-ui-icon').count(),1,'Transaction search has an offline SVG icon');
+ const beforeAppearance=await page.evaluate(()=>stateFingerprint(snapshotState()));
+ for(const tab of ['home','accounts','tx','rep','settings']){
+   await page.evaluate(tab=>go(tab),tab);
+   const box=await page.evaluate(()=>({tab:S.tab,width:document.documentElement.clientWidth,pageWidth:Math.max(document.body.scrollWidth,document.documentElement.scrollWidth),visible:document.getElementById('view').innerText().trim().length}));
+   assert.equal(box.tab,tab);assert(box.visible>5,'Page '+tab+' must display real text content');assert(box.pageWidth<=box.width+2,'Page '+tab+' must fit 393px');
+   await page.screenshot({path:path.join(output,'v25-screen-'+tab+'-393.png')});
+ }
+ assert.equal(await page.evaluate(()=>stateFingerprint(snapshotState())),beforeAppearance,'Visual navigation must not mutate financial ledger');
+ record('V25 transaction/report/settings visuals, SVG icon assets and navigation are live and read-only');
+
  await page.evaluate(()=>go('settings'));await page.locator('[data-sanad-act="lang"][data-value="en"]').click();
  await page.waitForFunction(()=>document.documentElement.dir==='ltr');await page.locator('[data-sanad-act="theme"][data-value="dark"]').click();
  await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
@@ -484,6 +501,25 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  });
  assert.equal(await page.locator('#sanadScanOverlay').isVisible(),true);
  assert.equal(await page.locator('#sanadScanPercent').innerText(),'42٪');
+
+ // The reported Samsung issue was modal clipping at real mobile dimensions.
+ for(const [width,height] of [[320,640],[360,760],[393,852]]){
+   await page.setViewportSize({width,height});
+   const ui=await page.evaluate(()=>({
+     viewport:document.documentElement.clientWidth,
+     pageWidth:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),
+     header:(()=>{let r=document.querySelector('#sanadScanDialog .sanad-scan-top h2').getBoundingClientRect();return {left:r.left,right:r.right,width:r.width}})(),
+     panel:(()=>{let r=document.querySelector('#sanadScanDialog').getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,height:r.height}})(),
+     actions:[...document.querySelectorAll('#sanadScanDialog .sanad-scan-actions button')].map(b=>{let r=b.getBoundingClientRect();return {left:r.left,right:r.right,width:r.width}})
+   }));
+   assert(ui.pageWidth<=ui.viewport+2&&ui.panel.left>=-1&&ui.panel.right<=ui.viewport+1,'Import panel must fit viewport '+width+': '+JSON.stringify(ui));
+   assert(ui.header.left>=-1&&ui.header.right<=ui.viewport+1,'Import heading clipped on '+width+': '+JSON.stringify(ui));
+   assert(ui.actions.every(b=>b.width>=70&&b.left>=-1&&b.right<=ui.viewport+1),'Import actions clipped at '+width+': '+JSON.stringify(ui));
+   await page.screenshot({path:path.join(output,'v25-sms-progress-'+width+'.png')});
+ }
+ await page.setViewportSize({width:393,height:852});
+ record('SMS import 320/360/393 mobile visual sizes: no horizontal clipping or overflowing buttons');
+
  await page.screenshot({path:path.join(output,'sms-import-progress.png')});
  await page.locator('#sanadScanHide').click();
  assert.equal(await page.locator('#sanadScanOverlay').isVisible(),false);
