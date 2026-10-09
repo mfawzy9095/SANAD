@@ -194,13 +194,14 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.locator('#v252Wallet').count(),1,'Live V25.2 wallet adapter must be mounted');
  assert.equal(await page.locator('[data-v252-country]').count(),3,'Country tabs must render without flag icons');
  assert((await page.locator('[data-v252-bank]').count())>0,'Real account must appear in provider selector');
- await page.locator('[data-v252-bank]').first().click();
- assert((await page.locator('[data-v252-account]').count())>0,'Single bank tap should show accounts');
- const firstAccount=page.locator('[data-v252-account]').first();
- await firstAccount.click();
- assert.equal(await page.locator('[data-v252-account][aria-pressed="true"]').count(),1);
+ assert.equal(await page.locator('[data-v252-bank][aria-pressed="true"]').count(),1,'First institution is selected on entry');
+ assert((await page.locator('[data-v252-account]').count())>0,'Accounts render immediately without requiring bank tap');
+ assert.equal(await page.locator('[data-v252-account][aria-pressed="true"]').count(),1,'A real account is initially selected');
  await page.locator('[data-v252-account][aria-pressed="true"]').click();
- assert.equal(await page.locator('#sheet[data-sheet-type="v252-account-details"]').count(),1,'Second tap opens details');
+ assert.equal(await page.locator('#sheet[data-sheet-type="v252-account-details"]').count(),1,'Tapping selected account opens read-only details');
+ await page.evaluate(()=>closeSheet());
+ await page.locator('[data-v252-bank][aria-pressed="true"]').click();
+ assert.equal(await page.locator('#sheet[data-sheet-type="v252-bank-details"]').count(),1,'Selected bank opens read-only details');
  await page.evaluate(()=>closeSheet());
  await page.locator('[data-v252-country="EGY"]').click();
  assert.equal(await page.evaluate(()=>S.activeCountry),'EGY');
@@ -208,6 +209,42 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.locator('[data-v252-country="UAE"]').click();
  assert.equal(await page.evaluate(()=>S.activeCountry),'UAE');
  assert.equal(await page.evaluate(()=>stateFingerprint(snapshotState())),v252Before,'Visual country/account selection must not mutate ledger');
+
+ // Responsive smoke at compact, standard and wide phones, including 200% font sizes.
+ const fit=await page.evaluate(async()=>{
+   const width=document.documentElement.clientWidth;
+   return {width,bodyScroll:document.body.scrollWidth,htmlScroll:document.documentElement.scrollWidth};
+ });
+ assert(fit.bodyScroll<=fit.width+2&&fit.htmlScroll<=fit.width+2,'No horizontal page overflow on Android-sized viewport '+JSON.stringify(fit));
+ assert.equal(await page.evaluate(()=>document.fonts.check('900 18px "Tajawal Local"')),true,'Approved Tajawal must be self-hosted and available offline');
+ await page.evaluate(()=>go('home'));
+ assert.equal(await page.locator('#v25Home').count(),1,'Prototype home hierarchy should be live, not old hero alone');
+ assert.equal(await page.locator('#v25Home .v25-hero').count(),1);
+ assert.equal(await page.locator('#v25Home .v25-review-btn').count(),1);
+ await page.screenshot({path:path.join(output,'v25-2-responsive-home-393.png')});
+ for(const width of [320,360,430]){
+   await page.setViewportSize({width,height:780});
+   await page.evaluate(()=>go('home'));
+   const metrics=await page.evaluate(()=>({
+     width:document.documentElement.clientWidth,
+     scroll:Math.max(document.body.scrollWidth,document.documentElement.scrollWidth),
+     hero:(()=>{const r=document.querySelector('#v25Home .v25-hero').getBoundingClientRect();return {left:r.left,right:r.right,width:r.width};})(),
+     navbar:document.querySelectorAll('#bottomNav [data-tab]').length,
+     font:document.fonts.check('900 18px "Tajawal Local"')
+   }));
+   assert(metrics.scroll<=metrics.width+2,'Global horizontal overflow '+width+': '+JSON.stringify(metrics));
+   assert(metrics.hero.left>=-1&&metrics.hero.right<=metrics.width+1,'Hero goes beyond viewport '+width+': '+JSON.stringify(metrics));
+   assert.equal(metrics.navbar,5);assert(metrics.font,'Tajawal font lost at '+width);
+   await page.screenshot({path:path.join(output,'v25-2-home-'+width+'.png')});
+   await page.evaluate(()=>go('accounts'));
+   const wallet=await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:Math.max(document.body.scrollWidth,document.documentElement.scrollWidth),bank:!!document.querySelector('[data-v252-bank]'),accounts:!!document.querySelector('[data-v252-account]')}));
+   assert(wallet.scroll<=wallet.width+2&&wallet.bank&&wallet.accounts,'Wallet overflow or blank account '+width+': '+JSON.stringify(wallet));
+   await page.screenshot({path:path.join(output,'v25-2-wallet-'+width+'.png')});
+ }
+ await page.setViewportSize({width:393,height:852});
+ await page.evaluate(()=>go('accounts'));
+ record('V25 layout QA on 320/360/393/430px: offline Tajawal, full-width home/wallet, icons, no horizontal clipping');
+
  await page.screenshot({path:path.join(output,'v25-2-real-wallet.png')});
  await page.evaluate(()=>go('settings'));
  await page.locator('[data-v252-subs]').click();
