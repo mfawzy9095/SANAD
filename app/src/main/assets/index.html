@@ -9796,36 +9796,108 @@ const SanadBankInbox = {
     const manualCandidates=BankIngestionCore.manualDuplicateCandidates(p,S);
     const manualLinkHtml=manualCandidates.length?'<div class="field"><label>هل تؤكد الرسالة عملية يدوية موجودة؟</label><select id="bankFixManualLink"><option value="">— لم أحسم أنها نفس العملية —</option>'+manualCandidates.map(t=>'<option value="'+esc(t.id)+'">'+esc(t.date||'')+' · '+esc(t.note||'عملية يدوية')+' · '+esc(String(t.amount==null?t.fromAmount:t.amount))+'</option>').join('')+'</select><label><input id="bankFixConfirmSame" type="checkbox"> أؤكد أن الرسالة لنفس الحركة المختارة؛ اربط الدليل فقط دون إضافة مال</label><label><input id="bankFixDistinctOperation" type="checkbox"> أو أؤكد أنها حركة أخرى مستقلة بعد مراجعة السجل اليدوي</label></div>':'';
     const pairHtml=pairs.length?'<div class="field"><label>ربط بطرف خصم محفوظ (اختياري)</label><select id="bankFixPair"><option value="">— لا تربط؛ سجلها مستقلة إذا كانت عملية أخرى —</option>'+pairs.map(t=>'<option value="'+esc(t.id)+'">'+esc((Finance.getAccount(t.fromAccountId||t.accountId)||{}).name||t.fromAccountId||t.accountId)+' · '+esc(t.date)+' · '+esc(String(t.fromAmount==null?t.amount:t.fromAmount))+' '+esc(t.fromCurrency||t.currency)+'</option>').join('')+'</select><div class="field-hint">المبلغ والتوقيت يشيران لاحتمال فقط. اربط إذا تأكدت أن الحسابين ملكك وأن الرسالتين لنفس التحويل؛ اختر نوع تحويل بين حساباتي، وحساب الخصم مصدرًا وحساب الاستلام وجهة. سيُحفظ التحويل مرة واحدة وتبقى أدلة الطرفين.</div></div>':'';
+    this._correctionItemId=String(id);
+    const sourceBank=p.bankId?UaeBankRegistryCore.get(p.bankId):null;
+    const sourceProvider=p.providerId&&UaeBankRegistryCore.getProvider?UaeBankRegistryCore.getProvider(p.providerId):null;
+    const sourceName=sourceBank?bankUiShort(sourceBank):(sourceProvider?providerUiShort(sourceProvider):'غير مؤكد');
+    const receiptAt=Number(p.postedAt),receiptTime=Number.isFinite(receiptAt)&&receiptAt>0?new Date(receiptAt).toLocaleString('ar-AE',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'غير متاح';
+    const required='<span class="bank-required" aria-label="مطلوب">*</span>';
     openSheet(
-      '<div class="sheet-head"><button type="button" class="close" data-sanad-act="bank-inbox"><span>‹</span></button><h2>تعديل وربط العملية</h2><div style="width:36px"></div></div>'+
+      '<div class="sheet-head"><button type="button" class="close" data-sanad-act="bank-inbox"><span>‹</span></button><h2>مراجعة العملية</h2><div style="width:36px"></div></div>'+
       '<div class="sheet-body">'+
-        '<div class="help-box"><span class="hi">🧠</span><div class="ht"><b>مراجعة بشرية</b>حدد التفاصيل بنفسك؛ لا تُستخدم الرسالة غير المعروفة لتعلّم قواعد تلقائية.</div></div>'+ 
-        (!item.parsed||!item.parsed.recognized||item.native.importProvenance==='untrusted-sms-xml'?'<label><input id="bankFixManualProof" type="checkbox"> أؤكد أني راجعت الرسالة مع مصدر مستقل؛ ملف SMS لا يثبت صحة البنك والمبلغ</label>':'')+
-        '<label><input id="bankFixConfirmIssuer" type="checkbox"> أؤكد المؤسسة وبلد الحساب، حتى لو اختلفا عن الاستنتاج الآلي</label>'+
-        '<div class="field"><label>نوع العملية</label><select id="bankFixKind">'+kindOpts+'</select></div>'+
-        '<div class="field"><label>تاريخ العملية</label><input type="date" id="bankFixDate" value="'+esc(bankReviewDateInputValue(p.transactionDate,p.postedAt))+'"><div class="field-hint">يمكن أن يختلف تاريخ الاستلام عن تاريخ الحركة المصرفية؛ تحقق من المصدر.</div></div>'+
-        '<div class="field"><label>وقت العملية (إن عُرف)</label><input type="time" id="bankFixTime" value="'+esc(/^([01]\d|2[0-3]):[0-5]\d$/.test(p.transactionTime||'')?p.transactionTime:'')+'"></div>'+
-        '<label><input type="checkbox" id="bankFixConfirmDate"> أؤكد التاريخ/الوقت المختارين من بيانات العملية أو كشف الحساب</label>'+
-        (p.kind==='salary'&&p.accountRef?'<div class="field"><label><input id="bankFixConfirmAccountIdentity" type="checkbox"> هل الحساب الوارد في الرسالة هو حسابك المرتبط بهذا الكارت؟</label><div class="field-hint">أؤكد ربط المرجع '+esc(p.accountRef)+' بحساب المصدر المختار في نفس البنك والعملة. الرسائل الأقدم تظل للمراجعة، والإيداع العام لا يصبح مرتبًا.</div></div>':'')+
-        pairHtml+
-        manualLinkHtml+
-        (p.kind==='outgoing_transfer'?'<div class="field"><label><input id="bankFixExternalDestination" type="checkbox"> أؤكد أن الوجهة خارج حساباتي، وليست نقلاً بين أموالي</label><div class="field-hint">اسم المستفيد لا يثبت ملكية الحساب. إذا كان حساباً تملكه، اختر تحويل بين حساباتي وحدد الوجهتين. التأكيد لهذه الحركة فقط.</div></div>':'')+
-        (['deposit','incoming_transfer'].includes(p.kind)?'<div class="field"><label><input id="bankFixExternalIncome" type="checkbox"> أؤكد أن هذه الحركة دخل من خارج حساباتي، وليست تحويلًا بين أموالي</label><div class="field-hint">إذا كانت من حساب آخر تملكه، اختر تحويل بين حساباتي وحدد المصدر والوجهة. هذا التأكيد لهذه الحركة فقط.</div></div>':'')+
-        '<div class="field"><label>المبلغ</label><input id="bankFixAmount" type="number" inputmode="decimal" step="0.01" value="'+esc(String(p.amount||''))+'"></div>'+
-        '<div class="field"><label>عملة ومبلغ العملية الأصليان</label><select id="bankFixCurrency">'+curOpts+'</select><div class="field-hint">لا تختار عملة أخرى لتفادي تأكيد مبلغ الخصم؛ هما قيمتان منفصلتان.</div></div>'+ 
-        '<label><input id="bankFixConfirmCurrency" type="checkbox"> أؤكد أنني صححت عملة العملية الأصلية من الرسالة</label>'+
-        '<div class="field"><label>مبلغ الخصم بعملة الحساب المختار، بدون الرسوم الإضافية</label><input id="bankFixSettlement" type="number" inputmode="decimal" min="0" step="0.01"><div class="field-hint">للشراء الأجنبي فقط: من كشف الحساب، دون تخمين أو تغيير رمز العملة. اترك الدليل للمراجعة إذا لم يتوفر المبلغ.</div></div>'+
-        (p.kind==='purchase'&&r&&r.account&&r.instrument&&p.currency!==r.account.currency?'<div class="field"><label><input id="bankFixRetainPending" type="checkbox"> احفظ الشراء المعروف والكارت؛ مبلغ الخصم بعملة الحساب يحتاج تأكيدًا</label><div class="field-hint">يبقى ظاهرًا للمراجعة، ولن يُحتسب مبلغ تخميني في الرصيد أو التقارير.</div></div>':'')+
-        '<div class="field"><label>رسوم إضافية تخصم من حساب المصدر، شاملة الضريبة</label><input id="bankFixFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="اتركها فارغة إذا لم تتأكد"><div class="field-hint">بنفس عملة الحساب المختار. أدخل صفرًا فقط إذا تأكدت أن العملية بلا رسوم إضافية؛ لا تستنتج الرسوم من صيغة نسبة أو فرق الرصيد.</div></div>'+
-        '<div class="field"><label>الحساب / الكارت المصدر</label><select id="bankFixSource">'+this.correctionSourceOptions(p,source)+'</select>'+
-          (p.cardLast4?'<div class="field-hint">الرسالة تشير إلى كارت ****'+esc(p.cardLast4)+'؛ اختر نفس الكارت حتى يتعلم الربط بدقة.</div>':'')+'</div>'+
-        '<div class="field"><label>حساب الوجهة (للتحويل بين حساباتك / سداد بطاقة / سحب كاش)</label><select id="bankFixTarget">'+this.correctionTargetOptions(p,target)+'</select></div>'+
-        '<div class="field"><label>التاجر / الشخص / الوصف</label><input id="bankFixParty" type="text" maxlength="100" value="'+esc(counterparty)+'"></div>'+
-        '<div class="field"><label>الفئة للمصروف</label><select id="bankFixCategory">'+catOpts+'</select></div>'+
-        '<button type="button" class="btn primary" data-sanad-act="bank-fix-save" data-id="'+esc(id)+'">حفظ القرار لهذه الحركة</button>'+
+        '<div class="bank-review-intro"><b>'+esc(sourceName)+' · '+amtFull(Number(p.amount||0),p.currency||'AED')+'</b><div class="field-hint">وصلت الرسالة: '+esc(receiptTime)+(p.cardLast4?' · بطاقة ••••'+esc(p.cardLast4):'')+'</div><div class="field-hint">راجع الخانات المعلّمة بالنجمة الحمراء. الحقول المعروفة من الرسالة مجهّزة مسبقًا.</div></div>'+
+        '<div class="bank-field-error" id="bankFixIssues" role="alert" hidden></div>'+
+        '<div class="field"><label for="bankFixKind">نوع العملية'+required+'</label><select id="bankFixKind" aria-required="true">'+kindOpts+'</select></div>'+
+        '<div class="field"><label for="bankFixAmount">المبلغ'+required+'</label><input id="bankFixAmount" type="number" inputmode="decimal" min="0.01" step="0.01" required value="'+esc(String(p.amount||''))+'"></div>'+
+        '<div class="field"><label for="bankFixDate">تاريخ العملية'+required+'</label><input type="date" id="bankFixDate" required value="'+esc(bankReviewDateInputValue(p.transactionDate,p.postedAt))+'"></div>'+
+        '<div class="field" data-bank-conditional="date-confirm" hidden><label><input type="checkbox" id="bankFixConfirmDate"> '+required+' أؤكد التاريخ المصحح من الرسالة أو كشف الحساب</label></div>'+
+        '<div class="field"><label for="bankFixSource">الحساب أو البطاقة التي خرجت منها / دخلت إليها الأموال'+required+'</label><select id="bankFixSource" aria-required="true">'+this.correctionSourceOptions(p,source)+'</select>'+
+          '<div class="field-hint" id="bankFixSourceHint">'+(p.kind==='card_repayment'?'اختر حساب الخصم، وليس البطاقة التي سددتها.':'اختر نفس البنك ونفس الكارت الموجودين في الرسالة.')+'</div>'+
+          '<div id="bankFixIssuerWarning" class="bank-field-error" hidden></div></div>'+
+        '<div class="field" data-bank-conditional="target" hidden><label for="bankFixTarget" id="bankFixTargetLabel">حساب الوجهة'+required+'</label><select id="bankFixTarget">'+this.correctionTargetOptions(p,target)+'</select><div class="field-hint" id="bankFixTargetHint"></div></div>'+
+        '<div class="field" data-bank-conditional="external" hidden><label><input id="bankFixExternalDestination" type="checkbox"> '+required+' أؤكد أن التحويل لشخص أو جهة خارج حساباتي</label><div class="field-hint">لو بتحول بين حساباتك، اختَر «تحويل بين حساباتي» وحدد الحسابين.</div></div>'+
+        '<div class="field" data-bank-conditional="incoming" hidden><label><input id="bankFixExternalIncome" type="checkbox"> '+required+' أؤكد أن الإيداع دخل من خارج حساباتي</label><div class="field-hint">لو المبلغ من حساب آخر ليك، ما تعتمدوش كدخل جديد.</div></div>'+
+        '<div class="field" data-bank-conditional="category" hidden><label for="bankFixCategory">تصنيف المصروف</label><select id="bankFixCategory">'+catOpts+'</select></div>'+
+        '<div class="field"><label for="bankFixParty">التاجر / المستفيد / الوصف (اختياري)</label><input id="bankFixParty" type="text" maxlength="100" value="'+esc(counterparty)+'"></div>'+
+        '<details class="bank-review-optional" id="bankFixAdvanced" '+(p.feeFormula||p.fee||p.vat||manualCandidates.length||pairs.length?'open':'')+'><summary>تفاصيل إضافية وتصحيحات متقدمة</summary>'+
+          '<div class="field" style="margin-top:16px"><label for="bankFixTime">وقت العملية (اختياري)</label><input id="bankFixTime" type="time" value="'+esc(/^([01]\\d|2[0-3]):[0-5]\\d$/.test(p.transactionTime||'')?p.transactionTime:'')+'"><div class="field-hint">لو البنك ما ذكرش وقت العملية، سيُحفظ وقت استلام SMS منفصلًا.</div></div>'+
+          '<div class="field"><label for="bankFixCurrency">عملة العملية الأصلية'+required+'</label><select id="bankFixCurrency">'+curOpts+'</select></div>'+
+          '<div class="field" data-bank-conditional="currency-confirm" hidden><label><input id="bankFixConfirmCurrency" type="checkbox"> '+required+' أؤكد أنني غيّرت العملة بناءً على رسالة البنك</label></div>'+
+          '<div class="field" data-bank-conditional="issuer" hidden><label><input id="bankFixConfirmIssuer" type="checkbox"> '+required+' أؤكد البلد والبنك بعد مراجعة دليل مستقل</label><div class="field-hint">التأكيد لا يسمح بربط رسالة موثوقة ببنك آخر عشوائيًا.</div></div>'+
+          '<div class="field"><label for="bankFixSettlement">مبلغ الخصم بعملة الحساب (للعملة الأجنبية فقط)</label><input id="bankFixSettlement" type="number" inputmode="decimal" min="0" step="0.01" placeholder="اتركه فارغًا لو لم يصل كشف الحساب"><div class="field-hint">مبلغ الخصم الحقيقي، مش سعر صرف تخميني.</div></div>'+
+          (p.kind==='purchase'&&r&&r.account&&r.instrument&&p.currency!==r.account.currency?'<div class="field"><label><input id="bankFixRetainPending" type="checkbox"> احفظ الشراء بدون احتساب الخصم حتى تتأكد من تسويته</label></div>':'')+
+          '<div class="field"><label for="bankFixFee">رسوم إضافية مؤكدة (اختياري إلا إذا ذكرها البنك)</label><input id="bankFixFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="لا تكتب صفرًا إلا إذا تأكدت"><div class="field-hint">لا تستنتج رسومًا من فرق الرصيد.</div></div>'+
+          (!item.parsed||!item.parsed.recognized||item.native.importProvenance==='untrusted-sms-xml'?'<div class="field"><label><input id="bankFixManualProof" type="checkbox"> '+required+' تحققت من الرسالة مع مصدر مستقل</label></div>':'')+
+          (p.kind==='salary'&&p.accountRef?'<div class="field"><label><input id="bankFixConfirmAccountIdentity" type="checkbox"> أؤكد ربط الحساب المرجعي '+esc(p.accountRef)+' بالحساب المختار</label></div>':'')+
+          pairHtml+manualLinkHtml+
+        '</details>'+
+        '<button type="button" class="btn primary" data-sanad-act="bank-fix-save" data-id="'+esc(id)+'">حفظ العملية بعد المراجعة</button>'+
       '</div>','bank-review-fix'
     );
+    this.updateCorrectionFields();
   },
+  updateCorrectionFields(kindChanged=false){
+    const el=id=>document.getElementById(id);
+    const kind=el('bankFixKind')?.value||'purchase';
+    const item=this.items.find(x=>String(x.native.id)===String(this._correctionItemId));
+    const parsed=item?this.correctionDraft(item):{};
+    if(kindChanged){
+      const source=el('bankFixSource'),target=el('bankFixTarget');
+      if(source){const previous=source.value;source.innerHTML=this.correctionSourceOptions({...parsed,kind},previous);if(Array.from(source.options).some(o=>o.value===previous))source.value=previous;}
+      if(target){const previous=target.value;target.innerHTML=this.correctionTargetOptions({...parsed,kind},previous);if(Array.from(target.options).some(o=>o.value===previous))target.value=previous;}
+    }
+    const toggle=(name,show)=>{
+      const row=document.querySelector('[data-bank-conditional="'+name+'"]');
+      if(row)row.hidden=!show;
+    };
+    const needTarget=['internal_transfer','card_repayment','cash_withdrawal'].includes(kind);
+    toggle('target',needTarget);
+    toggle('external',kind==='outgoing_transfer');
+    toggle('incoming',['deposit','incoming_transfer'].includes(kind));
+    toggle('category',['purchase','bill_payment','mobile_recharge'].includes(kind));
+    const date=el('bankFixDate')?.value||'';
+    toggle('date-confirm',!!parsed.transactionDate&&(parsed.transactionDate!==date||['ambiguous-date','invalid-operation-date'].includes(parsed.reviewReason)));
+    toggle('currency-confirm',!!parsed.currency&&parsed.currency!==el('bankFixCurrency')?.value);
+    const sourceRaw=el('bankFixSource')?.value||'';
+    const [sourceType,sourceId]=sourceRaw.split(':');
+    const card=sourceType==='instrument'?Finance.getInstrument(sourceId):null;
+    const account=sourceRaw?Finance.getAccount(card?card.accountId:sourceId):null;
+    const institution=account?Finance.getInstitution(account.institutionId):null;
+    const differentCountry=!!parsed.country&&!!account&&account.country!==parsed.country;
+    toggle('issuer',differentCountry||parsed.reviewReason==='issuer-jurisdiction-unconfirmed');
+    const hint=el('bankFixSourceHint');
+    if(hint)hint.textContent=kind==='card_repayment'?'مصدر السداد: الحساب اللي اتخصم منه المبلغ، مش البطاقة المسددة.':kind==='incoming_transfer'?'الحساب اللي استقبل الفلوس.':'اختَر الحساب أو البطاقة من البنك اللي أرسل الرسالة.';
+    const hintTarget=el('bankFixTargetHint');
+    if(hintTarget)hintTarget.textContent=kind==='card_repayment'?'الوجهة: حساب البطاقة الائتمانية المنتهية '+(parsed.cardLast4||'????')+'.':kind==='cash_withdrawal'?'اختر حساب الكاش الذي استلم النقد.':'لازم يكون حسابًا مختلفًا تملكه.';
+    const label=el('bankFixTargetLabel');
+    if(label)label.innerHTML=(kind==='card_repayment'?'البطاقة التي تم سدادها':kind==='cash_withdrawal'?'حساب الكاش الذي استلمته':'حساب الوجهة')+'<span class="bank-required">*</span>';
+    const warn=el('bankFixIssuerWarning');
+    if(warn){
+      const bank=parsed.bankId&&UaeBankRegistryCore.get(parsed.bankId);
+      const provider=parsed.providerId&&UaeBankRegistryCore.getProvider?UaeBankRegistryCore.getProvider(parsed.providerId):null;
+      const mismatch=!!institution&&((parsed.bankId&&institution.bankRegistryId&&institution.bankRegistryId!==parsed.bankId)||(parsed.providerId&&institution.providerRegistryId&&institution.providerRegistryId!==parsed.providerId));
+      const noSource=!sourceRaw;
+      warn.hidden=!(mismatch||noSource&&!!(parsed.bankId||parsed.providerId));
+      warn.textContent=mismatch?'البنك المختار مختلف عن مصدر الرسالة. اختر الحساب الصحيح أو صحّح بنك الحساب من صفحة الحسابات.':'مفيش حساب متوافق مع '+(bank?bankUiShort(bank):provider?providerUiShort(provider):'مصدر الرسالة')+'؟ افتح «الحسابات» وصحح البنك المرتبط بالحساب أو البطاقة، وبعدها ارجع للمراجعة.';
+    }
+    const issue=el('bankFixIssues');
+    if(issue){issue.hidden=true;issue.textContent='';}
+    document.querySelectorAll('.bank-field-invalid').forEach(x=>x.classList.remove('bank-field-invalid'));
+  },
+  correctionIssue(id,message){
+    const field=document.getElementById(id),issue=document.getElementById('bankFixIssues');
+    if(issue){issue.hidden=false;issue.textContent='مطلوب قبل الحفظ: '+message;}
+    if(field){
+      const advanced=field.closest('details');
+      if(advanced)advanced.open=true;
+      field.classList.add('bank-field-invalid');
+      field.setAttribute('aria-invalid','true');
+      field.scrollIntoView?.({block:'center',behavior:'smooth'});
+      try{field.focus({preventScroll:true});}catch(_){}
+    }
+    toast(message,5300);
+  },
+
   learnSourceAlias(item,route){
     if(!item||!item.parsed||item.parsed.bankId||item.parsed.providerId)return;
     const account=(route&&route.account)||(route&&route.fromAccount)||null;
@@ -10067,6 +10139,10 @@ const SanadBankInbox = {
   }
 };
 
+document.addEventListener('change',event=>{
+  const id=event.target?.id||'';
+  if(['bankFixKind','bankFixSource','bankFixTarget','bankFixDate','bankFixCurrency'].includes(id)&&document.getElementById('bankFixKind'))SanadBankInbox.updateCorrectionFields(id==='bankFixKind');
+});
 window.sanadBankRescanResult = function(requestId,added){try{SanadBankInbox.onRescanResult(String(requestId||''),Number(added));}catch(_){}};
 window.sanadHistoricalSmsPermissionResult = function(granted){try{SanadBankInbox.onHistoricalPermissionResult(!!granted);}catch(_){}};
 window.sanadHistoricalSmsPageResult = function(requestId,payload){try{SanadBankInbox.onHistoricalPageResult(String(requestId||''),payload||{});}catch(_){}};
