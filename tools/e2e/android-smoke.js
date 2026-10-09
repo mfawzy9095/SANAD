@@ -262,6 +262,10 @@ const waitSmsShadeGone=async(label)=>{
  assert.equal(await page.evaluate(()=>JSON.stringify(S.transactions)),txBeforeBackground);
  pass('Actual Android process force-stop and cold reopen retain cursor; bounded resume completes without loss or repeated posting');
  await waitSmsShadeGone('force-stop and resumed completion');
+ await page.waitForFunction(()=>SanadSmsImportUI.state==='complete'&&!SanadSmsImportUI.visible&&SanadSmsImportUI.minimized);
+ await page.evaluate(()=>SanadSmsImportUI.dismiss());
+ assert.equal(await page.locator('#sanadScanOverlay').isVisible(),false,'Finished scan must not block navigation');
+ assert.equal(await page.locator('#sanadScanMini').isVisible(),false,'Dismissed summary chip must disappear');
  assert(await page.evaluate(()=>document.fonts.check('900 18px "Tajawal Local"')),'Embedded Tajawal font should work offline inside native WebView');
  await page.evaluate(()=>go('home'));
  const nativeLayout=await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),home:!!document.querySelector('#v25Home .v25-hero')}));
@@ -270,6 +274,7 @@ const waitSmsShadeGone=async(label)=>{
  const nativeWallet=await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),bank:!!document.querySelector('[data-v252-bank]')}));
  assert(nativeWallet.bank&&nativeWallet.scroll<=nativeWallet.width+2,'Android WebView bank/cards layout overflow: '+JSON.stringify(nativeWallet));
  await page.screenshot({path:path.join(out,'android-wallet-v25.png')});
+ assert.equal(await page.locator('#v252Wallet').isVisible(),true,'Wallet must be visible on-device, not covered by a stale import summary');
  pass('V25 wallet/home, offline branded font, and viewport bounds on native Android WebView');
  await page.evaluate(()=>go('home'));
 
