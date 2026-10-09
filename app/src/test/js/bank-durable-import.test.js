@@ -72,7 +72,7 @@ const scan=(h,events)=>h.inbox.syncImpl({events,minPostedAt:h.ctx.S.settings.ban
   const changed=harness(),floor=changed.ctx.S.settings.bankSmsStartAt;
   changed.store.bankImportLastRecent={configuredStartAt:floor+86400000,scannedThrough:changed.now-3600000,status:'complete'};
   changed.inbox.requestHistoricalPage=async()=>({ok:false,status});await changed.inbox.refreshRecentSms();assert.equal(changed.store.bankImportLastRecent.scannedThrough,0);
-  let options;changed.inbox.importHistoricalSms=async(d,o)=>{options=o;};await changed.inbox.refreshRecentSms();assert.equal(options.fromDate,floor,status);
+  let options;changed.inbox.importHistoricalSms=async(d,o)=>{options=o;};await changed.inbox.refreshRecentSms();assert.equal(options.fromDate,changed.now-7*86400000,status+' quick update bounded to a week despite older configured historical floor');
  }
  const historical=harness();historical.store.bankImportLastRecent={configuredStartAt:historical.ctx.S.settings.bankSmsStartAt,scannedThrough:historical.now-86400000};
  const before=clone(historical.store.bankImportLastRecent);await historical.inbox.importHistoricalSms(0,{mode:'historical',fromDate:historical.now-3600000});assert.deepEqual(historical.store.bankImportLastRecent,before);
