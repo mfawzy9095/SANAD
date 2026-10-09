@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - ui/v25.2-android-integration
+      - ui/v25-prototype-rebuild
     paths:
       - '.github/workflows/sanad-v25-ui-sandbox.yml'
       - '.github/workflows/build-v9-device-test.yml'
@@ -16,7 +17,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: sanad-v25-ui-sandbox
+  group: sanad-v25-ui-sandbox-${{ github.ref_name }}
   cancel-in-progress: true
 jobs:
   gate-and-package:
