@@ -9727,17 +9727,33 @@ const SanadBankInbox = {
       const provider=institution&&institution.providerRegistryId&&UaeBankRegistryCore.getProvider?UaeBankRegistryCore.getProvider(institution.providerRegistryId):null;
       const short=bank?bankUiShort(bank):(provider?providerUiShort(provider):(institution?.name||acc.name||'حساب'));
       const accountKind=({bank:'حساب بنكي',credit:'حساب سداد بطاقة',ewallet:'حساب محفظة'}[acc.type]||'حساب');
-      // Account = transfer/repayment, card = actual instrument used in purchases.
+      // Issuer is immutable evidence on authenticated SMS, never inferred from matching digits alone.
+      const issuerOk=(!parsed.bankId||!!bank&&bank.id===parsed.bankId)&&(!parsed.providerId||!!provider&&provider.id===parsed.providerId);
+      if(!issuerOk)return '';
+      if(parsed.kind==='card_repayment'&&acc.type==='credit')return '';
       let rows=cardMessage?'':option('account:'+acc.id,short+' · '+accountKind+' ('+acc.currency+')');
-      rows+=cards.map(i=>option('instrument:'+i.id,short+' · '+({'debit_card':'بطاقة خصم','credit_card':'بطاقة ائتمان','wallet_card':'بطاقة محفظة','prepaid_card':'بطاقة مسبقة الدفع'}[i.type]||'بطاقة')+' ••••'+(i.last4||'غير معلوم')+' ('+acc.currency+')')).join('');
+      rows+=cards.filter(i=>parsed.kind!=='card_repayment'||i.type==='debit_card').map(i=>option('instrument:'+i.id,short+' · '+({'debit_card':'بطاقة خصم','credit_card':'بطاقة ائتمان','wallet_card':'بطاقة محفظة','prepaid_card':'بطاقة مسبقة الدفع'}[i.type]||'بطاقة')+' ••••'+(i.last4||'غير معلوم')+' ('+acc.currency+')')).join('');
       return rows?'<optgroup label="'+esc(short+' · '+(countryInfo(acc.country).name||acc.country)+' · '+acc.currency)+'">'+rows+'</optgroup>':'';
     });
     return '<option value="">— اختر الحساب أو البطاقة —</option>'+groups.join('');
   },
   correctionTargetOptions(parsed,selected){
-    return '<option value="">— بدون / غير مطلوب —</option>'+S.accounts.filter(a=>a&&!a.archived).map(a=>
-      '<option value="'+esc(a.id)+'"'+(selected===a.id?' selected':'')+'>'+esc((countryInfo(a.country).name||a.country)+' · '+a.name+' ('+a.currency+')')+'</option>'
-    ).join('');
+    const active=S.accounts.filter(a=>a&&!a.archived);
+    const kind=parsed&&parsed.kind;
+    let accounts=kind==='card_repayment'?active.filter(a=>a.type==='credit'):
+      kind==='cash_withdrawal'?active.filter(a=>a.type==='cash'):active;
+    if(kind==='card_repayment'&&parsed.cardLast4){
+      const matching=accounts.filter(a=>S.paymentInstruments.some(i=>!i.archived&&i.accountId===a.id&&i.type==='credit_card'&&i.last4===parsed.cardLast4));
+      if(matching.length)accounts=matching;
+    }
+    return '<option value="">— اختر حساب الوجهة —</option>'+accounts.map(a=>{
+      const institution=(S.institutions||[]).find(i=>i.id===a.institutionId);
+      const bank=institution?.bankRegistryId?UaeBankRegistryCore.get(institution.bankRegistryId):null;
+      const short=bank?bankUiShort(bank):(institution?.name||a.name||'حساب');
+      const digits=S.paymentInstruments.find(i=>!i.archived&&i.accountId===a.id&&i.type==='credit_card')?.last4;
+      const label=short+' · '+(a.type==='credit'?'بطاقة ائتمان':'حساب '+a.type)+(digits?' ••••'+digits:'')+' ('+a.currency+')';
+      return '<option value="'+esc(a.id)+'"'+(selected===a.id?' selected':'')+'>'+esc(label)+'</option>';
+    }).join('');
   },
   correctionDraft(item){
     if(item&&item.parsed&&item.parsed.recognized)return item.parsed;
@@ -9756,14 +9772,20 @@ const SanadBankInbox = {
       openSheet('<div class="sheet-head"><button class="close" data-act="close-sheet">×</button><h2>مراجعة تسوية شراء</h2></div><div class="sheet-body"><div class="help-box">'+esc(this.reasonLabel(item.plan&&item.plan.reason))+'<br>الدليل محفوظ. افتح الشراء الأصلي وأكد الخصم والرسوم إذا تحققت من كشف الحساب.</div>'+candidates.map(t=>'<button class="btn" data-txid="'+esc(t.id)+'">'+esc(t.date)+' · '+amtFull(t.amount,t.currency)+' · '+esc(t.note||'شراء')+'</button>').join('')+'</div>','settlement-review');return;
     }
     let source='';
-    if(r&&r.instrument)source='instrument:'+r.instrument.id;
+    if(p.kind==='card_repayment'&&r&&r.fromAccount)source='account:'+r.fromAccount.id;
+    else if(r&&r.instrument)source='instrument:'+r.instrument.id;
     else if(r&&r.account)source='account:'+r.account.id;
     else if(r&&r.fromAccount)source='account:'+r.fromAccount.id;
-    else if(p.cardLast4){
+    else if(p.cardLast4&&['purchase','bill_payment','mobile_recharge','refund'].includes(p.kind)){
       const cards=S.paymentInstruments.filter(i=>i&&!i.archived&&String(i.last4||'')===String(p.cardLast4)&&i.country===p.country);
       if(cards.length===1)source='instrument:'+cards[0].id;
     }
-    const target=r&&r.targetAccount?r.targetAccount.id:'';
+    let target=r&&r.targetAccount?r.targetAccount.id:'';
+    if(!target&&p.kind==='card_repayment'&&p.cardLast4){
+      const cards=S.paymentInstruments.filter(i=>i&&!i.archived&&i.type==='credit_card'&&String(i.last4)===String(p.cardLast4));
+      const candidates=new Set(cards.map(i=>i.accountId));
+      if(candidates.size===1)target=Array.from(candidates)[0];
+    }
     const kinds=['purchase','outgoing_transfer','incoming_transfer','internal_transfer','salary','deposit','refund','cash_withdrawal','mobile_recharge','bill_payment','card_repayment'];
     const kindOpts=kinds.map(k=>'<option value="'+k+'"'+(p.kind===k?' selected':'')+'>'+esc(this.kindLabel(k))+'</option>').join('');
     const cats=Finance.allCats('expense');
