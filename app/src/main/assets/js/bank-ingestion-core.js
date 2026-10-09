@@ -593,6 +593,8 @@
     if(kind==='card_repayment'){
       if(!valid(account)||!valid(target)||target.type!=='credit'||account.id===target.id)return {status:'needs-review',reason:'manual-repayment-invalid',confidence:0};
       const targetInstrument=instruments.find(i=>i&&!i.archived&&i.accountId===target.id&&i.type==='credit_card'&&(!parsed.cardLast4||String(i.last4||'')===String(parsed.cardLast4)))||null;
+      // A repayment carrying the repaid card's suffix cannot be bound to another credit account.
+      if(parsed.cardLast4&&!targetInstrument)return {status:'needs-review',reason:'manual-repayment-card-mismatch',confidence:0};
       return {status:'routed',fromAccount:account,targetAccount:target,instrument:targetInstrument,confidence:1,manualCorrection:true};
     }
     if(kind==='cash_withdrawal'){
