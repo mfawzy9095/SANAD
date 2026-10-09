@@ -8,6 +8,8 @@
 if(!window.SanadV252||window.__v25RebuildMounted)return;
 window.__v25RebuildMounted=true;
 const W=window.SanadV252;
+// Prior hybrid renderer inserted an obsolete settings widget before every new page.
+W.settingsTop=()=>'';
 const tr=(ar,en)=>S.settings?.language==='en'?en:ar;
 const ic=name=>window.SanadV25Icons?.vector?.(name)||'<span aria-hidden="true">•</span>';
 const n=value=>value===null||value===undefined||!Number.isFinite(Number(value))?'غير مؤكد':amtText(value);
@@ -51,13 +53,13 @@ viewHome=function(){
  '<div class="r25-hero-bottom"><span>'+tr('العملات منفصلة؛ لا يشمل حد الائتمان','Currencies remain separate; credit limits excluded')+'</span><button type="button" data-act="go-accounts">'+tr('محفظتي ←','My wallet →')+'</button></div></div>';
  const totals='<div class="r25-metrics"><div class="r25-stat"><small>'+tr('دخل الشهر','Monthly income')+'</small><b class="amt-val r25-positive">'+money(income,cur)+'</b><span>'+tr('الدخل المؤكد','Confirmed income')+'</span></div><div class="r25-stat"><small>'+tr('مصروفات الشهر','Monthly expenses')+'</small><b class="amt-val r25-expense">'+money(out,cur)+'</b><span>'+tr('مصروفات مسجلة','Recorded expenses')+'</span></div></div>';
  const transactions=recent.length?'<div class="r25-activity">'+recent.map(t=>txRowHtml(t,false)).join('')+'</div>':'<div class="r25-empty">لا توجد عمليات لهذا البلد.</div>';
- const content=countryBar()+'<p class="r25-intro">'+tr('إدارة أموالك بوضوح وأمان.','Your accounts and money, clearly organized.')+'</p>'+hero+
+ const content='<p class="r25-intro">'+tr('إدارة أموالك بوضوح وأمان.','Your accounts and money, clearly organized.')+'</p>'+hero+
  '<div class="r25-currency-strip">'+balances+'</div>'+totals+
  section(tr('مركز المراجعة','Review center'),'data-sanad-act="bank-inbox"',tr('فتح','Open'))+
  '<button type="button" class="r25-review" data-sanad-act="bank-inbox"><span class="r25-action-icon">'+ic('shield')+'</span><span><b>'+tr('عمليات تحتاج تأكيدك','Transactions need confirmation')+'</b><small>'+tr('لا تُعتمد العمليات غير المحسومة تلقائيًا','Unresolved transactions are never posted automatically')+'</small></span><strong>'+reviewCount+'</strong></button>'+
  section(tr('آخر العمليات','Recent transactions'),'data-act="go-tx"',tr('عرض الكل','See all'))+transactions+
  '<button type="button" class="r25-primary" data-act="account-add-menu">'+ic('plus')+tr('إضافة حساب أو عملية','Add account or transaction')+'</button>';
- return warning()+frame('Home',countryInfo(country).name,content);
+ return warning()+countryBar()+frame('Home',countryInfo(country).name,content);
 };
 viewAccounts=function(){
  // The existing V.walletView already binds to the real Finance engine.
@@ -77,7 +79,7 @@ viewTx=function(){
  '<button type="button" class="r25-primary" data-act="account-add-menu">'+ic('plus')+'إضافة عملية</button>':
  '<div class="r25-review-screen"><p>العمليات غير المحسومة لا تدخل في الأرصدة قبل تأكيدها.</p>'+
  '<button type="button" class="r25-primary" data-sanad-act="bank-inbox">'+ic('shield')+'فتح قائمة المراجعة</button></div>';
- return warning()+frame('Tx',countryInfo(S.activeCountry).name,countryBar()+tabs+search+filters+body);
+ return warning()+frame('Tx',countryInfo(S.activeCountry).name,tabs+search+filters+body);
 };
 viewRep=function(){
  const accounts=Finance.getCountryAccounts(S.activeCountry).filter(a=>!a.archived);
@@ -104,7 +106,7 @@ viewRep=function(){
  const top=Math.max(1,...categories.map(x=>Number(x[1])||0));
  const cat='<div class="r25-categories">'+(categories.length?categories.map(([key,val])=>'<div class="r25-category"><div><b>'+esc(Finance.getCat('expense',key)?.n||key)+'</b><span class="amt-val">'+money(val,cur)+'</span></div><i><em style="width:'+Math.max(0,Math.min(100,Math.round(Number(val)/top*100)))+'%"></em></i></div>').join(''):'<p>لا توجد مصروفات مؤكدة لهذا النطاق.</p>')+'</div>';
  // Existing report remains reachable with all original detailed calculations.
- const body=countryBar()+tabs+(S.repPeriod==='month'||S.repPeriod==='6months'?month:'')+
+ const body=tabs+(S.repPeriod='month'||S.repPeriod==='6months'?month:'')+
  '<div class="r25-report-filter"><label>العملة'+currencies+'</label><label>الحساب'+acctOpts+'</label></div>'+
  main+metrics+section('المصروفات عبر الفترة')+'<div class="r25-paper">'+bars+'</div>'+section('التصنيفات')+'<div class="r25-paper">'+cat+'</div>';
  return warning()+frame('Reports',countryInfo(S.activeCountry).name,body);
@@ -151,6 +153,9 @@ const baseWallet=W.walletView.bind(W);
 let ignoreCardClickUntil=0;
 W.walletView=function(){
  const box=document.createElement('div');box.innerHTML=baseWallet();
+ const country=box.querySelector('#v252Wallet .v252-country');
+ const title=box.querySelector('#v252Wallet .v25-page-head');
+ if(country&&title)title.before(country);
  const strip=box.querySelector('#v252CardStrip');
  if(!strip)return box.innerHTML;
  const cards=[...strip.querySelectorAll('[data-v252-card]')];
