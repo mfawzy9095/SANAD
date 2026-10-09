@@ -83,7 +83,7 @@ viewTx=function(){
 };
 viewRep=function(){
  const accounts=Finance.getCountryAccounts(S.activeCountry).filter(a=>!a.archived);
- if(!accounts.length)return warning()+frame('Reports','',countryBar()+'<div class="r25-empty">أضف حسابًا لعرض التقارير.</div>');
+ if(!accounts.length)return warning()+frame('Reports','','<div class="r25-empty">أضف حسابًا لعرض التقارير.</div>');
  const curSet=[...new Set(accounts.map(a=>a.currency))],selected=Finance.getAccount(S.repAccountId);
  if(selected&&selected.currency)S.repCurrency=selected.currency;
  if(!curSet.includes(S.repCurrency))S.repCurrency=Finance.getDefaultAccount(S.activeCountry)?.currency||curSet[0];
