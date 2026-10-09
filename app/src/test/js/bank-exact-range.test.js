@@ -15,7 +15,7 @@ const p=M.parse({id:'clock',title:'EI SMS',postedAt:now,text:'عملية دفع 
 assert(p.recognized);const built=M.buildTransaction(p,{status:'routed',account:{id:'c',type:'credit',currency:'AED'},instrument:{id:'card'}},{uid:()=> 't'});
 assert(built.ok);assert.equal(built.transaction.transactionTime,'09:05');assert.equal(built.transaction.smsReceivedAt,now);assert.equal(built.transaction.timeSource,'bank-message');
 const without=M.buildTransaction({...p,transactionTime:null},{status:'routed',account:{id:'c',currency:'AED'}},{uid:()=> 'u'}).transaction;
-assert.equal(without.transactionTime,null);assert(ctx.transactionTimeText(without).includes('وقت العملية غير مذكور'));
+assert.equal(without.transactionTime,null);assert(ctx.transactionTimeText(without).includes('استلام'),'SMS receipt time must not be mislabeled as bank event time');
 assert(State.txTimeValue({date:'2026-10-04',transactionTime:'09:05',created:now})<State.txTimeValue({date:'2026-10-04',transactionTime:'10:05',created:now-999999}));
 const a=html.indexOf('const SanadBankInbox = {'),b=html.indexOf('\n};',a);
 assert(a>=0&&b>a);
