@@ -23,7 +23,7 @@ function brandHeader(title){
  const isSettings=S.tab==='settings',hide=!!S.settings.hideAmounts,masked=amountsMasked();
  return '<div class="r25-header-brand"><img src="img/sanad-v25-original-logo.webp" alt=""><span><b>سند</b><small>SANAD</small></span></div>'+
  '<div class="r25-header-actions">'+
- '<button type="button" class="r25-icon-button" data-sanad-act="'+(hide?'amount-visibility':'amount-visibility')+'" aria-label="'+(masked?'إظهار الأرصدة':'إخفاء أو إظهار الأرصدة')+'">'+ic('eye')+'</button>'+
+ '<button type="button" class="r25-icon-button" '+(hide?'data-sanad-act="amount-visibility"':'data-act="toggle-mask"')+' aria-label="'+(masked?'إظهار الأرصدة':'إخفاء الأرصدة')+'">'+ic('eye')+'</button>'+
  '<button type="button" class="r25-icon-button" '+(isSettings?'data-act="close-settings"':'data-sanad-act="bank-inbox"')+' aria-label="'+(isSettings?'رجوع':'مركز المراجعة')+'">'+ic(isSettings?'transfer':'bell')+'</button></div>';
 }
 topBarHome=function(){return brandHeader('home')};
@@ -129,7 +129,8 @@ viewSet=function(){
  act('data-sanad-act="full-import"','استرجاع النسخة','من ملف محفوظ على جهازك','upload')+
  act('data-sanad-act="bank-support-export"','تقرير التشخيص','معلومات تساعد على تتبع مشكلة SMS','file'))+
  sec('الشكل والتفضيلات',
- act('data-act="toggle-theme"','المظهر',settings.theme==='dark'?'داكن':'فاتح','sun',yes(settings.theme!=='dark'))+
+ '<div class="r25-inline-options"><span>اللغة</span><div><button type="button" data-sanad-act="lang" data-value="ar" aria-pressed="'+(settings.language!=='en')+'">العربية</button><button type="button" data-sanad-act="lang" data-value="en" aria-pressed="'+(settings.language==='en')+'">English</button></div></div>'+
+ '<div class="r25-inline-options"><span>المظهر</span><div><button type="button" data-sanad-act="theme" data-value="light" aria-pressed="'+(settings.theme!=='dark')+'">فاتح</button><button type="button" data-sanad-act="theme" data-value="dark" aria-pressed="'+(settings.theme==='dark')+'">داكن</button></div></div>'+
  act('data-act="go-subs"','الالتزامات والاشتراكات','إدارة الدفعات الدورية','calendar'));
  const countries='<div class="r25-default-countries">'+[['UAE','الإمارات'],['EGY','مصر'],['MAR','المغرب']].map(([id,label])=>'<button type="button" data-default-country="'+id+'" aria-pressed="'+(settings.defaultCountry===id)+'">'+label+'</button>').join('')+'</div>';
  const advanced=more(oldSet(),'كل الإعدادات والتصنيفات وإدارة البيانات المتقدمة');
