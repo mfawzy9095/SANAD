@@ -305,6 +305,9 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
    await page.evaluate(tab=>go(tab),tab);
    const box=await page.evaluate(()=>({tab:S.tab,width:document.documentElement.clientWidth,pageWidth:Math.max(document.body.scrollWidth,document.documentElement.scrollWidth),visible:document.getElementById('view').innerText.trim().length}));
    assert.equal(box.tab,tab);assert(box.visible>5,'Page '+tab+' must display real text content');assert(box.pageWidth<=box.width+2,'Page '+tab+' must fit 393px');
+   const uniqueCountry=await page.locator('#view .v252-country').count();
+   if(tab==='settings')assert.equal(uniqueCountry,0,'Settings must not prepend legacy browsing countries widget');
+   else assert.equal(uniqueCountry,1,'Page '+tab+' must show exactly one country selector, not hybrid duplication');
    await page.screenshot({path:path.join(output,'v25-screen-'+tab+'-393.png')});
  }
  assert.equal(await page.evaluate(()=>stateFingerprint(snapshotState())),beforeAppearance,'Visual navigation must not mutate financial ledger');
