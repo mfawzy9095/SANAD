@@ -849,7 +849,7 @@ window.__sanadSplashBorn=performance.now();
       <button type="button" id="sanadScanPause" data-sanad-act="sms-progress-pause">إيقاف مؤقت</button>
       <button type="button" id="sanadScanCancel" data-sanad-act="sms-progress-cancel">إلغاء الفحص</button>
       <button type="button" id="sanadScanResume" data-sanad-act="sms-progress-resume" hidden>استكمال الفحص</button>
-      <button type="button" id="sanadScanReview" class="scan-primary" data-sanad-act="sms-progress-review" hidden>عرض المراجعة</button>
+      <button type="button" id="sanadScanOpenReview" class="scan-primary" data-sanad-act="sms-progress-review" hidden>عرض المراجعة</button>
       <button type="button" id="sanadScanDone" data-sanad-act="sms-progress-done" hidden>إغلاق</button>
     </div>
     <p class="sanad-scan-caption">الإضافة للمراجعة لا تعني اعتماد عملية مالية. يمكنك إخفاء النافذة ومتابعة استخدام التطبيق.</p>
@@ -9083,7 +9083,7 @@ const SanadSmsImportUI = {
       if(percent===null)track.removeAttribute('aria-valuenow');else track.setAttribute('aria-valuenow',String(percent));
     }
     if(fill)fill.style.width=(percent===null?(running?30:0):percent)+'%';
-    for(const [id,on] of [['sanadScanHide',running],['sanadScanPause',this.state==='running'],['sanadScanCancel',this.state==='running'],['sanadScanResume',this.state==='paused'||this.state==='error'],['sanadScanReview',!running&&!!(Number(p.review)||0)],['sanadScanDone',!running]])this.display(this.get(id),on);
+    for(const [id,on] of [['sanadScanHide',running],['sanadScanPause',this.state==='running'],['sanadScanCancel',this.state==='running'],['sanadScanResume',this.state==='paused'||this.state==='error'],['sanadScanOpenReview',!running&&!!(Number(p.review)||0)],['sanadScanDone',!running]])this.display(this.get(id),on);
   }
 };
 
