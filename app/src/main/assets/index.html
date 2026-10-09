@@ -693,6 +693,34 @@ main>.wallet-hero,main>.country-summary,main>.debt-summary,main>.card,main>.stat
 .bank-review-intro{padding:12px 14px;border:1px solid var(--outline);border-radius:15px;background:var(--surface-2);margin-bottom:16px}
 .bank-review-optional{border:1px solid var(--outline);border-radius:15px;padding:12px 14px;margin:12px 0}
 .bank-review-optional summary{font-weight:800;cursor:pointer;color:var(--text)}
+
+.bank-sync-summary{padding:15px 17px;margin:8px 16px 14px;border:1px solid var(--outline);border-radius:17px;background:var(--surface)}
+.bank-sync-summary-title{display:flex;gap:9px;align-items:center;font-size:15px;color:var(--text)}
+.bank-sync-summary-title svg{flex:none}
+.bank-sync-summary p{font-size:12px;line-height:1.6;color:var(--text-2);margin:6px 0 0}
+.bank-sync-steps{background:var(--surface);border:1px solid var(--outline);border-radius:17px;margin:0 16px 14px;overflow:hidden}
+.bank-sync-steps .list-item{padding:15px 12px;margin:0;min-height:73px}
+.bank-sync-steps .list-item+.list-item{border-top:1px solid var(--outline)}
+.bank-sync-steps .li-body b{font-size:15px}
+.bank-sync-steps .li-body span{font-size:12px;line-height:1.5}
+.bank-sync-priority{background:var(--primary-soft)}
+.bank-sync-advanced{margin:12px 16px 20px;padding:12px;border:1px solid var(--outline);border-radius:15px;background:var(--surface)}
+.bank-sync-advanced>summary{cursor:pointer;color:var(--text-2);font-size:13px;font-weight:700;list-style-position:inside}
+.bank-sync-advanced>.list{margin-top:12px;box-shadow:none}
+.bank-sync-advanced .list-item{padding:12px 4px}
+.bank-sync-diagnostics{padding:12px 6px;color:var(--text-2);font-size:11px;line-height:1.65;overflow-wrap:anywhere}
+.bank-sync-diagnostics p{margin:6px 0}
+.bank-scan-progress{margin:0 16px 14px;border:1px solid var(--outline);border-radius:14px;padding:12px;background:var(--surface)}
+.bank-scan-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.bank-scan-actions button{min-height:40px;border:1px solid var(--outline);border-radius:10px;background:var(--surface-2);padding:6px 12px;color:var(--text)}
+.sanad-review-form .field input[type="checkbox"]{appearance:auto!important;-webkit-appearance:checkbox!important;display:inline-block!important;width:20px!important;height:20px!important;min-height:20px!important;padding:0!important;margin:0 8px!important;accent-color:var(--primary);flex-shrink:0;vertical-align:middle;outline:0!important}
+.sanad-review-form .field label:has(input[type="checkbox"]){display:flex;align-items:flex-start;gap:8px;line-height:1.6;font-size:14px}
+.sanad-review-form .field label:has(input[type="checkbox"]) input[type="checkbox"]{margin:3px 0 0!important}
+.sanad-review-form .field[data-bank-conditional][hidden]{display:none!important}
+.sanad-review-form .bank-field-invalid:not([type="checkbox"]){border:2px solid #ba2640!important;outline:none!important}
+.sanad-review-form .bank-field-error[hidden]{display:none!important}
+.sanad-review-form .bank-required{font-size:16px}
+.sanad-review-form .bank-review-optional{margin-top:12px}
 /* ===== SANAD V9 product polish ===== */
 body{font-family:"Cairo",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Tahoma,sans-serif;background:
   radial-gradient(circle at 15% -10%,color-mix(in srgb,var(--primary) 9%,transparent),transparent 32%),var(--bg)}
@@ -9377,25 +9405,31 @@ const SanadBankInbox = {
       ' · Scanned: '+histScanned+' · Financial: '+histCandidates+' · Parsed: '+histParsed+
       ' · Duplicates: '+histDuplicates+' · Added: '+histAdded+' · Review: '+histReview+' · Ignored: '+histIgnored;
     const progressDetails=this.historicalImporting?('الفترة: '+new Date(hp.fromDate||0).toLocaleDateString('ar-AE')+' — '+new Date(hp.throughDate||Date.now()).toLocaleDateString('ar-AE')+' · وصل إلى: '+new Date(hp.reachedAt||hp.fromDate||0).toLocaleString('ar-AE')+' · قُرئ '+histScanned+' · أُضيف '+histAdded+' · مكرر '+histDuplicates+' · للمراجعة '+histReview):'اكتمال قراءة الرسائل لا يعني اكتمال المراجعة المالية. الاستكمال بعد إعادة فتح التطبيق يدوي من النقطة المحفوظة.';
-    return '<div class="sec"><h2>المزامنة البنكية التلقائية</h2></div><div class="list">' +
-      '<div class="list-item" data-sanad-act="bank-access"><div class="li-ico">'+this.icon('bank')+'</div><div class="li-body"><b>الوصول لإشعارات البنوك والمحافظ</b><span>' +
-        captureDesc +
-      '</span></div><div class="li-arrow">›</div></div>' +
-      '<div class="list-item"><div class="li-ico">'+this.icon('activity')+'</div><div class="li-body"><b>حالة الالتقاط</b><span>' +
-        esc(String(diag.capturedTotal||0))+' إشعار مالي ملتقط · '+esc(lastCapture) + (diag.recoveryRequired?' · تنبيه: ضغط أو فشل التقاط ('+esc(String(diag.captureFailures||diag.captureFailuresInProcess||0))+') — زامن ثم أعد فحص الإشعارات المتاحة وSMS؛ الإشعار المفقود بلا SMS يحتاج إدخالًا يدويًا':'') +
-      '</span></div></div>' +
-      '<div class="list-item" data-sanad-act="bank-auto-toggle"><div class="li-ico">'+this.icon(auto?'activity':'pause')+'</div><div class="li-body"><b>الإضافة التلقائية</b><span>' +
-        (auto?'مفعّلة · العمليات عالية الثقة تُسجل تلقائيًا':'متوقفة · ستبقى العمليات للمراجعة') +
-      '</span></div><div class="switch '+(auto?'on':'')+'"></div></div>' +
-      '<div class="list-item" data-sanad-act="bank-learning"><div class="li-body"><b>الروابط والتعلم</b><span>مراجعة وإيقاف هوية الحساب أو قالب الرسالة أو تصنيف التاجر</span></div><div class="li-arrow">›</div></div>' +
-      '<div class="list-item" data-sanad-act="bank-sync"><div class="li-ico">'+this.icon('sync')+'</div><div class="li-body"><b>مزامنة العمليات الجديدة الآن</b><span>'+syncDesc+'</span></div><div class="li-arrow">›</div></div>' +
-      '<div class="list-item" data-sanad-act="bank-sms-config"><div class="li-ico">'+this.icon('clock')+'</div><div class="li-body"><b>بداية سحب الرسائل من الرئيسية</b><span>'+esc(new Date(this.configuredSmsStart()).toLocaleString('ar-AE'))+'</span></div></div>' + '<div class="list-item" data-sanad-act="bank-support-export"><div class="li-ico">'+this.icon('archive')+'</div><div class="li-body"><b>تصدير باكب + تقرير تشخيص</b><span>ملف محلي واحد يشمل البيانات وأسباب قرارات الرسائل</span></div></div>' + '<div class="list-item" data-sanad-act="bank-sms-history"><div class="li-ico">'+this.icon('message')+'</div><div class="li-body"><b>استيراد رسائل SMS السابقة</b><span>'+esc(histDesc)+'</span></div><div class="li-arrow">›</div></div>' +
-      '<div class="list-item" data-sanad-act="bank-sms-xml"><div class="li-ico">'+this.icon('archive')+'</div><div class="li-body"><b>استيراد ملف SMS XML</b><span>يُقرأ محليًا ويُضاف للمراجعة فقط؛ بدون مصاريف تلقائية</span></div><div class="li-arrow">›</div></div>' +
-      '<div class="list-item"><button type="button" data-sanad-act="bank-sms-pause">إيقاف مؤقت</button><button type="button" data-sanad-act="bank-sms-resume">استكمال الفحص المحفوظ</button><button type="button" data-sanad-act="bank-sms-cancel">إلغاء الفحص</button></div>'+
-      '<div class="list-item"><div class="li-ico">'+this.icon('activity')+'</div><div class="li-body"><b>تشخيص استيراد SMS</b><span style="direction:ltr;text-align:left;white-space:normal">'+esc(progressDetails)+'</span><span style="direction:ltr">'+esc(histDiagnostics)+'</span></div></div>' +
-      '<div class="list-item" data-sanad-act="bank-inbox"><div class="li-ico">'+this.icon('inbox')+'</div><div class="li-body"><b>عمليات تحتاج مراجعة</b><span>' +
-        (count?count+' عملية':'لا توجد عمليات تحتاج مراجعة') +
-      '</span></div><div class="li-arrow">›</div></div></div>';
+    const activeScan=!!this.historicalImporting,failedScan=hist.status==='failed'||hist.status==='processing-failed';
+    const remaining=count?count+' عملية تحتاج قرارك':'لا توجد عمليات معلقة';
+    const captureOk=supported&&enabled&&diag.listenerConnected;
+    const statusText=!supported?'غير متاح على هذه النسخة':!enabled?'الإشعارات غير مفعّلة':diag.recoveryRequired?'مطلوب فحص اتصال الإشعارات':!diag.listenerConnected?'بانتظار اتصال خدمة الإشعارات':'المزامنة جاهزة';
+    const statusIcon=captureOk?'check-circle':'alert-circle';
+    const advancedRows=
+      '<div class="list-item" data-sanad-act="bank-access"><div class="li-ico">'+this.icon('bank')+'</div><div class="li-body"><b>صلاحية إشعارات البنوك</b><span>'+esc(captureDesc)+'</span></div><div class="li-arrow">›</div></div>'+
+      '<div class="list-item"><div class="li-ico">'+this.icon('activity')+'</div><div class="li-body"><b>سجل استقبال الإشعارات</b><span>'+esc(String(diag.capturedTotal||0))+' إشعار ملتقط · '+esc(lastCapture)+(diag.recoveryRequired?' · يحتاج فحصًا يدويًا':'')+'</span></div></div>'+
+      '<div class="list-item" data-sanad-act="bank-auto-toggle"><div class="li-ico">'+this.icon(auto?'activity':'pause')+'</div><div class="li-body"><b>التسجيل التلقائي للحركات المؤكدة</b><span>'+(auto?'مفعّل للحركات عالية الثقة فقط':'متوقف؛ الحركات تنتظر المراجعة')+'</span></div><div class="switch '+(auto?'on':'')+'"></div></div>'+
+      '<div class="list-item" data-sanad-act="bank-learning"><div class="li-ico">'+this.icon('activity')+'</div><div class="li-body"><b>الربط والتعلّم</b><span>تصحيح قواعد ربط الحسابات والتجار</span></div><div class="li-arrow">›</div></div>'+
+      '<div class="list-item" data-sanad-act="bank-sms-config"><div class="li-ico">'+this.icon('clock')+'</div><div class="li-body"><b>بداية استيراد الرسائل</b><span>'+esc(new Date(this.configuredSmsStart()).toLocaleDateString('ar-AE'))+'</span></div><div class="li-arrow">›</div></div>'+
+      '<div class="list-item" data-sanad-act="bank-sms-xml"><div class="li-ico">'+this.icon('archive')+'</div><div class="li-body"><b>استيراد رسائل XML</b><span>للمراجعة فقط، بدون تسجيل تلقائي</span></div><div class="li-arrow">›</div></div>'+
+      '<div class="list-item" data-sanad-act="bank-support-export"><div class="li-ico">'+this.icon('archive')+'</div><div class="li-body"><b>تقرير تشخيص ودعم فني</b><span>ملف حساس يشمل بياناتك ورسائل البنك؛ ليس مجرد إحصائيات</span></div><div class="li-arrow">›</div></div>'+
+      '<div class="bank-sync-diagnostics"><b>معلومات الفحص</b><p>'+esc(progressDetails)+'</p><p dir="ltr">'+esc(histDiagnostics)+'</p></div>';
+    return '<div class="sec"><h2>المزامنة البنكية</h2></div>'+
+      '<div class="bank-sync-summary"><div class="bank-sync-summary-title">'+this.icon(statusIcon)+' <b>'+esc(statusText)+'</b></div><p>الحركات المؤكدة فقط تُسجل تلقائيًا، والباقي ينتظر مراجعتك.</p></div>'+
+      '<div class="bank-sync-steps">'+
+        '<div class="list-item bank-sync-priority" data-sanad-act="bank-inbox"><div class="li-ico">'+this.icon('inbox')+'</div><div class="li-body"><b>راجع العمليات المعلقة</b><span>'+esc(remaining)+'</span></div><div class="li-arrow">›</div></div>'+
+        '<div class="list-item" data-sanad-act="bank-sync"><div class="li-ico">'+this.icon('sync')+'</div><div class="li-body"><b>مزامنة الآن</b><span>'+esc(syncDesc)+'</span></div><div class="li-arrow">›</div></div>'+
+        '<div class="list-item" data-sanad-act="bank-sms-history"><div class="li-ico">'+this.icon('message')+'</div><div class="li-body"><b>'+(activeScan?'فحص الرسائل القديمة جارٍ':'استيراد الرسائل القديمة')+'</b><span>'+(activeScan?'قُرئ '+histScanned+' رسالة · للمراجعة '+histReview:hist.at?'آخر فحص: '+histScanned+' رسالة · '+histReview+' للمراجعة': 'للمرة الأولى أو لاستكمال الرسائل السابقة')+'</span></div><div class="li-arrow">›</div></div>'+
+        (!enabled&&supported?'<div class="list-item" data-sanad-act="bank-access"><div class="li-ico">'+this.icon('bank')+'</div><div class="li-body"><b>السماح بإشعارات البنوك</b><span>مطلوب لالتقاط العمليات الجديدة تلقائيًا</span></div><div class="li-arrow">›</div></div>':'')+
+      '</div>'+
+      ((activeScan||hist.status==='paused'||failedScan)?'<div class="bank-scan-progress"><b>'+(activeScan?'الفحص جاري':hist.status==='paused'?'الفحص متوقف مؤقتًا':'الفحص يحتاج إعادة محاولة')+'</b><div class="bank-scan-actions">'+(activeScan?'<button type="button" data-sanad-act="bank-sms-pause">إيقاف مؤقت</button>': '<button type="button" data-sanad-act="bank-sms-resume">استكمال من آخر نقطة</button>')+'<button type="button" data-sanad-act="bank-sms-cancel">إلغاء الفحص</button></div></div>':'')+
+      '<details class="bank-sync-advanced"><summary>إعدادات متقدمة وتشخيص</summary><div class="list">'+advancedRows+'</div></details>';
+
   },
   async toggleAuto(){
     if(!canWrite()){toast('وضع القراءة فقط');return;}
