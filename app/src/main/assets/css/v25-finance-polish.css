@@ -76,3 +76,8 @@ main#view .v25-payment-card{
   animation:none!important;
   opacity:1!important;
 }
+
+/* The legacy selected-period tab had white text for a dark pill; V25 changes
+   the pill to white, so give it an explicit accessible foreground color. */
+#view .tabs button.on{color:var(--primary)!important;background:var(--surface)!important;border:1px solid var(--outline);font-weight:900}
+#view .tabs button:not(.on){color:var(--text-2)!important}
