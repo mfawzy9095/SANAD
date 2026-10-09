@@ -13,12 +13,14 @@ assert(start>=0&&end>start);
 async function scenario(status,mode='recent',permission=true,extra={}){
  const writes={},queries=[];let renders=0;
  const old={scannedThrough:now-3*day,configuredStartAt:now-4*day};
- const context={Date:class extends Date{static now(){return now;}},S:{tab:'home'},Set,Number,Math,Object,confirm:()=>true,AndroidBridge:{requestHistoricalSmsPermission(){}},toast(){},render(){renders++;},canWrite:()=>true,BankIngestionCore:I,SanadExtStorage:{get:async k=>writes[k]||old,set:async(k,v)=>{if(extra.failKey===k)return false;writes[k]=JSON.parse(JSON.stringify(v));return true;}}};
+ const uiCalls={started:[],progress:[],finished:[]};
+ const scanUI={start:m=>uiCalls.started.push(m),progress:(p,stage)=>uiCalls.progress.push({stage,scanned:p?.scanned}),finish:r=>uiCalls.finished.push(r.status),open(){}};
+ const context={SanadSmsImportUI:scanUI,Date:class extends Date{static now(){return now;}},S:{tab:'home'},Set,Number,Math,Object,confirm:()=>true,AndroidBridge:{requestHistoricalSmsPermission(){}},toast(){},render(){renders++;},canWrite:()=>true,BankIngestionCore:I,SanadExtStorage:{get:async k=>writes[k]||old,set:async(k,v)=>{if(extra.failKey===k)return false;writes[k]=JSON.parse(JSON.stringify(v));return true;}}};
  vm.createContext(context);
  const inbox=vm.runInContext('({'+html.slice(html.indexOf('  updateImportProgress(){'),html.indexOf('  homeImportHtml(){'))+html.slice(start,end)+'})',context);
  Object.assign(inbox,{historicalSupported:()=>true,historicalPermission:()=>permission,yieldUi:async()=>{},cancelHistoricalImport(){},requestHistoricalPage:async(days,date,id)=>{queries.push({days,date,id});return ['complete','processing-failed','cancel-last','navigate-last'].includes(status)?{ok:true,done:true,scanned:2,financialCandidates:1}:{ok:false,status};},sync:async()=>{if(status==='processing-failed')throw Error('batch failed');if(status==='cancel-last')inbox.historicalCancelRequested=true;if(status==='navigate-last')context.S.tab='tx';return {added:1,parsed:1,duplicates:0,review:0,reviewIds:[]};}});
  await inbox.importHistoricalSms(0,{mode,fromDate:now-4*day,configuredStartAt:now-4*day});
- return {writes,queries,inbox,renders};
+ return {writes,queries,inbox,renders,uiCalls};
 }
 (async()=>{
  const complete=await scenario('complete');
@@ -26,6 +28,9 @@ async function scenario(status,mode='recent',permission=true,extra={}){
  assert.strictEqual(complete.writes.bankImportLastRecent.scannedThrough,now);
  assert.strictEqual(complete.writes.bankImportLastRecent.total.added,1);
  assert(complete.renders>=2,'home shows running and completed state');
+ assert.strictEqual(complete.uiCalls.started.length,1,'modal starts on SMS scan');
+ assert.strictEqual(complete.uiCalls.finished[0],'complete','modal finishes only on durable scan status');
+ assert(complete.uiCalls.progress.some(p=>p.scanned===2),'modal progress receives scanned page count');
  for(const failure of ['cancelled','review-capacity','query-failed','permission-restricted','processing-failed','cancel-last']){
   const x=await scenario(failure);
   assert.strictEqual(x.writes.bankImportLastRecent.scannedThrough,now-3*day,'failed scan cannot skip unprocessed messages');
