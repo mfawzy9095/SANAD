@@ -283,8 +283,8 @@ const waitSmsShadeGone=async(label)=>{
  assert.equal(await page.locator('#sanadScanMini').isVisible(),false,'Dismissed summary chip must disappear');
  assert(await page.evaluate(()=>document.fonts.check('900 18px "Tajawal Local"')),'Embedded Tajawal font should work offline inside native WebView');
  await page.evaluate(()=>go('home'));
- await page.waitForFunction(()=>S.tab==='home'&&!!document.querySelector('#v25Home .v25-hero'));
- const nativeLayout=await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),home:!!document.querySelector('#v25Home .v25-hero')}));
+ await page.waitForFunction(()=>S.tab==='home'&&!!document.querySelector('#r25Home .r25-hero'));
+ const nativeLayout=await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),home:!!document.querySelector('#r25Home .r25-hero')}));
  assert(nativeLayout.home&&nativeLayout.scroll<=nativeLayout.width+2,'Android WebView home overflow: '+JSON.stringify(nativeLayout));
  await new Promise(r=>setTimeout(r,700)); // Android compositor capture is async to WebView JS.
  await page.screenshot({path:path.join(out,'android-home-v25.png')});
