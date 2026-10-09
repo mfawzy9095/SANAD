@@ -725,6 +725,43 @@ main>.wallet-hero,main>.country-summary,main>.debt-summary,main>.card,main>.stat
 .bank-review-fx-note[hidden]{display:none!important}
 .sanad-review-form .bank-review-pending{margin-top:12px;font-size:13px!important;font-weight:700}
 .sanad-review-form #bankFixSettlementRequired[hidden]{display:none!important}
+
+/* SMS import progress: an app-scoped, non-financial presentation layer. */
+#sanadScanOverlay[hidden],#sanadScanMini[hidden]{display:none!important}
+#sanadScanOverlay{position:fixed;inset:0;z-index:19000;background:rgba(12,35,32,.54);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);display:flex;align-items:flex-end;justify-content:center;padding:0}
+#sanadScanDialog{box-sizing:border-box;width:min(100%,530px);max-height:min(87dvh,790px);overflow-y:auto;background:var(--surface);color:var(--text);border-radius:30px 30px 0 0;padding:9px 21px calc(22px + env(safe-area-inset-bottom,0px));box-shadow:0 -20px 55px rgba(0,0,0,.16);position:relative}
+#sanadScanDialog:before{content:'';display:block;width:45px;height:5px;background:var(--outline);border-radius:20px;margin:4px auto 14px}
+.sanad-scan-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sanad-scan-top h2{font-size:21px;font-weight:850;margin:0;color:var(--text)}
+.sanad-scan-top button{border:1px solid var(--outline);background:var(--surface-2);border-radius:50%;width:40px;height:40px;color:var(--text-2);font-size:19px;cursor:pointer}
+.sanad-scan-art{width:90px;height:90px;border-radius:27px;margin:17px auto 13px;display:grid;place-items:center;background:linear-gradient(145deg,#e2fcf2,#b6ebdc);color:#087c6d;position:relative}
+.sanad-scan-art svg{width:45px;height:45px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.sanad-scan-art::after{content:'';position:absolute;inset:-8px;border:2px solid #2bb19a;border-left-color:transparent;border-radius:33px;animation:sanadScanOrbit 2.2s linear infinite}
+#sanadScanOverlay[data-finished="true"] .sanad-scan-art::after{animation:none;border-color:#2bb19a}
+@keyframes sanadScanOrbit{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.sanad-scan-art::after{animation:none;border-color:#2bb19a}}
+.sanad-scan-status{text-align:center;font-size:14px;font-weight:750;color:var(--text);margin:7px 0}
+.sanad-scan-note{text-align:center;font-size:12px;line-height:1.7;color:var(--text-2);margin:0 0 14px}
+.sanad-scan-progress-head{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:8px}
+.sanad-scan-progress-head strong{font-size:22px;color:var(--primary);font-variant-numeric:tabular-nums}
+.sanad-scan-track{height:11px;width:100%;border-radius:99px;background:var(--surface-2);overflow:hidden;position:relative}
+.sanad-scan-fill{display:block;height:100%;width:0;background:linear-gradient(90deg,#067d71,#21b6a0);border-radius:inherit;transition:width .3s ease}
+.sanad-scan-track[data-indeterminate="true"] .sanad-scan-fill{width:30%!important;animation:sanadScanIndeterminate 1.7s ease-in-out infinite}
+@keyframes sanadScanIndeterminate{0%{transform:translateX(-110%)}100%{transform:translateX(360%)}}
+.sanad-scan-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:17px 0}
+.sanad-scan-metric{border:1px solid var(--outline);border-radius:15px;padding:11px 13px;background:var(--surface-2)}
+.sanad-scan-metric span{display:block;color:var(--text-2);font-size:12px;margin-bottom:4px}
+.sanad-scan-metric b{font-size:23px;display:block;font-variant-numeric:tabular-nums;color:var(--text)}
+.sanad-scan-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}
+.sanad-scan-actions button{flex:1;min-width:98px;min-height:47px;border-radius:13px;padding:8px 11px;border:1px solid var(--outline);font-weight:800;font-size:13px;background:var(--surface-2);color:var(--text);cursor:pointer}
+.sanad-scan-actions .scan-primary{background:var(--primary);color:white;border-color:var(--primary)}
+.sanad-scan-caption{font-size:11px;color:var(--text-3);line-height:1.7;margin-top:10px;text-align:center}
+#sanadScanMini{position:fixed;bottom:calc(85px + env(safe-area-inset-bottom,0px));left:12px;right:12px;z-index:18000;margin:auto;width:min(94vw,480px);border-radius:16px;border:1px solid var(--outline);background:var(--surface);box-shadow:0 12px 40px rgba(0,0,0,.19);padding:12px 15px;text-align:right;color:var(--text);display:flex;align-items:center;gap:12px;cursor:pointer}
+#sanadScanMini .scan-mini-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:12px;background:var(--primary-soft);color:var(--primary);flex-shrink:0}
+#sanadScanMini .scan-mini-copy{flex:1;min-width:0;font-size:12px;line-height:1.5}
+#sanadScanMini .scan-mini-copy b{display:block;font-size:14px}
+#sanadScanMini .scan-mini-pct{font-size:15px;font-weight:800;color:var(--primary);font-variant-numeric:tabular-nums}
+
 /* ===== SANAD V9 product polish ===== */
 body{font-family:"Cairo",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Tahoma,sans-serif;background:
   radial-gradient(circle at 15% -10%,color-mix(in srgb,var(--primary) 9%,transparent),transparent 32%),var(--bg)}
@@ -792,6 +829,36 @@ window.__sanadSplashBorn=performance.now();
 
 <div class="backdrop" id="backdrop" onclick="closeSheet()"></div>
 <div class="sheet" id="sheet"></div>
+<div id="sanadScanOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="sanadScanTitle" data-finished="false">
+  <section id="sanadScanDialog" dir="rtl">
+    <div class="sanad-scan-top"><h2 id="sanadScanTitle">جاري استيراد الرسائل</h2><button type="button" data-sanad-act="sms-progress-minimize" aria-label="تصغير نافذة الفحص">—</button></div>
+    <div class="sanad-scan-art" aria-hidden="true"><svg viewBox="0 0 48 48"><rect x="7" y="8" width="34" height="26" rx="6"/><path d="M15 18h18M15 25h12M17 34l-6 7v-7"/></svg></div>
+    <p class="sanad-scan-status" id="sanadScanStage" aria-live="polite">تحضير الفحص…</p>
+    <p class="sanad-scan-note" id="sanadScanNote">تتم القراءة والمعالجة على جهازك. لن نحذف الرسائل.</p>
+    <div class="sanad-scan-progress-head"><span id="sanadScanCount">جارٍ تجهيز الرسائل</span><strong id="sanadScanPercent">—</strong></div>
+    <div class="sanad-scan-track" id="sanadScanTrack" role="progressbar" aria-label="نسبة فحص الرسائل" aria-valuemin="0" aria-valuemax="100" data-indeterminate="true"><span class="sanad-scan-fill" id="sanadScanFill"></span></div>
+    <div class="sanad-scan-metrics">
+      <div class="sanad-scan-metric"><span>رسائل تم فحصها</span><b id="sanadScanScanned">0</b></div>
+      <div class="sanad-scan-metric"><span>رسائل مالية</span><b id="sanadScanCandidates">0</b></div>
+      <div class="sanad-scan-metric"><span>عمليات أُضيفت</span><b id="sanadScanAdded">0</b></div>
+      <div class="sanad-scan-metric"><span>تحتاج مراجعة</span><b id="sanadScanReview">0</b></div>
+    </div>
+    <p id="sanadScanDuplicates" class="sanad-scan-note">المكرر: 0 · التسويات: 0</p>
+    <div class="sanad-scan-actions">
+      <button type="button" id="sanadScanHide" data-sanad-act="sms-progress-minimize">إخفاء واستمرار</button>
+      <button type="button" id="sanadScanPause" data-sanad-act="sms-progress-pause">إيقاف مؤقت</button>
+      <button type="button" id="sanadScanCancel" data-sanad-act="sms-progress-cancel">إلغاء الفحص</button>
+      <button type="button" id="sanadScanResume" data-sanad-act="sms-progress-resume" hidden>استكمال الفحص</button>
+      <button type="button" id="sanadScanReview" class="scan-primary" data-sanad-act="sms-progress-review" hidden>عرض المراجعة</button>
+      <button type="button" id="sanadScanDone" data-sanad-act="sms-progress-done" hidden>إغلاق</button>
+    </div>
+    <p class="sanad-scan-caption">الإضافة للمراجعة لا تعني اعتماد عملية مالية. يمكنك إخفاء النافذة ومتابعة استخدام التطبيق.</p>
+  </section>
+</div>
+<button id="sanadScanMini" type="button" data-sanad-act="sms-progress-show" hidden aria-label="عرض تقدم استيراد الرسائل">
+  <span class="scan-mini-icon">↻</span><span class="scan-mini-copy"><b id="sanadScanMiniTitle">جاري فحص الرسائل</b><span id="sanadScanMiniInfo">اضغط لمتابعة التقدم</span></span><span class="scan-mini-pct" id="sanadScanMiniPct">—</span>
+</button>
+
 <div class="dialog-backdrop" id="dlg">
   <div class="dialog">
     <div class="emoji" id="dlgEmoji">⚠️</div>
@@ -8932,6 +8999,92 @@ const SanadFullBackup = {
     }
   },
   async importFile(file){if(!file)return false;let data;try{data=BackupCore.parseJsonText(await file.text());}catch(_){toast('الملف ليس JSON صالح');return false;}return this.importData(data,true);}
+};
+
+const SanadSmsImportUI = {
+  mode:'historical',state:'idle',visible:false,minimized:false,progressData:null,result:null,stage:'',source:'',
+  get(id){return document.getElementById(id);},
+  display(root,visible){if(root)root.hidden=!visible;},
+  start(mode='historical'){
+    this.mode=mode==='recent'?'recent':'historical';this.state='running';this.visible=true;this.minimized=false;
+    this.progressData=null;this.result=null;this.stage='قراءة الرسائل من الهاتف';this.paint();
+  },
+  progress(data,stage){
+    if(this.state!=='running'&&this.state!=='stopping')return;
+    if(data&&typeof data==='object')this.progressData=Object.assign({},data);
+    if(stage&&this.state!=='stopping')this.stage=stage;
+    this.paint();
+  },
+  finish(result){
+    if(!result||typeof result!=='object')return;
+    this.result=result;
+    this.progressData=Object.assign({},this.progressData||{},result.total||{},{totalCount:result.totalCount});
+    this.state=result.status==='complete'?'complete':result.status==='paused'?'paused':result.status==='cancelled'?'cancelled':'error';
+    this.stage=this.state==='complete'?'اكتمل فحص الرسائل':this.state==='paused'?'تم الإيقاف مؤقتًا':this.state==='cancelled'?'تم إلغاء الفحص':'توقف الفحص قبل الاكتمال';
+    // Respect the user's minimize choice: a tappable status chip remains available.
+    this.paint();
+  },
+  open(){
+    if(this.state==='idle')return;
+    this.visible=true;this.minimized=false;this.paint();
+  },
+  minimize(){this.visible=false;this.minimized=true;this.paint();},
+  dismiss(){
+    if(this.state==='running'||this.state==='stopping'){this.minimize();return;}
+    this.visible=false;this.minimized=false;this.state='idle';this.paint();
+  },
+  async pause(){
+    if(this.state!=='running')return;
+    this.state='stopping';this.stage='إيقاف آمن بعد حفظ الدفعة الحالية…';this.paint();
+    await SanadBankInbox.cancelHistoricalImport('pause');
+  },
+  async cancel(){
+    if(this.state!=='running'&&this.state!=='stopping')return;
+    if(!confirm('إلغاء فحص الرسائل؟ العمليات التي تم حفظها بالفعل ستبقى محفوظة.'))return;
+    this.state='stopping';this.stage='جاري إلغاء الفحص بأمان…';this.paint();
+    await SanadBankInbox.cancelHistoricalImport('user');
+  },
+  async resume(){
+    if(this.state!=='paused'&&this.state!=='error')return;
+    this.minimize();
+    await SanadBankInbox.importHistoricalSms(0,{resume:true});
+  },
+  async openReview(){this.dismiss();await SanadBankInbox.open();},
+  paint(){
+    if(typeof document==='undefined')return;
+    const overlay=this.get('sanadScanOverlay'),mini=this.get('sanadScanMini');
+    if(!overlay||!mini)return;
+    const running=this.state==='running'||this.state==='stopping';
+    this.display(overlay,this.visible&&this.state!=='idle');
+    this.display(mini,!this.visible&&this.minimized&&this.state!=='idle');
+    overlay.dataset.finished=running?'false':'true';
+    if(this.state==='idle')return;
+    const p=this.progressData||{},total=Number(p.totalCount),scanned=Math.max(0,Number(p.scanned)||0);
+    const known=Number.isFinite(total)&&total>0&&total>=scanned;
+    // 100% is shown only after durable completion; avoid premature success while saving a page.
+    const percent=known?(this.state==='complete'?100:Math.min(99,Math.max(0,Math.floor(scanned/total*100)))):null;
+    const put=(id,text)=>{const node=this.get(id);if(node)node.textContent=String(text);};
+    const num=value=>Math.max(0,Number(value)||0).toLocaleString('ar-EG');
+    const statusLabel=this.state==='stopping'?this.stage:this.stage||'قراءة الرسائل';
+    put('sanadScanTitle',this.state==='complete'?'تم فحص الرسائل':this.state==='paused'?'الفحص متوقف مؤقتًا':this.state==='error'?'لم يكتمل الفحص':this.state==='cancelled'?'تم إلغاء الفحص':this.mode==='recent'?'تحديث رسائل آخر 7 أيام':'استيراد الرسائل السابقة');
+    put('sanadScanStage',statusLabel);
+    put('sanadScanNote',this.state==='complete'?'الرسائل المتشابهة لم تُسجّل مجددًا. راجع الحركات غير المؤكدة قبل اعتمادها.':this.state==='error'?'بياناتك المحفوظة لا تُحذف؛ يمكنك المحاولة أو استكمال نقطة الفحص إن وُجدت.':'تتم المعالجة على الجهاز. يمكنك إخفاء النافذة وسيستمر الفحص.');
+    put('sanadScanCount',known?'قُرئ '+num(scanned)+' من '+num(total)+' رسالة':'قُرئ '+num(scanned)+' رسالة');
+    put('sanadScanPercent',percent===null?'…':percent+'٪');
+    put('sanadScanScanned',num(scanned));put('sanadScanCandidates',num(p.financialCandidates));
+    put('sanadScanAdded',num(p.added));put('sanadScanReview',num(p.review));
+    put('sanadScanDuplicates','المكرر: '+num(p.duplicates)+' · التسويات: '+num(p.updated));
+    put('sanadScanMiniTitle',this.state==='complete'?'اكتمل الفحص':this.state==='paused'?'الفحص متوقف مؤقتًا':this.state==='error'?'الفحص يحتاج مراجعة':'جاري سحب الرسائل');
+    put('sanadScanMiniInfo',num(scanned)+' رسالة · '+num(p.review)+' للمراجعة');
+    put('sanadScanMiniPct',percent===null?'…':percent+'٪');
+    const fill=this.get('sanadScanFill'),track=this.get('sanadScanTrack');
+    if(track){
+      track.dataset.indeterminate=percent===null&&running?'true':'false';
+      if(percent===null)track.removeAttribute('aria-valuenow');else track.setAttribute('aria-valuenow',String(percent));
+    }
+    if(fill)fill.style.width=(percent===null?(running?30:0):percent)+'%';
+    for(const [id,on] of [['sanadScanHide',running],['sanadScanPause',this.state==='running'],['sanadScanCancel',this.state==='running'],['sanadScanResume',this.state==='paused'||this.state==='error'],['sanadScanReview',!running&&!!(Number(p.review)||0)],['sanadScanDone',!running]])this.display(this.get(id),on);
+  }
 };
 
 const SanadBankInbox = {
