@@ -194,3 +194,27 @@ main#view{padding:7px 13px calc(124px + env(safe-area-inset-bottom));overflow-x:
 .r25-card-dots button{width:7px;height:7px;border-radius:7px;background:#bbd4d6;border:0;padding:0}
 .r25-card-dots button[aria-pressed=true]{width:21px;background:var(--r25-primary)}
 @media(max-width:355px){#v252CardStrip.r25-card-deck{height:196px}#v252CardStrip.r25-card-deck .v25-payment-card{height:177px;min-height:177px}.r25-card-dots{gap:4px}}
+
+.sheet.r25-rebuilt-form{background:var(--r25-bg);box-shadow:0 -12px 50px #0e3c4a28}
+.sheet.r25-rebuilt-form .sheet-body{background:var(--r25-bg);padding:9px 13px calc(25px + env(safe-area-inset-bottom))}
+.r25-form-section{margin:13px 0;border:1px solid var(--r25-line);border-radius:15px;background:var(--r25-paper);padding:13px 12px;box-shadow:var(--r25-shadow);min-width:0}
+.r25-form-section-title{font-size:15px;font-weight:900;color:var(--r25-ink);margin:0 0 12px;padding:0 2px}
+.r25-form-fields{display:flex;flex-direction:column;min-width:0;gap:4px}
+.r25-form-fields .field{margin:4px 0 10px!important}
+.r25-form-fields .field:last-child{margin-bottom:0!important}
+.r25-form-fields .field-hint{font-size:11px;color:var(--r25-muted);line-height:1.6}
+.r25-form-fields>.field-hint{margin:6px 3px}
+.r25-form-footer{padding:4px 1px 11px}
+.r25-form-footer>.btn.primary{width:100%;border:0;color:#fff;box-shadow:0 8px 16px #08667428}
+.r25-form-card-preview{display:flex;flex-direction:column;justify-content:space-between;min-height:157px;margin:13px 2px;padding:15px 16px;color:#fff;border-radius:17px;box-shadow:0 13px 25px #0644572c;direction:rtl}
+.r25-form-card-preview>div:first-child{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.r25-form-card-preview strong{font-size:15px;font-weight:900;overflow-wrap:anywhere}
+.r25-form-card-preview span{font:800 11px system-ui,sans-serif;border:1px solid #ffffff44;border-radius:7px;padding:4px 6px;background:#ffffff20}
+.r25-form-card-chip{height:29px;width:36px;border-radius:7px;border:1px solid #ffffff99;position:relative;margin:7px 0;background:#ffffff2c;display:grid;place-items:center}
+.r25-form-card-chip i{display:block;width:75%;border-top:1px solid #ffffff99;height:1px}
+.r25-form-card-number{font:900 clamp(15px,4.8vw,20px) system-ui,sans-serif;letter-spacing:1.1px;white-space:nowrap;overflow:hidden;text-overflow:clip}
+.r25-form-card-preview small{font-size:10px;color:#d9fffa}
+.sheet.r25-rebuilt-form .r25-form-section .color-row{margin:4px 0;max-width:100%}
+.sheet.r25-rebuilt-form .r25-form-section .icon-grid{max-width:100%}
+.sheet.r25-rebuilt-form .r25-form-section input,.sheet.r25-rebuilt-form .r25-form-section select{color:var(--r25-ink)}
+.sheet.r25-rebuilt-form .r25-form-section label{line-height:1.4}
