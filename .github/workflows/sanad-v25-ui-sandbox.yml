@@ -24,6 +24,11 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Check sandbox workflow references before expensive jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -Eq 'SANAD-V9[.]2[.]14-ISOLATED-QA-APK|SANAD-FINANCIAL-QA-DEVICE-UNVERIFIED[.]apk' .github/workflows/sanad-v25-ui-sandbox.yml
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -128,7 +133,7 @@ jobs:
           target: google_apis
           disable-animations: true
           script: |
-            adb install device-apk/SANAD-FINANCIAL-QA-DEVICE-UNVERIFIED.apk
+            adb install device-apk/SANAD-V25-2-UI-BASELINE-UNPORTED.apk
             SANAD_QA_PACKAGE=com.sanad.v9test.v25uipreview SANAD_QA_OUTPUT="$RUNNER_TEMP/sanad-android-qa" node tools/e2e/android-smoke.js
       - name: Retain native test evidence, including on failure
         if: always()
