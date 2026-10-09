@@ -210,7 +210,7 @@ assert(html.includes('data-sanad-act="bank-edit-accounts"'));
 
 // Progress presentation tests: real counts, honest percentages and non-destructive controls.
 (async()=>{
- const ids=['sanadScanOverlay','sanadScanMini','sanadScanTitle','sanadScanStage','sanadScanNote','sanadScanCount','sanadScanPercent','sanadScanScanned','sanadScanCandidates','sanadScanAdded','sanadScanReview','sanadScanDuplicates','sanadScanMiniTitle','sanadScanMiniInfo','sanadScanMiniPct','sanadScanFill','sanadScanTrack','sanadScanHide','sanadScanPause','sanadScanCancel','sanadScanResume','sanadScanReview','sanadScanDone'];
+ const ids=['sanadScanOverlay','sanadScanMini','sanadScanTitle','sanadScanStage','sanadScanNote','sanadScanCount','sanadScanPercent','sanadScanScanned','sanadScanCandidates','sanadScanAdded','sanadScanReview','sanadScanDuplicates','sanadScanMiniTitle','sanadScanMiniInfo','sanadScanMiniPct','sanadScanFill','sanadScanTrack','sanadScanHide','sanadScanPause','sanadScanCancel','sanadScanResume','sanadScanOpenReview','sanadScanDone'];
  const elements=Object.fromEntries(ids.map(id=>[id,{id,hidden:true,textContent:'',dataset:{},style:{},attrs:{},setAttribute(k,v){this.attrs[k]=v;},removeAttribute(k){delete this.attrs[k];}}]));
  const sourceStart=html.indexOf('const SanadSmsImportUI = {'),sourceEnd=html.indexOf('\n};',sourceStart);
  assert(sourceStart>=0&&sourceEnd>sourceStart);
@@ -245,7 +245,7 @@ assert(html.includes('data-sanad-act="bank-edit-accounts"'));
  ui.progress({scanned:100,totalCount:100,review:3,added:6},'حفظ');
  ui.finish({status:'complete',total:{scanned:100,review:3,added:6},totalCount:100});
  assert.strictEqual(elements.sanadScanPercent.textContent,'100٪');
- assert.strictEqual(elements.sanadScanReview.hidden,false);
+ assert.strictEqual(elements.sanadScanOpenReview.hidden,false);
  await ui.openReview();assert.strictEqual(reviewed,1);
  ui.start('historical');await ui.cancel();assert.strictEqual(cancelled,1);
  ui.finish({status:'cancelled',total:{scanned:10},totalCount:100});
