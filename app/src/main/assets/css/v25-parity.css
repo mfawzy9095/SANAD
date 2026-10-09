@@ -1,0 +1,118 @@
+/* V25 visual parity + Samsung/Android font scaling safety. Pure presentation. */
+@font-face{font-family:"Tajawal Local";src:url("../fonts/Tajawal-Regular.ttf") format("truetype");font-weight:400;font-display:swap}
+@font-face{font-family:"Tajawal Local";src:url("../fonts/Tajawal-Medium.ttf") format("truetype");font-weight:500 600;font-display:swap}
+@font-face{font-family:"Tajawal Local";src:url("../fonts/Tajawal-Bold.ttf") format("truetype");font-weight:700 800;font-display:swap}
+@font-face{font-family:"Tajawal Local";src:url("../fonts/Tajawal-Black.ttf") format("truetype");font-weight:900;font-display:swap}
+html,body{max-width:100%;overflow-x:hidden;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html,body,button,input,textarea,select,#app,.onboard{font-family:"Tajawal Local",Tahoma,sans-serif!important}
+#app{width:100%;max-width:500px;overflow-x:clip}
+.top-bar{min-height:61px;padding:11px 13px 7px;gap:7px}
+.top-bar h1{font-family:"Tajawal Local",Tahoma,sans-serif;font-size:clamp(17px,5vw,20px);line-height:1.3;font-weight:900;min-width:0;white-space:normal}
+.top-bar h1:before{background-image:url("../img/sanad-v25-original-logo.webp");width:30px;height:37px;margin-left:7px}
+.top-bar .country-btn{display:none}
+.top-bar .tb-btn{flex:0 0 36px;width:36px;height:36px;min-width:36px}
+main#view{overflow-x:hidden;padding:4px 13px calc(117px + env(safe-area-inset-bottom));min-width:0}
+.bottom-nav{border-radius:17px 17px 0 0;box-shadow:0 -6px 24px #0a4d6017}
+.bottom-nav button{min-width:0;padding:7px 2px 5px}
+.bottom-nav button span{font-size:clamp(10px,2.8vw,11px)}
+.bottom-nav .ico svg{width:21px;height:21px}
+.fab{bottom:calc(85px + env(safe-area-inset-bottom))}
+.v25-page{min-width:0;width:100%}
+.v25-page-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:4px 0 8px}
+.v25-page-head h2{font-weight:900;font-size:19px;line-height:1.4;margin:0}
+.v25-page-head small{font-size:11px;color:var(--text-2)}
+.v25-hint{font-size:12px;color:var(--text-2);line-height:1.6;margin:0 0 10px}
+.v252-country{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;gap:7px;margin:0 0 10px}
+.v252-country button{font-size:12px;min-height:41px;padding:10px 2px;white-space:nowrap}
+.v25-hero{background:linear-gradient(118deg,#083f65,#086c82 51%,#04aa8b);color:white;border-radius:20px;padding:17px 17px 13px;box-shadow:0 10px 26px #09516724;overflow:hidden}
+.v25-hero small{display:block;font-size:11px;color:#d9f4ef;line-height:1.55}
+.v25-hero strong{font:800 clamp(21px,6.1vw,28px) system-ui,Tahoma,sans-serif;display:block;direction:ltr;text-align:right;overflow-wrap:anywhere;margin:17px 0}
+.v25-hero-foot{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #ffffff48;padding-top:10px;gap:10px}
+.v25-hero-foot button{border:1px solid #ffffff57;background:#ffffff22;color:white;padding:8px 11px;border-radius:9px;font-size:12px;font-weight:800}
+.v25-cur-strip{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;touch-action:pan-x;padding:9px 0}
+.v25-cur-chip{min-width:108px;flex:0 0 auto;border:1px solid var(--outline);background:var(--surface);border-radius:12px;padding:11px}
+.v25-cur-chip small{font-size:11px;color:var(--text-2);display:block}
+.v25-cur-chip b{font:750 15px system-ui,Tahoma,sans-serif;direction:ltr;display:block;margin-top:6px;text-align:right}
+.v25-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:5px 0 12px}
+.v25-metric{min-width:0;border:1px solid var(--outline);background:var(--surface);border-radius:13px;padding:12px}
+.v25-metric small{font-size:11px;color:var(--text-2)}
+.v25-metric b{font:800 18px system-ui,Tahoma,sans-serif;display:block;direction:ltr;text-align:right;overflow-wrap:anywhere;margin:7px 0 1px}
+.v25-metric em{display:block;color:var(--text-2);font-size:10px;font-style:normal;text-align:right}
+.v25-heading{display:flex;align-items:center;justify-content:space-between;margin:12px 1px 7px;gap:8px}
+.v25-heading h3{font-size:14px;font-weight:900;margin:0}
+.v25-heading button{border:1px solid #bce7d9;border-radius:9px;background:#e6f8f0;color:#078071;font-size:11px;font-weight:800;padding:7px 10px}
+.v25-review-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:right;width:100%;padding:13px;border-radius:12px;border:1px solid #f0d5bd;background:#fff3e7;color:#885d3c}
+.v25-review-btn b{font-size:12px;display:block}.v25-review-btn small{font-size:11px;display:block}
+.v25-review-btn .pill{border-radius:18px;background:#ce905d;color:white;font-size:11px;padding:5px 9px}
+.v25-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
+.v25-actions button{border:1px solid var(--outline);background:var(--surface);color:var(--text);padding:12px 6px;min-height:47px;border-radius:12px;font-weight:800;font-size:12px;display:flex;justify-content:center;align-items:center;gap:7px}
+.v25-actions button svg{width:18px;height:18px}
+.v25-actions button:first-child{background:#e0f7ef;color:#097d71;border-color:#aee1d3}
+.v25-advanced{margin:12px 0;border-radius:13px;border:1px solid var(--outline);background:var(--surface);overflow:hidden}
+.v25-advanced summary{padding:13px;font-weight:800;color:var(--primary);font-size:12px;cursor:pointer}
+.v25-advanced-body{padding:9px 12px 15px}
+#v252Wallet{background:transparent;box-shadow:none;border:0;border-radius:0;padding:0;margin:0}
+#v252Wallet>.v252-heading{display:none}
+.v252-section{margin:13px 1px 7px}
+.v252-section h3{font-size:14px;font-weight:900}
+.v252-section .v252-hint{font-size:11px}
+.v252-strip{scroll-snap-type:x proximity;gap:7px;padding:3px 1px 9px}
+.v252-bank{width:135px;min-width:135px;max-width:135px;height:49px;min-height:49px;padding:7px 9px;gap:7px}
+.v252-bank b{max-width:86px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v252-bank small{font-size:9px}
+.v252-mark{width:29px;height:29px;min-width:29px;border-radius:8px}
+.v252-mark img{max-height:27px;max-width:27px}
+.v252-account{min-width:122px;max-width:122px;width:122px;flex:0 0 122px;padding:8px 9px}
+.v252-account[aria-pressed="true"]{padding:7px 8px}
+.v252-account strong{font-size:11px}
+.v252-account span{font-size:10px;margin-top:3px}
+.v252-account .amt-val{font-size:12px}
+.v252-cards{scroll-snap-type:x mandatory}
+.v25-payment-card{flex:0 0 min(278px,82vw);min-width:min(278px,82vw);position:relative;scroll-snap-align:center;border-radius:18px;padding:15px;color:#fff;min-height:173px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 9px 22px #1537462b;overflow:hidden;background:linear-gradient(125deg,#184b65,#008983)}
+.v25-payment-card[aria-pressed="true"]{outline:2px solid #06ac9c;outline-offset:2px}
+.v25-payment-card:before{content:"";position:absolute;width:170px;height:170px;border:1px solid #ffffff22;border-radius:50%;right:-85px;bottom:-88px;box-shadow:0 0 0 26px #ffffff0b,0 0 0 52px #ffffff09;pointer-events:none}
+.v25-payment-card-head,.v25-payment-card-foot{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;position:relative}
+.v25-payment-card-head b{display:block;font-size:13px;line-height:1.3}
+.v25-payment-card-head small{display:block;font-size:10px;color:#ffffffd0;max-width:190px}
+.v25-card-type{background:#ffffff22;border:1px solid #ffffff44;border-radius:9px;padding:4px 6px;font-size:10px;white-space:nowrap}
+.v25-payment-card-number{position:relative;font:700 16px system-ui,Tahoma,sans-serif;direction:ltr;text-align:right;letter-spacing:1.2px}
+.v25-payment-card-foot b{display:block;font:750 16px system-ui,Tahoma,sans-serif;margin-top:4px}
+.v25-payment-card-foot small{font-size:10px;color:#ffffffdc}
+.v25-card-network{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;align-self:end}
+.v25-card-list-empty{text-align:center;padding:22px 12px;border:1px dashed var(--outline);border-radius:12px;font-size:12px;color:var(--text-2)}
+#sanadBootSplash{background:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:0}
+#sanadBootSplash .sb-mark{width:100%;height:100%;max-width:none;display:flex;flex-direction:column;justify-content:center;gap:0;animation:none}
+#sanadBootSplash .v25-poster{object-fit:contain;object-position:center;display:block;width:100%;max-height:calc(100dvh - 116px);min-height:0;flex:1}
+#sanadBootSplash .v25-loading{background:#fff;width:100%;flex:0 0 110px;display:flex;flex-direction:column;gap:11px;align-items:center;justify-content:center}
+#sanadBootSplash .v25-loading span{font-size:13px;font-weight:700;color:#0c5364}
+#sanadBootSplash .v25-loading-track{width:135px;height:4px;background:#e6f1f0;border-radius:10px;overflow:hidden}
+#sanadBootSplash .v25-loading-track:before{content:"";width:40%;height:100%;display:block;background:#02a78f;animation:v25-loading 1.35s ease-in-out infinite}
+@keyframes v25-loading{from{transform:translateX(0)}to{transform:translateX(-235%)}}
+.onboard .ob-slide h2{font-family:"Tajawal Local",sans-serif!important;line-height:1.4;font-size:22px}
+.onboard .ob-slide p{font-size:14px;line-height:1.75}
+#sanadScanOverlay{padding:0 max(0px,env(safe-area-inset-right)) 0 max(0px,env(safe-area-inset-left));width:100vw;overflow:hidden}
+#sanadScanDialog{width:min(100%,500px);max-width:100%;max-height:min(89dvh,850px);min-width:0;overflow-y:auto;overflow-x:hidden;padding:11px 17px max(19px,env(safe-area-inset-bottom));border-radius:24px 24px 0 0!important;overscroll-behavior:contain}
+.sanad-scan-top{width:100%;min-width:0;gap:12px;align-items:flex-start}
+.sanad-scan-top h2{flex:1;min-width:0;margin:0;font-size:clamp(17px,4.7vw,22px);font-weight:900;line-height:1.4;overflow-wrap:break-word}
+.sanad-scan-top button{flex:0 0 36px;width:36px;height:36px}
+.sanad-scan-art{width:76px!important;height:76px!important;flex:0 0 76px;margin:8px auto!important;animation:none}
+.sanad-scan-art:before{width:53px!important;height:57px!important;background-image:url("../img/sanad-v25-original-logo.webp")!important}
+.sanad-scan-art:after{inset:-5px;border-radius:25px}
+.sanad-scan-status{font-size:14px;line-height:1.45;margin:7px 0}
+.sanad-scan-note{font-size:12px;line-height:1.5;margin:4px 0 11px}
+.sanad-scan-progress-head{min-width:0;gap:8px;align-items:baseline;flex-wrap:wrap}
+.sanad-scan-progress-head span{min-width:0;overflow-wrap:anywhere;font-size:12px}
+.sanad-scan-progress-head strong{font:850 19px system-ui,Tahoma,sans-serif;flex:0 0 auto}
+.sanad-scan-track{height:9px}
+.sanad-scan-metrics{gap:8px;margin:13px 0}
+.sanad-scan-metric{min-width:0;padding:10px 9px}
+.sanad-scan-metric span{font-size:11px;line-height:1.4}
+.sanad-scan-metric b{font:800 20px system-ui,Tahoma,sans-serif;margin-top:3px}
+.sanad-scan-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.sanad-scan-actions button{min-width:0;width:100%;padding:8px 5px;font-size:clamp(10px,2.7vw,12px);line-height:1.35;min-height:44px;overflow-wrap:break-word}
+.sanad-scan-caption{font-size:11px;line-height:1.5}
+#sanadScanMini{max-width:calc(100% - 24px);padding:9px 12px}
+#sanadScanMini .scan-mini-copy{font-size:11px;min-width:0}
+@media(max-width:360px){#sanadScanDialog{padding-inline:12px}.sanad-scan-actions{gap:5px}.sanad-scan-metrics{gap:6px}.v25-hero{padding:14px}.v25-payment-card{flex-basis:83vw;min-width:83vw}}
+@media(max-height:690px){.sanad-scan-art{width:58px!important;height:58px!important;margin:3px auto!important}.sanad-scan-art:before{width:37px!important;height:42px!important}.sanad-scan-metrics{margin:6px 0}.sanad-scan-metric{padding:7px}.sanad-scan-note{margin:3px 0}}
+@media(prefers-reduced-motion:reduce){#sanadBootSplash .v25-loading-track:before{animation:none}.sanad-scan-art:after{animation:none}}
