@@ -172,7 +172,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert(await page.evaluate(async id=>!!(await SanadExtStorage.getReceipt(id)),expenseId));record('Receipt attachment and financial/receipt persistence after reload');
  // A full export/restore round trip uses the same UI path as the user.
  await page.evaluate(()=>go('settings'));
- const downloadPromise=page.waitForEvent('download');await page.locator('[data-sanad-act="full-export"]').click();
+ const downloadPromise=page.waitForEvent('download');await page.locator('#r25Settings > .r25-settings-group [data-sanad-act="full-export"]').click();
  const download=await downloadPromise;const backupPath=path.join(output,'synthetic-full-backup.json');await download.saveAs(backupPath);
  const saved=JSON.parse(fs.readFileSync(backupPath));assert.equal(saved.format,'SANAD_FULL_BACKUP');
  await page.evaluate(()=>go('home'));await addManual('expense',5);
