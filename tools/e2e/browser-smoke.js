@@ -441,7 +441,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(async()=>{const r=await commitCriticalMutation(()=>{Finance.setOverallLimit(S.month,'UAE','AED',1000);return true;});render();return r.ok;}),true);
  assert.match(await page.locator('#view').innerText(),/شراء يحتاج تأكيد مبلغ الخصم/);
  assert.match(await page.locator('#view').innerText(),/المتبقي غير مؤكد حتى تأكيد مبالغ الخصم/);
- assert.equal(await page.locator('.stat-card').filter({hasText:/متوسط المعاملة|Average transaction/}).locator('.v').innerText(),'غير معروف');
+ assert.equal(await page.locator('#r25Reports .r25-report-average .v').innerText(),'غير معروف');
  assert.equal(await page.evaluate(()=>Finance.buildReportDataset({country:'UAE',period:'month',month:isoToday().slice(0,7),currency:'AED'}).pendingSettlementCount),1);
  await page.reload();await page.waitForFunction(()=>S.ready&&SanadV9.initialized);
  assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).walletAmount,pendingId),null);
