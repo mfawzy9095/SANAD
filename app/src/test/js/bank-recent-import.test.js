@@ -206,3 +206,49 @@ assert(html.includes('data-sanad-act="bank-edit-accounts"'));
  assert.strictEqual(commits,1);
  console.log('Beneficiaries: persistent touch order preserves IDs, history references and archived membership: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});
+
+
+// Progress presentation tests: real counts, honest percentages and non-destructive controls.
+(async()=>{
+ const ids=['sanadScanOverlay','sanadScanMini','sanadScanTitle','sanadScanStage','sanadScanNote','sanadScanCount','sanadScanPercent','sanadScanScanned','sanadScanCandidates','sanadScanAdded','sanadScanReview','sanadScanDuplicates','sanadScanMiniTitle','sanadScanMiniInfo','sanadScanMiniPct','sanadScanFill','sanadScanTrack','sanadScanHide','sanadScanPause','sanadScanCancel','sanadScanResume','sanadScanReview','sanadScanDone'];
+ const elements=Object.fromEntries(ids.map(id=>[id,{id,hidden:true,textContent:'',dataset:{},style:{},attrs:{},setAttribute(k,v){this.attrs[k]=v;},removeAttribute(k){delete this.attrs[k];}}]));
+ const sourceStart=html.indexOf('const SanadSmsImportUI = {'),sourceEnd=html.indexOf('\n};',sourceStart);
+ assert(sourceStart>=0&&sourceEnd>sourceStart);
+ let paused=0,cancelled=0,resumed=0,reviewed=0;
+ const ctx={document:{getElementById:id=>elements[id]||null},SanadBankInbox:{cancelHistoricalImport:async mode=>mode==='pause'?paused++:cancelled++,importHistoricalSms:async()=>{resumed++;},open:async()=>{reviewed++;}},
+ confirm:()=>true,Number,Math,Object,Date,console};
+ vm.createContext(ctx);
+ const ui=vm.runInContext('('+html.slice(sourceStart+'const SanadSmsImportUI = '.length,sourceEnd+2)+')',ctx);
+ ui.start('recent');
+ assert.strictEqual(ui.state,'running');
+ assert.strictEqual(elements.sanadScanOverlay.hidden,false);
+ assert.strictEqual(elements.sanadScanPercent.textContent,'…','unknown total cannot fabricate percentage');
+ assert.strictEqual(elements.sanadScanTrack.dataset.indeterminate,'true');
+ ui.progress({scanned:42,totalCount:100,financialCandidates:14,added:6,review:3,duplicates:7,updated:2},'قراءة الرسائل');
+ assert.strictEqual(elements.sanadScanPercent.textContent,'42٪');
+ assert.strictEqual(elements.sanadScanAdded.textContent,'٦');
+ ui.minimize();
+ assert.strictEqual(elements.sanadScanOverlay.hidden,true);
+ assert.strictEqual(elements.sanadScanMini.hidden,false,'background scan is still reachable');
+ ui.open();
+ assert.strictEqual(elements.sanadScanMini.hidden,true);
+ ui.progress({scanned:100,totalCount:100},'حفظ النتائج');
+ assert.strictEqual(elements.sanadScanPercent.textContent,'99٪','no 100% before durable terminal status');
+ await ui.pause();
+ assert.strictEqual(paused,1);
+ assert.strictEqual(ui.state,'stopping');
+ ui.finish({status:'paused',total:{scanned:100,review:3,added:6},totalCount:100});
+ assert.strictEqual(ui.state,'paused');
+ assert.strictEqual(elements.sanadScanResume.hidden,false);
+ await ui.resume();assert.strictEqual(resumed,1);
+ ui.start('historical');
+ ui.progress({scanned:100,totalCount:100,review:3,added:6},'حفظ');
+ ui.finish({status:'complete',total:{scanned:100,review:3,added:6},totalCount:100});
+ assert.strictEqual(elements.sanadScanPercent.textContent,'100٪');
+ assert.strictEqual(elements.sanadScanReview.hidden,false);
+ await ui.openReview();assert.strictEqual(reviewed,1);
+ ui.start('historical');await ui.cancel();assert.strictEqual(cancelled,1);
+ ui.finish({status:'cancelled',total:{scanned:10},totalCount:100});
+ assert.strictEqual(ui.state,'cancelled');
+ console.log('SMS progress sheet: accurate percentage, minimize, pause, resume, cancel, completion and review actions: PASS');
+})().catch(err=>{console.error(err);process.exitCode=1;});
