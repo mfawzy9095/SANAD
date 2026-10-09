@@ -486,7 +486,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(()=>S.transactions.length),autoBefore.count+1);assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).bankSettlementAudit.length,autoId),1);
  record('Late bank settlement replaces original purchase, counts an update, retains proof and survives cross-channel repeat/reload');
  const historicalBeforeLearning=await page.evaluate(()=>JSON.stringify(S.transactions));
- await page.evaluate(()=>{closeSheet();go('settings');});await page.locator('details.bank-sync-advanced').evaluate(el=>{el.open=true;});await page.locator('[data-sanad-act="bank-learning"]').click();
+ await page.evaluate(()=>{closeSheet();go('settings');});await page.locator('#r25Settings > .r25-settings-group [data-sanad-act="bank-learning"]').click();
  const ruleButton=page.locator('[data-sanad-act="bank-learning-toggle"][data-learning-type="template"][data-enabled="false"]').first();
  const ruleId=await ruleButton.getAttribute('data-id');await ruleButton.click();
  await page.waitForFunction(id=>S.settings.bankLearningRules.find(r=>r.id===id)?.enabled===false&&!_criticalMutationInFlight,ruleId);
