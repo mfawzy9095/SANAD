@@ -180,3 +180,17 @@ main#view{padding:7px 13px calc(124px + env(safe-area-inset-bottom));overflow-x:
 .r25-inline-options>div{display:flex;gap:5px;background:var(--r25-line);border-radius:10px;padding:3px}
 .r25-inline-options button{border:0;border-radius:8px;padding:9px 10px;background:transparent;color:var(--r25-muted);font-size:11px;font-weight:900}
 .r25-inline-options button[aria-pressed=true]{background:var(--r25-paper);color:var(--r25-primary);box-shadow:var(--r25-shadow)}
+
+/* Authentic V25 stacked card deck rather than a flat horizontal row. */
+#v252CardStrip.r25-card-deck{position:relative;display:block;width:100%;height:222px;overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none;scroll-snap-type:none;margin:3px 0 0;padding:3px}
+#v252CardStrip.r25-card-deck .v25-payment-card{position:absolute;top:3px;right:5%;left:5%;width:90%;max-width:unset;min-width:0;min-height:196px;height:203px;margin:0;flex:none;border-radius:19px;transition:transform .27s cubic-bezier(.2,.75,.2,1),opacity .18s;box-shadow:0 11px 25px #0b4b6140;will-change:transform}
+#v252CardStrip.r25-card-deck .v25-payment-card .v25-payment-card-number{font-size:clamp(15px,5.3vw,21px);white-space:nowrap}
+#v252CardStrip.r25-card-deck .v25-payment-card .v25-payment-card-head b{font-size:clamp(11px,3.2vw,14px)}
+#v252CardStrip.r25-card-deck .v25-payment-card .v25-payment-card-head small{font-size:11px}
+.r25-card-pager{display:flex;align-items:center;justify-content:center;gap:14px;margin:8px 0 5px;min-height:34px}
+.r25-card-pager>button{display:grid;place-items:center;height:34px;width:38px;border:1px solid var(--r25-line);border-radius:10px;background:var(--r25-paper);font-size:21px;color:var(--r25-primary)}
+.r25-card-pager>button:disabled{opacity:.35}
+.r25-card-dots{display:flex;gap:6px;align-items:center}
+.r25-card-dots button{width:7px;height:7px;border-radius:7px;background:#bbd4d6;border:0;padding:0}
+.r25-card-dots button[aria-pressed=true]{width:21px;background:var(--r25-primary)}
+@media(max-width:355px){#v252CardStrip.r25-card-deck{height:196px}#v252CardStrip.r25-card-deck .v25-payment-card{height:177px;min-height:177px}.r25-card-dots{gap:4px}}
