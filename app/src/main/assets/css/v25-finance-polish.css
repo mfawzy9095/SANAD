@@ -54,3 +54,25 @@
  #view .tab-chip{padding:9px 6px;font-size:11px}
  .sheet .pick-card{padding:12px 6px}
 }
+
+/* Old V8.9 entry fade initialized content at opacity 0. Screen captures and
+   rapid navigation saw blank settings/reports before the animation settled.
+   Remove opacity animations on ledger-critical screens, without touching
+   gesture transforms or adding transparency to the payment-card carousel. */
+main#view>.wallet-hero,
+main#view>.country-summary,
+main#view>.debt-summary,
+main#view>.card,
+main#view>.stat-grid,
+main#view>.stat-card,
+main#view>.tx-list,
+main#view>.list,
+main#view .card,
+main#view .list,
+main#view .stat-card,
+main#view .stat-grid,
+main#view .tx-list,
+main#view .v25-payment-card{
+  animation:none!important;
+  opacity:1!important;
+}
