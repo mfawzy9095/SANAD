@@ -9742,7 +9742,8 @@ const SanadBankInbox = {
       const short=bank?bankUiShort(bank):(provider?providerUiShort(provider):(institution?.name||acc.name||'حساب'));
       const accountKind=({bank:'حساب بنكي',credit:'حساب سداد بطاقة',ewallet:'حساب محفظة'}[acc.type]||'حساب');
       // Issuer is immutable evidence on authenticated SMS, never inferred from matching digits alone.
-      const issuerOk=(!parsed.bankId||!!bank&&bank.id===parsed.bankId)&&(!parsed.providerId||!!provider&&provider.id===parsed.providerId);
+      const egyptIssuerCorrection=parsed.reviewReason==='issuer-jurisdiction-unconfirmed'&&parsed.bankId==='emirates-nbd'&&bank?.id==='emirates-nbd-egypt';
+      const issuerOk=(!parsed.bankId||!!bank&&(bank.id===parsed.bankId||egyptIssuerCorrection))&&(!parsed.providerId||!!provider&&provider.id===parsed.providerId);
       if(!issuerOk)return '';
       if(parsed.kind==='card_repayment'&&acc.type==='credit')return '';
       let rows=cardMessage?'':option('account:'+acc.id,short+' · '+accountKind+' ('+acc.currency+')');
