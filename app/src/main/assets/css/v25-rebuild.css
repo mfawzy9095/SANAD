@@ -218,3 +218,8 @@ main#view{padding:7px 13px calc(124px + env(safe-area-inset-bottom));overflow-x:
 .sheet.r25-rebuilt-form .r25-form-section .icon-grid{max-width:100%}
 .sheet.r25-rebuilt-form .r25-form-section input,.sheet.r25-rebuilt-form .r25-form-section select{color:var(--r25-ink)}
 .sheet.r25-rebuilt-form .r25-form-section label{line-height:1.4}
+
+/* One country row directly beneath the branded global app header. */
+main#view>.v252-country{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:3px 0 13px;gap:6px;padding:0;min-width:0}
+main#view>.v252-country button{background:var(--r25-paper);border:1px solid var(--r25-line);color:var(--r25-muted);border-radius:11px;min-height:40px;padding:8px 4px;font-weight:900;font-size:12px}
+main#view>.v252-country button.active{background:linear-gradient(115deg,#075271,#00a38e);border-color:transparent;color:#fff}
