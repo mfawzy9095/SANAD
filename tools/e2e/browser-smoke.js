@@ -67,7 +67,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  }
  assert.equal(await page.locator('#topBar [data-act="open-settings"] svg').count(),1,'Home settings action must use accessible offline SVG icon');
  record('Boot, offline vector navigation, meaningful screen, IndexedDB and onboarding');
- await page.evaluate(()=>go('settings'));await page.locator('[data-sanad-act="bank-sms-config"]').click();
+ await page.evaluate(()=>go('settings'));await page.locator('details.bank-sync-advanced').evaluate(el=>{el.open=true;});await page.locator('[data-sanad-act="bank-sms-config"]').click();
  const configured=await page.evaluate(()=>localDateTimeInput(Date.now()-3600000));
  await page.locator('#bankSmsConfiguredStart').fill(configured);await page.locator('[data-sanad-act="bank-sms-config-save"]').click();
  await page.waitForFunction(v=>S.settings.bankSmsStartAt===parseLocalDateTime(v)&&!_criticalMutationInFlight,configured);
@@ -226,7 +226,9 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());assert.equal(await page.evaluate(()=>S.transactions.length),beforeRecent+1);
  record('New unresolved inbound remains one review across repeats, then posts once after origin confirmation');
  await page.evaluate(()=>go('settings'));
- const diagnosticDownload=page.waitForEvent('download');await page.locator('[data-sanad-act="bank-support-export"]').click();
+ await page.locator('details.bank-sync-advanced').evaluate(el=>{el.open=true;});await page.locator('[data-sanad-act="bank-support-export"]').click();
+ await page.locator('[data-sheet-type="bank-support-guide"]').count();
+ const diagnosticDownload=page.waitForEvent('download');await page.locator('[data-sanad-act="bank-support-export-confirm"]').click();
  const diagnostic=await diagnosticDownload,diagnosticPath=path.join(output,'synthetic-diagnostic-backup.json');await diagnostic.saveAs(diagnosticPath);
  const diagnosticData=JSON.parse(fs.readFileSync(diagnosticPath));assert.equal(diagnosticData.format,'SANAD_FULL_BACKUP');assert(diagnosticData.features.diagnosticReport);assert(diagnosticData.features.bankImportAudit.decisions.rows.some(r=>r.id==='qa-after-scan'&&r.action==='saved'));
  record('Restorable backup plus diagnostic report exports posting decisions and exact scan bounds');
@@ -349,7 +351,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(()=>S.transactions.length),autoBefore.count+1);assert.equal(await page.evaluate(id=>S.transactions.find(t=>t.id===id).bankSettlementAudit.length,autoId),1);
  record('Late bank settlement replaces original purchase, counts an update, retains proof and survives cross-channel repeat/reload');
  const historicalBeforeLearning=await page.evaluate(()=>JSON.stringify(S.transactions));
- await page.evaluate(()=>{closeSheet();go('settings');});await page.locator('[data-sanad-act="bank-learning"]').click();
+ await page.evaluate(()=>{closeSheet();go('settings');});await page.locator('details.bank-sync-advanced').evaluate(el=>{el.open=true;});await page.locator('[data-sanad-act="bank-learning"]').click();
  const ruleButton=page.locator('[data-sanad-act="bank-learning-toggle"][data-learning-type="template"][data-enabled="false"]').first();
  const ruleId=await ruleButton.getAttribute('data-id');await ruleButton.click();
  await page.waitForFunction(id=>S.settings.bankLearningRules.find(r=>r.id===id)?.enabled===false&&!_criticalMutationInFlight,ruleId);
