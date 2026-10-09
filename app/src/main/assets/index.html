@@ -721,6 +721,10 @@ main>.wallet-hero,main>.country-summary,main>.debt-summary,main>.card,main>.stat
 .sanad-review-form .bank-field-error[hidden]{display:none!important}
 .sanad-review-form .bank-required{font-size:16px}
 .sanad-review-form .bank-review-optional{margin-top:12px}
+.bank-review-fx-note{border-radius:12px;border:1px solid var(--outline);background:var(--surface-2);padding:12px;font-size:13px;line-height:1.7;margin:12px 0;color:var(--text)}
+.bank-review-fx-note[hidden]{display:none!important}
+.sanad-review-form .bank-review-pending{margin-top:12px;font-size:13px!important;font-weight:700}
+.sanad-review-form #bankFixSettlementRequired[hidden]{display:none!important}
 /* ===== SANAD V9 product polish ===== */
 body{font-family:"Cairo",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Tahoma,sans-serif;background:
   radial-gradient(circle at 15% -10%,color-mix(in srgb,var(--primary) 9%,transparent),transparent 32%),var(--bg)}
@@ -9409,7 +9413,7 @@ const SanadBankInbox = {
     const remaining=count?count+' عملية تحتاج قرارك':'لا توجد عمليات معلقة';
     const captureOk=supported&&enabled&&diag.listenerConnected;
     const statusText=!supported?'غير متاح على هذه النسخة':!enabled?'الإشعارات غير مفعّلة':diag.recoveryRequired?'مطلوب فحص اتصال الإشعارات':!diag.listenerConnected?'بانتظار اتصال خدمة الإشعارات':'المزامنة جاهزة';
-    const statusIcon=captureOk?'check-circle':'alert-circle';
+    const statusIcon=captureOk?'sync':'activity';
     const advancedRows=
       '<div class="list-item" data-sanad-act="bank-access"><div class="li-ico">'+this.icon('bank')+'</div><div class="li-body"><b>صلاحية إشعارات البنوك</b><span>'+esc(captureDesc)+'</span></div><div class="li-arrow">›</div></div>'+
       '<div class="list-item"><div class="li-ico">'+this.icon('activity')+'</div><div class="li-body"><b>سجل استقبال الإشعارات</b><span>'+esc(String(diag.capturedTotal||0))+' إشعار ملتقط · '+esc(lastCapture)+(diag.recoveryRequired?' · يحتاج فحصًا يدويًا':'')+'</span></div></div>'+
@@ -9883,7 +9887,7 @@ const SanadBankInbox = {
     const required='<span class="bank-required" aria-label="مطلوب">*</span>';
     openSheet(
       '<div class="sheet-head"><button type="button" class="close" data-sanad-act="bank-inbox"><span>‹</span></button><h2>مراجعة العملية</h2><div style="width:36px"></div></div>'+
-      '<div class="sheet-body">'+
+      '<div class="sheet-body sanad-review-form">'+
         '<div class="bank-review-intro"><b>'+esc(sourceName)+' · '+amtFull(Number(p.amount||0),p.currency||'AED')+'</b><div class="field-hint">وصلت الرسالة: '+esc(receiptTime)+(p.cardLast4?' · بطاقة ••••'+esc(p.cardLast4):'')+'</div><div class="field-hint">راجع الخانات المعلّمة بالنجمة الحمراء. الحقول المعروفة من الرسالة مجهّزة مسبقًا.</div></div>'+
         '<div class="bank-field-error" id="bankFixIssues" role="alert" hidden></div>'+
         '<div class="field"><label for="bankFixKind">نوع العملية'+required+'</label><select id="bankFixKind" aria-required="true">'+kindOpts+'</select></div>'+
@@ -9898,13 +9902,13 @@ const SanadBankInbox = {
         '<div class="field" data-bank-conditional="incoming" hidden><label><input id="bankFixExternalIncome" type="checkbox"> '+required+' أؤكد أن الإيداع دخل من خارج حساباتي</label><div class="field-hint">لو المبلغ من حساب آخر ليك، ما تعتمدوش كدخل جديد.</div></div>'+
         '<div class="field" data-bank-conditional="category" hidden><label for="bankFixCategory">تصنيف المصروف</label><select id="bankFixCategory">'+catOpts+'</select></div>'+
         '<div class="field"><label for="bankFixParty">التاجر / المستفيد / الوصف (اختياري)</label><input id="bankFixParty" type="text" maxlength="100" value="'+esc(counterparty)+'"></div>'+
+        '<div class="bank-review-fx-note" id="bankFixFxNote" hidden>شراء بعملة غير عملة الحساب: هنحفظ الشراء للمراجعة المالية بدون خصم تقديري. لما تعرف مبلغ الخصم الحقيقي، أكّد التسوية من تفاصيل الشراء.</div>'+
         '<details class="bank-review-optional" id="bankFixAdvanced" '+(p.feeFormula||p.fee||p.vat||manualCandidates.length||pairs.length?'open':'')+'><summary>تفاصيل إضافية وتصحيحات متقدمة</summary>'+
           '<div class="field" style="margin-top:16px"><label for="bankFixTime">وقت العملية (اختياري)</label><input id="bankFixTime" type="time" value="'+esc(/^([01]\d|2[0-3]):[0-5]\d$/.test(p.transactionTime||'')?p.transactionTime:'')+'"><div class="field-hint">لو البنك ما ذكرش وقت العملية، سيُحفظ وقت استلام SMS منفصلًا.</div></div>'+
           '<div class="field"><label for="bankFixCurrency">عملة العملية الأصلية'+required+'</label><select id="bankFixCurrency">'+curOpts+'</select></div>'+
           '<div class="field" data-bank-conditional="currency-confirm" hidden><label><input id="bankFixConfirmCurrency" type="checkbox"> '+required+' أؤكد أنني غيّرت العملة بناءً على رسالة البنك</label></div>'+
           '<div class="field" data-bank-conditional="issuer" hidden><label><input id="bankFixConfirmIssuer" type="checkbox"> '+required+' أؤكد البلد والبنك بعد مراجعة دليل مستقل</label><div class="field-hint">التأكيد لا يسمح بربط رسالة موثوقة ببنك آخر عشوائيًا.</div></div>'+
-          '<div class="field"><label for="bankFixSettlement">مبلغ الخصم بعملة الحساب (للعملة الأجنبية فقط)</label><input id="bankFixSettlement" type="number" inputmode="decimal" min="0" step="0.01" placeholder="اتركه فارغًا لو لم يصل كشف الحساب"><div class="field-hint">مبلغ الخصم الحقيقي، مش سعر صرف تخميني.</div></div>'+
-          (p.kind==='purchase'&&r&&r.account&&r.instrument&&p.currency!==r.account.currency?'<div class="field"><label><input id="bankFixRetainPending" type="checkbox"> احفظ الشراء بدون احتساب الخصم حتى تتأكد من تسويته</label></div>':'')+
+          '<div class="field" data-bank-conditional="foreign" hidden><label for="bankFixSettlement">مبلغ الخصم الفعلي بعملة الحساب <span id="bankFixSettlementRequired" class="bank-required" hidden>*</span></label><input id="bankFixSettlement" type="number" inputmode="decimal" min="0" step="0.01" placeholder="من كشف البنك فقط"><div class="field-hint">اختياري لو اخترت «أكمّل التسوية لاحقًا». لا تخمن سعر الصرف.</div><label class="bank-review-pending"><input id="bankFixRetainPending" type="checkbox" checked> أكمّل التسوية لاحقًا (الاختيار الآمن)</label></div>'+
           '<div class="field"><label for="bankFixFee">رسوم إضافية مؤكدة (اختياري إلا إذا ذكرها البنك)</label><input id="bankFixFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="لا تكتب صفرًا إلا إذا تأكدت"><div class="field-hint">لا تستنتج رسومًا من فرق الرصيد.</div></div>'+
           (!item.parsed||!item.parsed.recognized||item.native.importProvenance==='untrusted-sms-xml'?'<div class="field"><label><input id="bankFixManualProof" type="checkbox"> '+required+' تحققت من الرسالة مع مصدر مستقل</label></div>':'')+
           (p.kind==='salary'&&p.accountRef?'<div class="field"><label><input id="bankFixConfirmAccountIdentity" type="checkbox"> أؤكد ربط الحساب المرجعي '+esc(p.accountRef)+' بالحساب المختار</label></div>':'')+
@@ -9950,6 +9954,16 @@ const SanadBankInbox = {
     if(hintTarget)hintTarget.textContent=kind==='card_repayment'?'الوجهة: حساب البطاقة الائتمانية المنتهية '+(parsed.cardLast4||'????')+'.':kind==='cash_withdrawal'?'اختر حساب الكاش الذي استلم النقد.':'لازم يكون حسابًا مختلفًا تملكه.';
     const label=el('bankFixTargetLabel');
     if(label)label.innerHTML=(kind==='card_repayment'?'البطاقة التي تم سدادها':kind==='cash_withdrawal'?'حساب الكاش الذي استلمته':'حساب الوجهة')+'<span class="bank-required">*</span>';
+    const foreign=kind==='purchase'&&!!account&&!!parsed.currency&&account.currency!==el('bankFixCurrency')?.value;
+    toggle('foreign',foreign);
+    const pending=el('bankFixRetainPending');
+    const settlement=el('bankFixSettlement');
+    const pendingSafe=!!pending?.checked;
+    const note=el('bankFixFxNote');
+    if(note)note.hidden=!(foreign&&pendingSafe);
+    const star=el('bankFixSettlementRequired');
+    if(star)star.hidden=!foreign||pendingSafe||!!settlement?.value;
+    if(settlement)settlement.setAttribute('aria-required',String(foreign&&!pendingSafe));
     const warn=el('bankFixIssuerWarning');
     if(warn){
       const bank=parsed.bankId&&UaeBankRegistryCore.get(parsed.bankId);
@@ -10099,6 +10113,9 @@ const SanadBankInbox = {
     const settlementInput=String((document.getElementById('bankFixSettlement')||{}).value||'').trim();
     if(settlementInput)buildOptions.confirmedSettlementAmount=settlementInput;
     if(document.getElementById('bankFixRetainPending')?.checked)buildOptions.allowPendingSettlement=true;
+    if(kind==='purchase'&&corrected.currency!==chosenAccount.currency&&!settlementInput&&!buildOptions.allowPendingSettlement){
+      this.correctionIssue('bankFixSettlement','ادخل مبلغ الخصم الفعلي من كشف البنك، أو فعّل «أكمّل التسوية لاحقًا» لحفظ الشراء بدون خصم مؤقت.');return;
+    }
     // Original source text remains attached. Currency changes require confirmation above.
     if(['deposit','incoming_transfer'].includes(kind)){
       if(!(document.getElementById('bankFixExternalIncome')||{}).checked){this.correctionIssue('bankFixExternalIncome','أكد إن المبلغ دخل من خارج حساباتك، وإلا اختَر تحويل بين حساباتك');return;}
@@ -10231,7 +10248,7 @@ const SanadBankInbox = {
 
 document.addEventListener('change',event=>{
   const id=event.target?.id||'';
-  if(['bankFixKind','bankFixSource','bankFixTarget','bankFixDate','bankFixCurrency'].includes(id)&&document.getElementById('bankFixKind'))SanadBankInbox.updateCorrectionFields(id==='bankFixKind');
+  if(['bankFixKind','bankFixSource','bankFixTarget','bankFixDate','bankFixCurrency','bankFixRetainPending','bankFixSettlement'].includes(id)&&document.getElementById('bankFixKind'))SanadBankInbox.updateCorrectionFields(id==='bankFixKind');
 });
 window.sanadBankRescanResult = function(requestId,added){try{SanadBankInbox.onRescanResult(String(requestId||''),Number(added));}catch(_){}};
 window.sanadHistoricalSmsPermissionResult = function(granted){try{SanadBankInbox.onHistoricalPermissionResult(!!granted);}catch(_){}};
