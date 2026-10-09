@@ -65,9 +65,9 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  }else{
   assert((await page.locator('.quick-chip[data-quick] .ci svg').count())>=3,'Default expense category quick actions must use local vector icons');
  }
- assert.equal(await page.locator('#topBar [data-act="open-settings"] svg').count(),1,'Home settings action must use accessible offline SVG icon');
+ assert.equal(await page.locator('#topBar .r25-header-actions svg').count(),1,'Brand header actions must use accessible offline SVG icon');
  record('Boot, offline vector navigation, meaningful screen, IndexedDB and onboarding');
- await page.evaluate(()=>go('settings'));await page.locator('details.bank-sync-advanced').evaluate(el=>{el.open=true;});await page.locator('[data-sanad-act="bank-sms-config"]').click();
+ await page.evaluate(()=>go('settings'));await page.locator('#r25Settings > .r25-settings-group [data-sanad-act="bank-sms-config"]').click();
  const configured=await page.evaluate(()=>localDateTimeInput(Date.now()-3600000));
  await page.locator('#bankSmsConfiguredStart').fill(configured);await page.locator('[data-sanad-act="bank-sms-config-save"]').click();
  await page.waitForFunction(v=>S.settings.bankSmsStartAt===parseLocalDateTime(v)&&!_criticalMutationInFlight,configured);
@@ -176,7 +176,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  const download=await downloadPromise;const backupPath=path.join(output,'synthetic-full-backup.json');await download.saveAs(backupPath);
  const saved=JSON.parse(fs.readFileSync(backupPath));assert.equal(saved.format,'SANAD_FULL_BACKUP');
  await page.evaluate(()=>go('home'));await addManual('expense',5);
- await page.evaluate(()=>go('settings'));await page.locator('[data-sanad-act="full-import"]').click();
+ await page.evaluate(()=>go('settings'));await page.locator('#r25Settings > .r25-settings-group [data-sanad-act="full-import"]').click();
  await page.locator('#sanadFullImport').setInputFiles(backupPath);await page.locator('.dialog-backdrop.on #dlgOk').click();
  await page.waitForFunction(expected=>stateFingerprint(snapshotState())===expected,fp);
  assert(await page.evaluate(async id=>!!(await SanadExtStorage.getReceipt(id)),expenseId));record('Full backup export/restore with receipt and fingerprint equality');
@@ -218,9 +218,9 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert(fit.bodyScroll<=fit.width+2&&fit.htmlScroll<=fit.width+2,'No horizontal page overflow on Android-sized viewport '+JSON.stringify(fit));
  assert.equal(await page.evaluate(()=>document.fonts.check('900 18px "Tajawal Local"')),true,'Approved Tajawal must be self-hosted and available offline');
  await page.evaluate(()=>go('home'));
- assert.equal(await page.locator('#v25Home').count(),1,'Prototype home hierarchy should be live, not old hero alone');
- assert.equal(await page.locator('#v25Home .v25-hero').count(),1);
- assert.equal(await page.locator('#v25Home .v25-review-btn').count(),1);
+ assert.equal(await page.locator('#r25Home').count(),1,'Prototype home hierarchy should be live, not old hero alone');
+ assert.equal(await page.locator('#r25Home .r25-hero').count(),1);
+ assert.equal(await page.locator('#r25Home .r25-review').count(),1);
  await page.screenshot({path:path.join(output,'v25-2-responsive-home-393.png')});
  for(const width of [320,360,430]){
    await page.setViewportSize({width,height:780});
@@ -228,7 +228,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
    const metrics=await page.evaluate(()=>({
      width:document.documentElement.clientWidth,
      scroll:Math.max(document.body.scrollWidth,document.documentElement.scrollWidth),
-     hero:(()=>{const r=document.querySelector('#v25Home .v25-hero').getBoundingClientRect();return {left:r.left,right:r.right,width:r.width};})(),
+     hero:(()=>{const r=document.querySelector('#r25Home .r25-hero').getBoundingClientRect();return {left:r.left,right:r.right,width:r.width};})(),
      navbar:document.querySelectorAll('#bottomNav [data-tab]').length,
      font:document.fonts.check('900 18px "Tajawal Local"')
    }));
@@ -247,7 +247,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
 
  await page.screenshot({path:path.join(output,'v25-2-real-wallet.png')});
  await page.evaluate(()=>go('settings'));
- await page.locator('[data-v252-subs]').click();
+ await page.locator('#r25Settings [data-act="go-subs"]').click();
  assert.equal(await page.evaluate(()=>S.tab),'subs','Legacy obligations remain reachable through settings');
  await page.evaluate(()=>go('home'));
  record('V25.2 live wallet: 5 tabs, country/provider/account selection, read-only double tap, financial invariant, obligations access');
@@ -271,9 +271,9 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  // Every major financial screen retains its original delegated actions,
  // but icon-only affordances must be offline SVG rather than emoji glyphs.
  await page.evaluate(()=>go('settings'));
- assert.equal(await page.locator('#view .li-ico svg.v25-ui-icon').count()>2,true,'Settings icons must be SVG');
+ assert.equal(await page.locator('#view .r25-action-icon svg.v25-ui-icon').count()>2,true,'Settings icons must be SVG');
  await page.evaluate(()=>go('tx'));
- assert.equal(await page.locator('#view .filter-row .search-wrap svg.v25-ui-icon').count(),1,'Transaction search has an offline SVG icon');
+ assert.equal(await page.locator('#view .r25-search svg.v25-ui-icon').count(),1,'Transaction search has an offline SVG icon');
  const beforeAppearance=await page.evaluate(()=>stateFingerprint(snapshotState()));
  for(const tab of ['home','accounts','tx','rep','settings']){
    await page.evaluate(tab=>go(tab),tab);
@@ -284,28 +284,28 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(()=>stateFingerprint(snapshotState())),beforeAppearance,'Visual navigation must not mutate financial ledger');
  for(const tab of ['rep','settings']){
    await page.evaluate(tab=>go(tab),tab);
-   const visiblePanels=await page.evaluate(()=>[...document.querySelectorAll('#view .card,#view .list,#view .stat-grid,#view .stat-card')]
+   const visiblePanels=await page.evaluate(()=>[...document.querySelectorAll('#view .r25-paper,#view .r25-stat,#view .r25-settings-group,#view .r25-report-primary')]
      .filter(el=>el.getBoundingClientRect().width>20)
      .map(el=>({className:el.className,opacity:Number(getComputedStyle(el).opacity),animation:getComputedStyle(el).animationName})));
    assert(visiblePanels.length>0,'Expected visible panels in '+tab);
    assert(visiblePanels.every(x=>x.opacity>=0.99&&x.animation==='none'),'Financial panels must not fade/blank on '+tab+': '+JSON.stringify(visiblePanels.slice(0,10)));
    if(tab==='rep'){
-     const selected=await page.evaluate(()=>{const e=document.querySelector('#view .tabs button.on');if(!e)return null;const s=getComputedStyle(e);return {text:e.textContent.trim(),color:s.color,bg:s.backgroundColor};});
+     const selected=await page.evaluate(()=>{const e=document.querySelector('#view .r25-period button[aria-pressed="true"]');if(!e)return null;const s=getComputedStyle(e);return {text:e.textContent.trim(),color:s.color,bg:s.backgroundColor};});
      assert(selected&&selected.text.length>0&&selected.color!==selected.bg,'Selected report period should be readable: '+JSON.stringify(selected));
    }
    await page.screenshot({path:path.join(output,'v25-screen-'+tab+'-no-fade.png')});
  }
  record('V25 transaction/report/settings visuals, SVG icon assets and navigation are live and read-only');
 
- await page.evaluate(()=>go('settings'));await page.locator('[data-sanad-act="lang"][data-value="en"]').click();
- await page.waitForFunction(()=>document.documentElement.dir==='ltr');await page.locator('[data-sanad-act="theme"][data-value="dark"]').click();
+ await page.evaluate(()=>go('settings'));await page.locator('#r25Settings .r25-inline-options [data-sanad-act="lang"][data-value="en"]').click();
+ await page.waitForFunction(()=>document.documentElement.dir==='ltr');await page.locator('#r25Settings .r25-inline-options [data-sanad-act="theme"][data-value="dark"]').click();
  await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
  await page.evaluate(()=>go('home'));await stableHome();
- const englishHero=await page.locator('#v25Home .v25-hero .wh-sub').innerText();
- assert.match(englishHero,/Primary account in/,'Primary account status should be English');
+ const englishHero=await page.locator('#r25Home .r25-hero .r25-eyebrow').innerText();
+ assert.match(englishHero,/Asset balances/,'Main asset currency line should be English');
  assert(!/[\u0600-\u06FF]/.test(englishHero),'Financial status description must not mix Arabic text into English view');
  await page.screenshot({path:path.join(output,'mobile-en-dark.png')});record('English LTR, translated primary-balance status and dark theme');
- for(const width of [360,1280]){await page.setViewportSize({width,height:852});await stableHome();assert(await page.evaluate(()=>{const a=document.querySelector('#v25Home .v25-page-head').getBoundingClientRect(),b=document.querySelector('#v25Home .v25-hero').getBoundingClientRect();return a.bottom<=b.top+1&&b.left>=-1&&b.right<=innerWidth+1;}),'V25 home header must not overlap the real balance hero');assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:path.join(output,'viewport-'+width+'.png')});}
+ for(const width of [360,1280]){await page.setViewportSize({width,height:852});await stableHome();assert(await page.evaluate(()=>{const a=document.querySelector('#r25Home .r25-page-title').getBoundingClientRect(),b=document.querySelector('#r25Home .r25-hero').getBoundingClientRect();return a.bottom<=b.top+1&&b.left>=-1&&b.right<=innerWidth+1;}),'V25 home header must not overlap the real balance hero');assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:path.join(output,'viewport-'+width+'.png')});}
  record('360/393/1280 widths without page overflow');
 
  await page.evaluate(()=>{window.__qaRows.push({id:'qa-after-scan',title:'Emirates NBD',packageName:'sms:ENBD',postedAt:Date.now(),text:'لقد تم ايداع AED 10.00 في رقم حسابك 012XXX50XXX01 OBP TR REF QAAFTERSCAN01. الرصيد المتوفر هو AED 9,031.66'});});
