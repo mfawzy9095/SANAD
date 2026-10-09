@@ -425,7 +425,10 @@ jobs:
           assert 'data:image/' not in splash
           assert 'id="sanadSplashMark"' in splash
           assert 'SANAD' in splash
-          assert '.webp' not in splash
+          assert '<img src="img/sanad-logo.webp"' in splash
+          # Only a local, packaged RIFF/WEBP asset is permitted; no inline or remote media.
+          logo=Path("app/src/main/assets/img/sanad-logo.webp").read_bytes()
+          assert len(logo)>4000 and logo[:4]==b'RIFF' and logo[8:12]==b'WEBP'
 
           card=h[h.index("async function saveCard"):h.index("async function archiveInstrument",h.index("async function saveCard"))]
           assert "defaultTopupAccountId: isPrepaid ? prepaidFundingSourceId : null" in card
