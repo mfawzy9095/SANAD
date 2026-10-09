@@ -63,7 +63,7 @@
       budgets:{},saving:{amount:0,currency:'EGP',saved:0,targetDate:null},
       warnPct:80,alertPct:100,lastFx:{},dismissedReminders:{},
       defaultCountry:'UAE',primaryAccountByCountry:{},lastExpenseSourceByCountry:{},
-      categoryBudgets:{},categoryOrder:{expense:[],income:[]},overallSpendingLimits:{},budgetAlerts:{}
+      categoryBudgets:{},categoryOrder:{expense:[],income:[]},overallSpendingLimits:{},budgetAlerts:{},
       defaultAccountByCountry:{}, defaultInstrumentByCountry:{}
     };
     for (const [k,def] of Object.entries(D)){
@@ -246,7 +246,7 @@
         budgets:{},saving:{amount:0,currency:'EGP',saved:0,targetDate:null},
         warnPct:80,alertPct:100,lastFx:{},dismissedReminders:{},
         defaultCountry:'UAE',primaryAccountByCountry:{},lastExpenseSourceByCountry:{},
-        categoryBudgets:{},categoryOrder:{expense:[],income:[]},overallSpendingLimits:{},budgetAlerts:{}
+        categoryBudgets:{},categoryOrder:{expense:[],income:[]},overallSpendingLimits:{},budgetAlerts:{},
         defaultAccountByCountry:{}, defaultInstrumentByCountry:{}
       }, state.settings || {})
     };
