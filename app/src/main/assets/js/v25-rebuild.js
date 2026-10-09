@@ -108,13 +108,19 @@ viewRep=function(){
  const categories=Object.entries(ds.categoryByCur?.[cur]||{}).sort((a,b)=>b[1]-a[1]);
  const top=Math.max(1,...categories.map(x=>Number(x[1])||0));
  const cat='<div class="r25-categories">'+(categories.length?categories.map(([key,val])=>'<div class="r25-category"><div><b>'+esc(Finance.getCat('expense',key)?.n||key)+'</b><span class="amt-val">'+money(val,cur)+'</span></div><i><em style="width:'+Math.max(0,Math.min(100,Math.round(Number(val)/top*100)))+'%"></em></i></div>').join(''):'<p>لا توجد مصروفات مؤكدة لهذا النطاق.</p>')+'</div>';
- const uncertainty=(inc===null||spend===null)?
- '<div class="r25-uncertain" role="status"><strong>إجماليات التقرير غير مؤكدة</strong><span>توجد عملية مالية غير محسومة. لا يُعرض صافي تقديري باعتباره رصيداً صحيحاً.</span></div>':'';
+ const pending=Number(ds.pendingSettlementCount)||0;
+ const uncertainty=(inc===null||spend===null||pending>0)?
+ '<div class="r25-uncertain" role="status"><strong>إجماليات التقرير غير مؤكدة</strong>'+
+ (pending?'<span>'+pending+' شراء يحتاج تأكيد مبلغ الخصم بعملة الحساب.</span><span>المتبقي غير مؤكد حتى تأكيد مبالغ الخصم.</span>':'')+
+ '<span>توجد عملية مالية غير محسومة. لا يُعرض صافي تقديري باعتباره رصيداً صحيحاً.</span></div>':'';
+ const count=ReportCore.distinctSourceTransactionCount(ds.expenses||[],cur);
+ const avg=spend===null?'غير معروف':money(count?spend/count:0,cur);
+ const average='<div class="r25-stat r25-report-average stat-card"><span class="lbl">متوسط المعاملة</span><b class="v amt-val">'+avg+'</b></div>';
  // Detailed legacy reporting remains available without occupying the new UI.
  const advanced=more(previous.report(),'تفاصيل التقارير والميزانيات المتقدمة');
  const body=tabs+(S.repPeriod==='month'||S.repPeriod==='6months'?month:'')+
  '<div class="r25-report-filter"><label>العملة'+currencies+'</label><label>الحساب'+acctOpts+'</label></div>'+
- uncertainty+main+metrics+section('المصروفات عبر الفترة')+'<div class="r25-paper">'+bars+'</div>'+section('التصنيفات')+'<div class="r25-paper">'+cat+'</div>'+advanced;
+ uncertainty+main+metrics+average+section('المصروفات عبر الفترة')+'<div class="r25-paper">'+bars+'</div>'+section('التصنيفات')+'<div class="r25-paper">'+cat+'</div>'+advanced;
  return warning()+frame('Reports',countryInfo(S.activeCountry).name,body);
 };
 const oldSet=previous.settings;
