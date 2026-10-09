@@ -116,3 +116,7 @@ main#view{overflow-x:hidden;padding:4px 13px calc(117px + env(safe-area-inset-bo
 @media(max-width:360px){#sanadScanDialog{padding-inline:12px}.sanad-scan-actions{gap:5px}.sanad-scan-metrics{gap:6px}.v25-hero{padding:14px}.v25-payment-card{flex-basis:83vw;min-width:83vw}}
 @media(max-height:690px){.sanad-scan-art{width:58px!important;height:58px!important;margin:3px auto!important}.sanad-scan-art:before{width:37px!important;height:42px!important}.sanad-scan-metrics{margin:6px 0}.sanad-scan-metric{padding:7px}.sanad-scan-note{margin:3px 0}}
 @media(prefers-reduced-motion:reduce){#sanadBootSplash .v25-loading-track:before{animation:none}.sanad-scan-art:after{animation:none}}
+
+/* Higher specificity than the legacy 128px splash-logo rule. */
+#sanadBootSplash .sb-mark img.v25-poster{width:100%;height:auto;max-height:calc(100dvh - 116px);min-height:0;flex:1;object-fit:contain;object-position:center;filter:none;}
+#sanadBootSplash .sb-mark .v25-loading{flex:0 0 110px;min-height:110px;}
