@@ -137,7 +137,8 @@ viewSet=function(){
  act('data-sanad-act="bank-inbox"','مراجعة العمليات','الحركات التي تحتاج تأكيدك','shield')+
  act('data-sanad-act="bank-sms-recent"','استيراد الجديد','فحص الرسائل الجديدة دون تكرار','sms')+
  act('data-sanad-act="bank-sms-history"','استيراد الرسائل السابقة','تاريخ أو نطاق زمني محدد','calendar')+
- act('data-sanad-act="bank-sms-config"','إعدادات الاستيراد',bankStatus,'settings'))+
+ act('data-sanad-act="bank-sms-config"','إعدادات الاستيراد',bankStatus,'settings')+
+ act('data-sanad-act="bank-learning"','قواعد التعلّم','مراجعة القواعد المكتسبة وتعطيل غير الصحيح','list'))+
  sec('البيانات والنسخ الاحتياطي',
  act('data-sanad-act="full-export"','نسخة احتياطية كاملة','نسخة محلية قابلة للاسترجاع','download')+
  act('data-sanad-act="full-import"','استرجاع النسخة','من ملف محفوظ على جهازك','upload')+
