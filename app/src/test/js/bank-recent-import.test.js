@@ -96,3 +96,36 @@ async function scenario(status,mode='recent',permission=true,extra={}){
  assert.strictEqual((await inbox.sync({force:true})).added,1);
  console.log('Concurrent bank scans preserve request policy and recover after failures: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});
+
+
+// UI regression: a 7-day quick scan never silently reopens the full historical range,
+// and financial review keeps the bank message timestamp distinct from SMS receipt time.
+assert(html.includes('Math.max(now-7*86400000,BankIngestionCore.recentScanStart(compatible,now,floor))'));
+assert(html.includes('استلام الرسالة: '));
+assert(html.includes('عرض نص الرسالة الأصلية'));
+assert(html.includes('aria-label="نسبة التقدم"'));
+assert(html.includes('data-sanad-act="bank-fix"'));
+{
+ const a=html.indexOf('function bankTxSourceHtml(t,acc,card){'),b=html.indexOf('function txRowHtml(t, withSwipe){',a);
+ assert(a>=0&&b>a,'compact bank source helper exists');
+ const state={institutions:[{id:'enbd-institution',bankRegistryId:'emirates-nbd',name:'Emirates NBD Bank P.J.S.C'}]};
+ const ctx={S:state,UaeBankRegistryCore:{get:()=>({short:'ENBD'})},bankUiShort:()=> 'ENBD',esc:x=>String(x),financialInstitutionMark:()=>'<mark/>'};
+ vm.createContext(ctx);
+ const view=vm.runInContext('('+html.slice(a,b).trim().replace(/}\s*$/,'}')+')',ctx);
+ const card=view({}, {institutionId:'enbd-institution',name:'full name',type:'credit'},{type:'credit_card',last4:'4021'});
+ assert(card.includes('ENBD')&&card.includes('4021')&&card.includes('ائتمان'));
+ assert(!card.includes('P.J.S.C'),'legal bank suffix must not clutter transaction row');
+}
+{
+ const a=html.indexOf('  correctionSourceOptions(parsed,selected){'),b=html.indexOf('  correctionTargetOptions(parsed,selected){',a);
+ assert(a>=0&&b>a,'review account/card picker exists');
+ const state={institutions:[{id:'bank',bankRegistryId:'emirates-nbd'}],accounts:[{id:'credit',institutionId:'bank',name:'long legal company account name',type:'credit',currency:'AED',country:'UAE'}],paymentInstruments:[{id:'4021',accountId:'credit',type:'credit_card',last4:'4021'}]};
+ const ctx={S:state,UaeBankRegistryCore:{get:()=>({short:'ENBD'})},bankUiShort:()=> 'ENBD',countryInfo:()=>({name:'الإمارات'}),esc:x=>String(x)};
+ vm.createContext(ctx);
+ const ui=vm.runInContext('({'+html.slice(a,b)+'})',ctx);
+ const selected=ui.correctionSourceOptions({kind:'outgoing_transfer'},'instrument:4021');
+ assert(selected.includes('value="account:credit"'));
+ assert(selected.includes('value="instrument:4021" selected'));
+ assert(selected.includes('حساب سداد بطاقة')&&selected.includes('بطاقة ائتمان'));
+ assert(!selected.includes('long legal company account name'));
+}
