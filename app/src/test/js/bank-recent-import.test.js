@@ -129,3 +129,56 @@ assert(html.includes('data-sanad-act="bank-fix"'));
  assert(selected.includes('حساب سداد بطاقة')&&selected.includes('بطاقة ائتمان'));
  assert(!selected.includes('long legal company account name'));
 }
+
+
+// QA regression: priority order is display-only and is saved atomically.
+(async()=>{
+ const state={settings:{categoryOrder:{expense:['transport','food'],income:[]}},categories:{expense:[],income:[]}};
+ const defaults={expense:[{id:'food'},{id:'transport'},{id:'bills'}],income:[]};
+ const a=html.indexOf('  allCats(type){'),b=html.indexOf('  periodRange(',a);
+ assert(a>=0&&b>a);
+ const ctx={S:state,DEFAULT_CATS:defaults,Map};vm.createContext(ctx);
+ const finance=vm.runInContext('({'+html.slice(a,b)+'})',ctx);
+ assert.deepStrictEqual(Array.from(finance.allCats('expense'),x=>x.id),['transport','food','bills']);
+ const s=html.indexOf('async function saveCategorySort(type,ids){'),e=html.indexOf('function openCatEdit(type, id){',s);
+ assert(s>=0&&e>s);
+ let writes=0,fail=false;
+ const saveCtx={S:state,Finance:finance,canWrite:()=>true,Set,Array,Object,document:{addEventListener:()=>{}},toast:()=>{},commitCriticalMutation:async task=>{
+   if(fail)return {ok:false};
+   await task();writes++;return {ok:true};
+ }};
+ vm.createContext(saveCtx);vm.runInContext(html.slice(s,e),saveCtx);
+ assert.strictEqual(await saveCtx.saveCategorySort('expense',['bills','food','transport']),true);
+ assert.strictEqual(writes,1);
+ assert.deepStrictEqual(Array.from(state.settings.categoryOrder.expense),['bills','food','transport']);
+ assert.strictEqual(await saveCtx.saveCategorySort('expense',['bills','bills','food']),false);
+ assert.strictEqual(writes,1,'duplicate category sort must not write finance state');
+ fail=true;
+ assert.strictEqual(await saveCtx.saveCategorySort('expense',['transport','bills','food']),false);
+ assert.deepStrictEqual(Array.from(state.settings.categoryOrder.expense),['bills','food','transport'],'failed persist must not change order in this harness');
+ assert(html.includes('data-cat-drag=')&&html.includes("data-cat-step=")&&html.includes('grid-template-columns:repeat(3,minmax(0,1fr))'));
+ console.log('Ordered category grid: semantic list sorting, persisted drag priorities and rejected unsafe order: PASS');
+})().catch(e=>{console.error(e);process.exitCode=1;});
+
+// QR-like suffix is not a bank identity: only the authentic issuer may be a correction source.
+{
+ const state={
+  institutions:[{id:'enbd',bankRegistryId:'emirates-nbd'},{id:'ei',bankRegistryId:'emirates-islamic'}],
+  accounts:[{id:'debit',type:'bank',name:'ENBD debit',institutionId:'enbd',country:'UAE',currency:'AED'},
+            {id:'credit',type:'credit',name:'EI credit',institutionId:'ei',country:'UAE',currency:'AED'}],
+  paymentInstruments:[{id:'ei0308',accountId:'credit',type:'credit_card',last4:'0308',country:'UAE'}]
+ };
+ const a=html.indexOf('  correctionSourceOptions(parsed,selected){'),b=html.indexOf('  correctionDraft(item){',a);
+ assert(a>=0&&b>a);
+ const ctx={S:state,UaeBankRegistryCore:{get:id=>({id,short:id==='emirates-nbd'?'ENBD':'EI'})},bankUiShort:b=>b.short,countryInfo:()=>({name:'UAE'}),esc:x=>String(x)};
+ vm.createContext(ctx);
+ const u=vm.runInContext('({'+html.slice(a,b)+'})',ctx);
+ const p={kind:'card_repayment',bankId:'emirates-nbd',country:'UAE',currency:'AED',cardLast4:'0308'};
+ const sources=u.correctionSourceOptions(p,'account:debit');
+ assert(sources.includes('account:debit')&&!sources.includes('account:credit')&&!sources.includes('ei0308'),'card-repayment source must be ENBD, not EI payee');
+ const targets=u.correctionTargetOptions(p,'credit');
+ assert(targets.includes('value="credit" selected'),'EI card can be the target of ENBD repayment');
+ assert(!targets.includes('value="debit"'));
+}
+assert(html.includes('id="bankFixIssues"')&&html.includes('bank-required')&&html.includes('data-bank-conditional="target"')&&html.includes('data-bank-conditional="incoming"'));
+assert(html.includes('data-sanad-act="bank-edit-accounts"'));
