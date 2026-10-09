@@ -56,6 +56,19 @@ async function locateImportNotificationAction(label){
  throw Error('Import notification action not visible: '+label);
 }
 const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);};
+const smsShadePresent=()=>{
+ const dump=execFileSync('adb',['shell','dumpsys','notification','--noredact'],{encoding:'utf8',maxBuffer:12*1024*1024});
+ // Compare only ACTIVE NotificationRecords; historical ranking/usage counts are excluded.
+ return dump.split('\n').some(line=>line.includes('NotificationRecord(')&&line.includes('pkg='+pkg)&&line.includes('id=92013'));
+};
+const waitSmsShadeGone=async(label)=>{
+ for(let n=0;n<45;n++){
+  if(!smsShadePresent())return;
+  await new Promise(r=>setTimeout(r,150));
+ }
+ throw Error('SMS foreground notification remains in Android shade after '+label);
+};
+
 (async()=>{
  adb('shell','am','start','-n',pkg+'/com.sanad.v9test.MainActivity');
  const discovery=[];
@@ -156,6 +169,9 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
   await new Promise(r=>setTimeout(r,100));
  }
  assert(adb('shell','dumpsys','activity','services',pkg).includes('isForeground=true'),'Native service must actually enter foreground');
+ assert.equal(smsShadePresent(),true,'Visible ongoing SMS notification must exist while service runs');
+ pass('Android notification shade shows live foreground SMS progress');
+
  const txBeforeBackground=await page.evaluate(()=>JSON.stringify(S.transactions));
  await page.evaluate(()=>{window.qaImportDone=false;SanadBankInbox.importHistoricalSms(0,{fromDate:1}).then(()=>{window.qaImportDone=true;});});
  await page.waitForFunction(()=>SanadBankInbox.historicalImporting&&SanadBankInbox.historicalProgress?.scanned>=20);
@@ -168,6 +184,9 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  assert.equal(await page.evaluate(()=>JSON.stringify(S.transactions)),txBeforeBackground);
  for(let n=0;n<30&&adb('shell','dumpsys','activity','services',pkg).includes('isForeground=true');n++)await new Promise(r=>setTimeout(r,100));
  assert(!adb('shell','dumpsys','activity','services',pkg).includes('isForeground=true'),'Foreground service stops after completion');
+ await waitSmsShadeGone('completed import');
+ pass('Completed SMS scan removes its notification from system notification shade');
+
  adb('shell','am','start','-n',pkg+'/com.sanad.v9test.MainActivity');
  pass('Native foreground SMS import completes while app is behind HOME; actual count, unchanged ledger, service cleanup');
  for(const [label,status] of [['إيقاف مؤقت','paused'],['إلغاء','cancelled']]){
@@ -203,6 +222,8 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
   await page.waitForFunction(()=>window.qaImportDone);
   const stopped=await page.evaluate(()=>SanadExtStorage.get('bankImportActive',null));
   assert.equal(stopped.status,status);assert(stopped.total.scanned>0&&stopped.total.scanned<backgroundScan.total.scanned,'Notification action must interrupt actual unfinished reading');
+  await waitSmsShadeGone(status+' import');
+
   assert.equal(await page.evaluate(()=>JSON.stringify(S.transactions)),txBeforeBackground);
   adb('shell','am','start','-n',pkg+'/com.sanad.v9test.MainActivity');
   if(status==='paused'){
@@ -240,6 +261,18 @@ const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);}
  assert.equal(resumed.status,'complete');assert.equal(resumed.throughDate,beforeKill.throughDate);assert.equal(resumed.total.scanned,backgroundScan.total.scanned);
  assert.equal(await page.evaluate(()=>JSON.stringify(S.transactions)),txBeforeBackground);
  pass('Actual Android process force-stop and cold reopen retain cursor; bounded resume completes without loss or repeated posting');
+ await waitSmsShadeGone('force-stop and resumed completion');
+ assert(await page.evaluate(()=>document.fonts.check('900 18px "Tajawal Local"')),'Embedded Tajawal font should work offline inside native WebView');
+ await page.evaluate(()=>go('home'));
+ const nativeLayout=await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),home:!!document.querySelector('#v25Home .v25-hero')}));
+ assert(nativeLayout.home&&nativeLayout.scroll<=nativeLayout.width+2,'Android WebView home overflow: '+JSON.stringify(nativeLayout));
+ await page.evaluate(()=>go('accounts'));
+ const nativeWallet=await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),bank:!!document.querySelector('[data-v252-bank]')}));
+ assert(nativeWallet.bank&&nativeWallet.scroll<=nativeWallet.width+2,'Android WebView bank/cards layout overflow: '+JSON.stringify(nativeWallet));
+ await page.screenshot({path:path.join(out,'android-wallet-v25.png')});
+ pass('V25 wallet/home, offline branded font, and viewport bounds on native Android WebView');
+ await page.evaluate(()=>go('home'));
+
  fs.writeFileSync(path.join(out,'import-performance.json'),JSON.stringify({scope:'Android 35 emulator, native provider, 160 nonfinancial synthetic rows plus financial fixtures; elapsed stage timings, not Samsung measurements',background:backgroundScan,resumed},null,2));
 
  await page.waitForFunction(()=>Number(getComputedStyle(document.getElementById('toast')).opacity)<0.01&&Number(getComputedStyle(document.getElementById('backdrop')).opacity)<0.01&&Number(getComputedStyle(document.querySelector('#view .wallet-hero')||document.getElementById('view')).opacity)>0.99);
