@@ -277,7 +277,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  const beforeAppearance=await page.evaluate(()=>stateFingerprint(snapshotState()));
  for(const tab of ['home','accounts','tx','rep','settings']){
    await page.evaluate(tab=>go(tab),tab);
-   const box=await page.evaluate(()=>({tab:S.tab,width:document.documentElement.clientWidth,pageWidth:Math.max(document.body.scrollWidth,document.documentElement.scrollWidth),visible:document.getElementById('view').innerText().trim().length}));
+   const box=await page.evaluate(()=>({tab:S.tab,width:document.documentElement.clientWidth,pageWidth:Math.max(document.body.scrollWidth,document.documentElement.scrollWidth),visible:document.getElementById('view').innerText.trim().length}));
    assert.equal(box.tab,tab);assert(box.visible>5,'Page '+tab+' must display real text content');assert(box.pageWidth<=box.width+2,'Page '+tab+' must fit 393px');
    await page.screenshot({path:path.join(output,'v25-screen-'+tab+'-393.png')});
  }
