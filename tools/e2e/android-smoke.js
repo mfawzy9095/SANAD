@@ -68,6 +68,7 @@ const smsShadePresent=()=>{
    break;
   }catch(e){
    lastError=e;
+   dump=null;
    try{execFileSync('sleep',['0.25']);}catch(_){}
   }
  }
