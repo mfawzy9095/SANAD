@@ -321,6 +321,7 @@ jobs:
           grep -q "ReminderCore.dueNotifications(S.recurring" "$HTML"
           node --check "$REMINDER_CORE"
           node app/src/test/js/reminder-core.test.js
+          set -x # Temporary diagnostics for silent report-core grep checks
           REPORT_CORE="app/src/main/assets/js/report-core.js"
           test -s "$REPORT_CORE"
           REPORT_CORE_SHA="$(sha256sum "$REPORT_CORE" | awk '{print $1}')"
