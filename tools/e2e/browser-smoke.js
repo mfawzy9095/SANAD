@@ -282,6 +282,15 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
    await page.screenshot({path:path.join(output,'v25-screen-'+tab+'-393.png')});
  }
  assert.equal(await page.evaluate(()=>stateFingerprint(snapshotState())),beforeAppearance,'Visual navigation must not mutate financial ledger');
+ for(const tab of ['rep','settings']){
+   await page.evaluate(tab=>go(tab),tab);
+   const visiblePanels=await page.evaluate(()=>[...document.querySelectorAll('#view .card,#view .list,#view .stat-grid,#view .stat-card')]
+     .filter(el=>el.getBoundingClientRect().width>20)
+     .map(el=>({className:el.className,opacity:Number(getComputedStyle(el).opacity),animation:getComputedStyle(el).animationName})));
+   assert(visiblePanels.length>0,'Expected visible panels in '+tab);
+   assert(visiblePanels.every(x=>x.opacity>=0.99&&x.animation==='none'),'Financial panels must not fade/blank on '+tab+': '+JSON.stringify(visiblePanels.slice(0,10)));
+   await page.screenshot({path:path.join(output,'v25-screen-'+tab+'-no-fade.png')});
+ }
  record('V25 transaction/report/settings visuals, SVG icon assets and navigation are live and read-only');
 
  await page.evaluate(()=>go('settings'));await page.locator('[data-sanad-act="lang"][data-value="en"]').click();
