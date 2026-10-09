@@ -268,12 +268,20 @@ const waitSmsShadeGone=async(label)=>{
  assert.equal(await page.locator('#sanadScanMini').isVisible(),false,'Dismissed summary chip must disappear');
  assert(await page.evaluate(()=>document.fonts.check('900 18px "Tajawal Local"')),'Embedded Tajawal font should work offline inside native WebView');
  await page.evaluate(()=>go('home'));
+ await page.waitForFunction(()=>S.tab==='home'&&!!document.querySelector('#v25Home .v25-hero'));
  const nativeLayout=await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),home:!!document.querySelector('#v25Home .v25-hero')}));
  assert(nativeLayout.home&&nativeLayout.scroll<=nativeLayout.width+2,'Android WebView home overflow: '+JSON.stringify(nativeLayout));
+ await new Promise(r=>setTimeout(r,700)); // Android compositor capture is async to WebView JS.
+ await page.screenshot({path:path.join(out,'android-home-v25.png')});
  await page.evaluate(()=>go('accounts'));
- const nativeWallet=await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),bank:!!document.querySelector('[data-v252-bank]')}));
- assert(nativeWallet.bank&&nativeWallet.scroll<=nativeWallet.width+2,'Android WebView bank/cards layout overflow: '+JSON.stringify(nativeWallet));
+ await page.waitForFunction(()=>S.tab==='accounts'&&!!document.getElementById('v252Wallet')&&document.querySelectorAll('[data-v252-bank]').length>0);
+ const nativeWallet=await page.evaluate(()=>({tab:S.tab,width:document.documentElement.clientWidth,scroll:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),bank:!!document.querySelector('[data-v252-bank]'),walletVisible:(()=>{let x=document.querySelector('#v252Wallet');let r=x.getBoundingClientRect();return r.height>100&&r.width>100;})()}));
+ assert(nativeWallet.walletVisible&&nativeWallet.bank&&nativeWallet.scroll<=nativeWallet.width+2,'Android WebView bank/cards layout overflow: '+JSON.stringify(nativeWallet));
+ await new Promise(r=>setTimeout(r,800)); // Capture actual wallet after UI compositing, not previous home frame.
  await page.screenshot({path:path.join(out,'android-wallet-v25.png')});
+ const crypto=require('crypto');
+ const screenHash=p=>crypto.createHash('sha256').update(fs.readFileSync(path.join(out,p))).digest('hex');
+ assert.notEqual(screenHash('android-home-v25.png'),screenHash('android-wallet-v25.png'),'Native home and wallet pixels must differ; stale screenshots are not a visual pass');
  assert.equal(await page.locator('#v252Wallet').isVisible(),true,'Wallet must be visible on-device, not covered by a stale import summary');
  pass('V25 wallet/home, offline branded font, and viewport bounds on native Android WebView');
  await page.evaluate(()=>go('home'));
