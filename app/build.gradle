@@ -46,6 +46,16 @@ android {
             resValue 'string', 'app_name', 'SANAD CI — سند'
             matchingFallbacks = ['debug']
         }
+        // Integration sandbox: a different Android package with isolated app data.
+        // This is NOT a V25.2 UI release; the approved V25.2 visual file
+        // must be audited before any runtime screen is replaced.
+        v25UiPreview {
+            initWith debug
+            applicationIdSuffix '.v25uipreview'
+            versionNameSuffix '-v25-ui-preview'
+            resValue 'string', 'app_name', 'SANAD UI Preview — سند'
+            matchingFallbacks = ['debug']
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
