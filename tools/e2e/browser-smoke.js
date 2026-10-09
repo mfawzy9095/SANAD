@@ -294,7 +294,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.evaluate(async id=>{const account=Finance.getAccount(id);const result=await commitCriticalMutation(()=>{S.paymentInstruments.push({id:'qa-pending-card',name:'Synthetic debit',type:'debit_card',country:account.country,accountId:id,institutionId:account.institutionId,last4:'6452'});return true;});if(!result.ok)throw Error('Pending fixture card rejected');window.__qaRows=[{id:'qa-pending-fx',title:'EmiratesNBD',postedAt:Date.now(),text:'Purchase EUR 23.45 at Synthetic Store using debit card ending 6452. Transaction reference PENDINGQA01'}];},bankId);
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());
  await page.evaluate(()=>SanadBankInbox.openCorrection('qa-pending-fx'));
- await page.locator('#bankFixRetainPending').check();
+ await page.locator('#bankFixAdvanced').evaluate(el=>{el.open=true;});await page.locator('#bankFixRetainPending').check();
  await page.locator('[data-sanad-act="bank-fix-save"]').click();
  await page.waitForFunction(n=>S.transactions.length===n+1&&!_criticalMutationInFlight,pendingBefore.count);
  await page.waitForFunction(()=>document.getElementById('sheet').dataset.sheetType==='bank-inbox'&&!SanadBankInbox.syncing);
@@ -323,7 +323,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  const autoBefore=await page.evaluate(id=>({count:S.transactions.length,balance:Finance.accountBalance(id)}),bankId);
  await page.evaluate(()=>{window.__qaRows=[{id:'qa-late-original',title:'EmiratesNBD',packageName:'sms:ENBD',postedAt:Date.now(),text:'Purchase USD 10.00 at Synthetic Late Shop using debit card ending 6452. Transaction reference AUTOFX01'}];});
  await page.evaluate(()=>SanadBankInbox.refreshRecentSms());await page.evaluate(()=>SanadBankInbox.openCorrection('qa-late-original'));
- await page.locator('#bankFixRetainPending').check();await page.locator('[data-sanad-act="bank-fix-save"]').click();
+ await page.locator('#bankFixAdvanced').evaluate(el=>{el.open=true;});await page.locator('#bankFixRetainPending').check();await page.locator('[data-sanad-act="bank-fix-save"]').click();
  await page.waitForFunction(()=>document.getElementById('sheet').dataset.sheetType==='bank-inbox'&&!SanadBankInbox.syncing&&S.transactions.some(t=>t.bankImportEventId==='qa-late-original'));
  const autoId=await page.evaluate(()=>S.transactions.find(t=>t.bankImportEventId==='qa-late-original').id);
  await page.evaluate(()=>{const date=S.transactions.find(t=>t.bankImportEventId==='qa-late-original').date;window.__qaRows=[{id:'qa-late-proof',title:'EmiratesNBD',packageName:'sms:ENBD',postedAt:Date.now(),text:'Purchase settlement completed. Original purchase: USD 10.00. Original reference: AUTOFX01. Purchase date: '+date+'. Settled amount excluding fees: AED 37.00. Total fees: AED 1.00. Debit card ending 6452.'}];});
