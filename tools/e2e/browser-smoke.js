@@ -65,7 +65,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  }else{
   assert((await page.locator('.quick-chip[data-quick] .ci svg').count())>=3,'Default expense category quick actions must use local vector icons');
  }
- assert.equal(await page.locator('#topBar .r25-header-actions svg').count(),1,'Brand header actions must use accessible offline SVG icon');
+ assert((await page.locator('#topBar .r25-header-actions svg').count())>=2,'Both brand-header actions must render accessible offline SVG icons');
  record('Boot, offline vector navigation, meaningful screen, IndexedDB and onboarding');
  await page.evaluate(()=>go('settings'));await page.locator('#r25Settings > .r25-settings-group [data-sanad-act="bank-sms-config"]').click();
  const configured=await page.evaluate(()=>localDateTimeInput(Date.now()-3600000));
