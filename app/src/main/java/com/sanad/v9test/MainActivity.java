@@ -502,7 +502,9 @@ public final class MainActivity extends Activity {
 
         @JavascriptInterface
         public void endSmsImportForeground() {
-            stopService(new Intent(MainActivity.this, SmsImportService.class));
+            // Serialize with startForegroundService() on the Android UI thread.
+            // Remove the ongoing notification as well as stopping the service.
+            runOnUiThread(() -> SmsImportService.finish(MainActivity.this));
         }
 
         @JavascriptInterface
