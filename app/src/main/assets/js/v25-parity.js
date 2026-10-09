@@ -11,7 +11,10 @@ const money=(value,cur)=>{
   return amtText(value)+' '+esc(Finance.curSymbol(cur));
 };
 const safeColor=value=>/^#[0-9a-f]{6}$/i.test(String(value||''))?value:'#066b83';
-const countryBar=()=>V.countryBar();
+const tr=(ar,en)=>S.settings&&S.settings.language==='en'?en:ar;
+const countryBar=()=>'<div class="v252-country" role="group" aria-label="'+tr('اختيار البلد','Select country')+'">'+
+  [['UAE','الإمارات','UAE'],['EGY','مصر','Egypt'],['MAR','المغرب','Morocco']].map(([code,ar,en])=>
+    '<button type="button" data-v252-country="'+code+'" class="'+(S.activeCountry===code?'active':'')+'" aria-pressed="'+(S.activeCountry===code)+'">'+tr(ar,en)+'</button>').join('')+'</div>';
 function title(text){return '<div class="v25-page-head"><h2>'+text+'</h2><small>'+esc(countryInfo(S.activeCountry).name)+'</small></div>'}
 function subhead(heading,action,label){
   return '<div class="v25-heading"><h3>'+heading+'</h3>'+(action?'<button type="button" '+action+'>'+label+'</button>':'')+'</div>';
@@ -34,17 +37,19 @@ function realHome(){
     (tx.toAccountId&&all.some(a=>a.id===tx.toAccountId))
   )).sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,4):[];
   const reviewButton='<button type="button" class="v25-review-btn" data-sanad-act="bank-inbox">'+
-    '<span><b>عمليات تحتاج تأكيدك</b><small>راجع العمليات غير المؤكدة قبل اعتمادها</small></span><span class="pill">المراجعة ←</span></button>';
+    '<span><b>'+tr('عمليات تحتاج تأكيدك','Transactions need confirmation')+'</b><small>'+tr('راجع العمليات غير المؤكدة قبل اعتمادها','Review unresolved transactions before posting')+'</small></span><span class="pill">'+tr('المراجعة ←','Review →')+'</span></button>';
   const logoButton='<button type="button" data-sanad-act="amount-visibility" aria-label="'+(amountsMasked()?'إظهار المبالغ':'إخفاء المبالغ')+'">'+(amountsMasked()?'إظهار':'إخفاء')+'</button>';
-  const hero='<div class="v25-hero"><small>أرصدة الأصول من السجل · '+esc(cur)+'</small>'+
+  const status=primary?tr('الحساب الأساسي في '+countryInfo(country).name,'Primary account in '+({UAE:'UAE',EGY:'Egypt',MAR:'Morocco'}[country]||country)+' · '+(mainBalance===null?'Balance unconfirmed':'Ledger balance')):tr('لا يوجد حساب أساسي','No primary account');
+  const hero='<div class="v25-hero"><small>'+tr('أرصدة الأصول من السجل','Ledger asset balances')+' · '+esc(cur)+'</small>'+
     '<strong class="amt-val">'+(showNoAccounts?'—':money(mainBalance,cur))+'</strong>'+
-    '<div class="v25-hero-foot"><small>العملات الأخرى لا تُجمع ولا يدخل الائتمان ضمن الأصول</small>'+
-    (S.settings.hideAmounts?logoButton:'<button type="button" data-act="go-accounts">محفظتي ←</button>')+'</div></div>';
+    '<small class="wh-sub">'+esc(status)+'</small>'+
+    '<div class="v25-hero-foot"><small>'+tr('العملات الأخرى لا تُجمع ولا يدخل الائتمان ضمن الأصول','Currencies are not combined; credit is not an asset')+'</small>'+
+    (S.settings.hideAmounts?logoButton:'<button type="button" data-act="go-accounts">'+tr('محفظتي ←','My wallet →')+'</button>')+'</div></div>';
   const chips=balances.map(([currency,value])=>'<div class="v25-cur-chip"><small>رصيد '+esc(currency)+'</small><b class="amt-val">'+money(value,currency)+'</b></div>').join('')||'<div class="v25-cur-chip"><small>الأرصدة</small><b>غير مؤكدة</b></div>';
-  const metrics='<div class="v25-metrics"><div class="v25-metric"><small>دخل الشهر · '+esc(cur)+'</small>'+
-    '<b class="amt-val" style="color:#079375">'+money(income,cur)+'</b><em>دخل مؤكد في السجل</em></div>'+
-    '<div class="v25-metric"><small>مصروفات الشهر · '+esc(cur)+'</small>'+
-    '<b class="amt-val" style="color:#b97858">'+money(expense,cur)+'</b><em>مصاريف مسجلة</em></div></div>';
+  const metrics='<div class="v25-metrics"><div class="v25-metric"><small>'+tr('دخل الشهر','Monthly income')+' · '+esc(cur)+'</small>'+
+    '<b class="amt-val" style="color:#079375">'+money(income,cur)+'</b><em>'+tr('دخل مؤكد في السجل','Recorded income')+'</em></div>'+
+    '<div class="v25-metric"><small>'+tr('مصروفات الشهر','Monthly spending')+' · '+esc(cur)+'</small>'+
+    '<b class="amt-val" style="color:#b97858">'+money(expense,cur)+'</b><em>'+tr('مصاريف مسجلة','Recorded spending')+'</em></div></div>';
   const actions='<div class="v25-actions">'+
     '<button type="button" data-sanad-act="bank-sms-recent">'+svg('sms')+' استيراد الجديد</button>'+
     '<button type="button" data-act="account-add-menu">'+svg('plus')+' إضافة حساب</button>'+
@@ -53,10 +58,10 @@ function realHome(){
     '<div class="v252-empty">لا توجد عمليات في البلد المحدد.</div>';
   const expanded=originalHome();
   return '<div class="v25-page" id="v25Home">'+previewBannerHtml()+recoveryBannerHtml()+missedRecurringBannerHtml()+
-    title('أهلاً بيك في سند')+countryBar()+'<p class="v25-hint">حساباتك وحركاتك المالية في مكان واحد.</p>'+
+    title(tr('أهلاً بيك في سند','Welcome to SANAD'))+countryBar()+'<p class="v25-hint">'+tr('حساباتك وحركاتك المالية في مكان واحد.','Manage accounts and transactions in one place.')+'</p>'+
     hero+'<div class="v25-cur-strip">'+chips+'</div>'+metrics+
-    subhead('مركز المراجعة','data-sanad-act="bank-inbox"','فتح')+reviewButton+
-    subhead('آخر العمليات','data-act="go-tx"','عرض الكل')+txs+actions+
+    subhead(tr('مركز المراجعة','Review center'),'data-sanad-act="bank-inbox"','فتح')+reviewButton+
+    subhead(tr('آخر العمليات','Recent transactions'),'data-act="go-tx"','عرض الكل')+txs+actions+
     '<details class="v25-advanced"><summary>الأدوات والتفاصيل المالية المتقدمة</summary><div class="v25-advanced-body">'+expanded+'</div></details>'+
     '</div>';
 }
@@ -101,7 +106,7 @@ V.walletView=function(){
       '<div class="v25-payment-card-foot"><div><small>'+(debt?'الائتمان المتاح':'الرصيد المرتبط')+'</small><b class="amt-val">'+money(amount,a?.currency||'AED')+'</b></div>'+
       '<div class="v25-card-network">'+esc(network)+'</div></div></div>';
   }).join('');
-  return '<section class="v25-page" id="v252Wallet">'+title('محفظتي')+countryBar()+
+  return '<section class="v25-page" id="v252Wallet">'+title(tr('محفظتي','My wallet'))+countryBar()+
     '<div class="v252-section"><h3>البنوك والمحافظ</h3><small class="v252-hint">اضغط على البنك لاختياره</small></div>'+
     (groups.length?'<div class="v252-strip" id="v252BankStrip">'+bankItems+'</div>':'<div class="v252-empty">لا توجد حسابات في هذا البلد بعد.</div>')+
     '<div class="v252-section"><h3>الحسابات</h3><small class="v252-hint">اختيار مباشر</small></div>'+
