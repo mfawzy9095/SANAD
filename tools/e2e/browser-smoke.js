@@ -326,6 +326,16 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  }
  record('V25 transaction/report/settings visuals, SVG icon assets and navigation are live and read-only');
 
+ await page.evaluate(()=>go('rep'));
+ const periodBefore=await page.evaluate(()=>S.repPeriod);
+ await page.locator('#r25Reports > .r25-period [data-period="today"]').click();
+ assert.equal(await page.evaluate(()=>S.repPeriod),'today','Rebuilt report must preserve requested period, never force month');
+ await page.locator('#r25Reports > .r25-period [data-period="month"]').click();
+ assert.equal(await page.evaluate(()=>S.repPeriod),'month');
+ await page.evaluate(()=>{S.repPeriod='month';});
+ record('Rebuilt report period tabs stay selectable and do not silently reset financial periods');
+
+
  await page.evaluate(()=>go('settings'));await page.locator('#r25Settings .r25-inline-options [data-sanad-act="lang"][data-value="en"]').click();
  await page.waitForFunction(()=>document.documentElement.dir==='ltr');await page.locator('#r25Settings .r25-inline-options [data-sanad-act="theme"][data-value="dark"]').click();
  await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
