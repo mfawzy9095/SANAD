@@ -138,6 +138,9 @@ main{flex:1;overflow-y:auto;padding:0 16px 120px;-webkit-overflow-scrolling:touc
 .tx-item .info b{display:block;font-size:14.5px;font-weight:500;margin-bottom:2px}
 .tx-item .info span{display:block;font-size:12px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tx-item .info .tag{display:inline-block;font-size:10px;color:var(--primary);background:var(--primary-soft);padding:1px 6px;border-radius:6px;margin-inline-end:4px}
+.tx-item .info .tx-source-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;margin-top:4px;padding:2px 7px 2px 4px;border:1px solid var(--outline);border-radius:10px;background:var(--surface-2);font-size:10.5px;vertical-align:middle;direction:ltr;white-space:nowrap}
+.tx-item .info .tx-source-chip span{display:inline;flex-shrink:0;font-size:10.5px;max-width:112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tx-item .info .tx-source-chip .tx-source-sep{color:var(--text-3)}
 .tx-item .amt{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
 .tx-item .amt.pos{color:var(--success)}
 .tx-item .amt.transfer{color:var(--info)}
@@ -2210,13 +2213,24 @@ function parseLocalDateTime(value){
   return dt.getFullYear()===y&&dt.getMonth()===mo-1&&dt.getDate()===d&&dt.getHours()===h&&dt.getMinutes()===mi?dt.getTime():null;
 }
 function transactionTimeText(t){
-  if(t&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t.transactionTime||''))return t.transactionTime+(t.timeSource==='bank-message'?' · وقت مذكور برسالة البنك':'');
-  if(t&&(t.bankImportKey||t.bankImportEventId))return 'وقت العملية غير مذكور · وصول الرسالة '+new Date(Number(t.smsReceivedAt||t.created)).toLocaleTimeString('ar-AE',{hour:'2-digit',minute:'2-digit'});
+  if(t&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t.transactionTime||''))return t.transactionTime;
+  if(t&&(t.bankImportKey||t.bankImportEventId)){const at=Number(t.smsReceivedAt||t.created);return Number.isFinite(at)&&at>0?'استلام '+new Date(at).toLocaleTimeString('ar-AE',{hour:'2-digit',minute:'2-digit'}):'وقت الرسالة غير معروف';}
   return 'وقت العملية غير مسجل';
 }
 function transactionTimeField(f){
   if(f.transactionTime===undefined)f.transactionTime=f.id?'':localDateTimeInput(Date.now()).slice(11);
   return '<div class="field"><label>وقت المعاملة</label><input id="txTimeIn" type="time" value="'+esc(f.transactionTime||'')+'" onchange="S.form.transactionTime=this.value"><div class="field-hint">الوقت المحلي للعملية؛ اتركه فارغًا إذا كان غير معلوم.</div></div>';
+}
+function bankTxSourceHtml(t,acc,card){
+  if(!acc)return '';
+  const institution=(S.institutions||[]).find(i=>i.id===acc.institutionId);
+  const bank=institution&&institution.bankRegistryId?UaeBankRegistryCore.get(institution.bankRegistryId):null;
+  const provider=institution&&institution.providerRegistryId&&UaeBankRegistryCore.getProvider?UaeBankRegistryCore.getProvider(institution.providerRegistryId):null;
+  const label=bank?bankUiShort(bank):(provider?providerUiShort(provider):(institution?.name||acc.name||'حساب'));
+  const kind=card?({credit_card:'ائتمان',debit_card:'خصم',wallet_card:'محفظة',prepaid_card:'مسبقة الدفع'}[card.type]||'بطاقة'):({credit:'حساب ائتمان',bank:'حساب بنكي',ewallet:'محفظة'}[acc.type]||'حساب');
+  const last4=card&&/^\d{4}$/.test(String(card.last4||''))?' ••••'+card.last4:'';
+  const mark=financialInstitutionMark(label,23,!!provider||acc.type==='ewallet');
+  return '<span class="tx-source-chip" title="'+esc(label+' · '+kind+last4)+'">'+mark+'<span>'+esc(label)+'</span><span class="tx-source-sep">·</span><span>'+esc(kind+last4)+'</span></span>';
 }
 function txRowHtml(t, withSwipe){
   if (!t) return '';
@@ -2276,14 +2290,14 @@ function txRowHtml(t, withSwipe){
   const cls = t.type === 'income' ? 'pos' : '';
   const tags = (t.tags||[]).map(tag => '<span class="tag">#' + esc(tag) + '</span>').join('');
   const noteText = t.merchantName ? esc(t.merchantName) : (t.note ? esc(t.note) : esc(c.n));
-  const sourceTxt = inst ? (inst.name + (inst.last4 ? ' ••' + inst.last4 : '')) : (acc ? acc.name : '');
+  const sourceBadge = bankTxSourceHtml(t,acc,inst);
   const origCur = t.currency || (acc ? acc.currency : 'EGP');
   const walletCur = acc ? acc.currency : 'EGP';
   const fxLine = t.settlementStatus==='pending'?'<span class="fx">مبلغ الخصم يحتاج تأكيدًا</span>':(origCur !== walletCur && t.fxRate && t.fxRate !== 1)
     ? '<span class="fx amt-val">≈ ' + amtFull(t.walletAmount, walletCur) + '</span>' : '';
   const inner = '<div class="ic" style="background:' + c.c + '22;color:' + c.c + '">' + categoryIconHtml(c,20) + '</div>' +
     '<div class="info"><b>' + tags + esc(c.n) + (t.rec ? ' 🔁' : '') + '</b>' +
-      '<span>' + noteText + (sourceTxt ? ' • ' + esc(sourceTxt) : '') + '</span><span>'+esc(t.date)+' · '+esc(transactionTimeText(t))+'</span></div>' +
+      '<span>' + noteText + '</span><span>'+esc(t.date)+' · '+esc(transactionTimeText(t))+'</span>'+sourceBadge+'</div>' +
     '<div class="amt ' + cls + ' amt-val">' + sign + amtText(t.amount) + ' ' + Finance.curSymbol(origCur) + fxLine + '</div>';
   if (withSwipe) return '<div class="tx-item-wrap" data-wrap="' + t.id + '"><div class="hint-icon">✏️</div><div class="tx-item" data-txid="' + t.id + '">' + inner + '</div></div>';
   return '<div class="tx-item" data-txid="' + t.id + '">' + inner + '</div>';
