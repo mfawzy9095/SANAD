@@ -9707,7 +9707,7 @@ const SanadBankInbox = {
     }
   },
   openHistoricalImportPicker(){
-    if(this.historicalImporting)return this.cancelHistoricalImport('user');
+    if(this.historicalImporting)return SanadSmsImportUI.open();
     const d=new Date();
     d.setDate(d.getDate()-90);
     const defaultDate=localDateTimeInput(d.getTime());
@@ -9741,30 +9741,18 @@ const SanadBankInbox = {
   },
   updateImportProgress(){
     if(typeof document==='undefined')return;
-    let panel=document.getElementById('bankImportProgress');
-    const hp=this.historicalProgress;
-    if(!this.historicalImporting||!hp){if(panel)panel.remove();return;}
-    const view=document.getElementById('view');if(!view)return;
-    if(!panel){panel=document.createElement('section');panel.id='bankImportProgress';panel.className='card';panel.setAttribute('aria-label','تقدم قراءة الرسائل');view.prepend(panel);}
-    const known=Number.isFinite(hp.totalCount)&&hp.totalCount>=hp.scanned;
-    const percent=known&&hp.totalCount>0?Math.floor(hp.scanned*100/hp.totalCount):null;
-    const date=v=>v?new Date(v).toLocaleDateString('ar-EG'):'أقدم رسالة';
-    panel.innerHTML='<strong>قراءة الرسائل محليًا</strong><div>'+esc(date(hp.fromDate))+' — '+esc(date(hp.throughDate))+'</div>'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span>قُرئ '+Number(hp.scanned||0)+(known?' من '+hp.totalCount:'')+' · وصل إلى '+esc(date(hp.reachedAt))+'</span><b style="font-size:18px;color:var(--primary)" aria-label="نسبة التقدم">'+(percent!==null?percent+'٪':'جارٍ الفحص')+'</b></div>'+
-      '<div>مضاف '+Number(hp.added||0)+' · تسويات '+Number(hp.updated||0)+' · مكرر '+Number(hp.duplicates||0)+' · للمراجعة '+Number(hp.review||0)+'</div>'+
-      (percent!==null?'<progress max="'+hp.totalCount+'" value="'+hp.scanned+'" aria-label="الرسائل المقروءة" style="width:100%;height:12px;accent-color:var(--primary)"></progress>':'')+
-      (Number.isFinite(hp.etaSeconds)?'<div>المتبقي تقديريًا: '+Math.ceil(hp.etaSeconds/60)+' دقيقة</div>':'')+
-      '<small>'+(hp.foreground?'الاستيراد يعمل بإشعار Android؛ بعد إنهاء العملية استكمله من النقطة المحفوظة.':'احتفظ بالتطبيق مفتوحًا؛ الاستكمال متاح من النقطة المحفوظة.')+' اكتمال القراءة لا يعني اكتمال المراجعة المالية.</small>'+
-      '<div class="quick-add"><button type="button" class="btn" data-sanad-act="bank-sms-pause">إيقاف مؤقت</button><button type="button" class="btn" data-sanad-act="bank-sms-cancel">إلغاء</button></div>';
+    const legacy=document.getElementById('bankImportProgress');
+    if(legacy)legacy.remove();
+    if(this.historicalImporting&&this.historicalProgress)SanadSmsImportUI.progress(this.historicalProgress);
   },
   homeImportHtml(){
     const running=this.historicalImporting,stats=this.historicalProgress||{},last=this.lastRecentImport||{},total=last.total||{};
-    const label=running?'إيقاف فحص الرسائل':'تحديث آخر 7 أيام';
+    const label=running?'عرض تقدم الفحص':'تحديث آخر 7 أيام';
     const detail=running?('فُحص '+Number(stats.scanned||0)+' · أضيف '+Number(stats.added||0)):last.at?('آخر تحديث: '+Number(total.added||0)+' مضافة · '+Number(total.duplicates||0)+' مكررة · '+Number(total.review||0)+' للمراجعة'+(last.status==='complete'?'':' · الفحص لم يكتمل')):'اقرأ آخر 7 أيام بسرعة؛ يمكنك اختيار فترة أقدم من الإعدادات.';
     return '<div style="margin-top:10px"><div class="quick-add"><button type="button" class="quick-chip more" data-sanad-act="bank-sms-recent">'+this.icon('message')+' '+(running?label:'آخر 7 أيام')+'</button><button type="button" class="quick-chip" data-sanad-act="bank-inbox">'+this.icon('inbox')+' مراجعة الرسائل</button></div><div style="font-size:12px;color:var(--text-2);margin-top:6px">'+esc(detail)+'</div></div>';
   },
   async refreshRecentSms(){
-    if(this.historicalImporting){this.cancelHistoricalImport('user');return null;}
+    if(this.historicalImporting){SanadSmsImportUI.open();return null;}
     if(this._recentStarting)return null;
     closeSheet();
     this._recentStarting=true;
@@ -9782,8 +9770,7 @@ const SanadBankInbox = {
   },
   async importHistoricalSms(days=0,options={}){
     if(this.historicalImporting){
-      this.cancelHistoricalImport('user');
-      toast('سيتم إيقاف استيراد SMS بعد الدفعة الحالية');
+      SanadSmsImportUI.open();
       return null;
     }
     if(!this.historicalSupported()){toast('استيراد SMS القديمة غير متاح على هذه النسخة');return null;}
@@ -9826,6 +9813,8 @@ const SanadBankInbox = {
     const scanCheckpoint=status=>({status,fromDate:rangeStart,throughDate:startedAt,mode:options.mode||'historical',configuredStartAt:options.configuredStartAt||null,nextAfterDate:afterDate,nextAfterId:afterId,pages,totalCount,timings:Object.assign({},timings),total:Object.assign({},total)});
     let status='complete';
     this.historicalProgress=Object.assign({pages,fromDate:rangeStart,throughDate:startedAt,reachedAt:afterDate},total);
+    SanadSmsImportUI.start(options.mode||checkpoint?.mode||'historical');
+    SanadSmsImportUI.progress(this.historicalProgress,'تجهيز الرسائل للفحص');
     if(S.tab==='settings'||S.tab==='home')render();
 
     try{
@@ -9838,6 +9827,7 @@ const SanadBankInbox = {
         if(this.historicalCancelRequested){status=this.historicalCancelReason==='pause'?'paused':'cancelled';break;}
 
         pages++;
+        SanadSmsImportUI.progress(null,'قراءة الرسائل من الهاتف');
         let page=null;const readStarted=clock();
         try{
           page=await this.requestHistoricalPage(0,afterDate,afterId,20,startedAt);
@@ -9850,6 +9840,7 @@ const SanadBankInbox = {
           break;
         }
 
+        SanadSmsImportUI.progress(null,'تحليل الرسائل المالية');
         timings.readMs+=Number.isFinite(page.readMs)?page.readMs:clock()-readStarted;
         if(Number.isFinite(page.remainingCount)&&page.remainingCount>=0)totalCount=total.scanned+page.remainingCount;
         total.scanned+=Number(page.scanned||0);
@@ -9872,6 +9863,7 @@ const SanadBankInbox = {
           excludeIds:this._historicalReviewIds
         });
         if(!batch||batch.ok===false)throw new Error('bank-batch-failed');
+        SanadSmsImportUI.progress(null,'حفظ النتائج ونقطة الاستكمال');
         for(const key of ['parsePlanMs','saveMs'])timings[key]+=Number(batch.timings&&batch.timings[key]||0);
         for(const id of (batch.reviewIds||[]))this._historicalReviewIds.add(String(id));
         total.parsed+=Number(batch.parsed||0);
@@ -9926,6 +9918,7 @@ const SanadBankInbox = {
     }
     // Historical imports have independent coverage and must not advance recent scans.
     if(S.tab==='settings'||S.tab==='home')render();
+    SanadSmsImportUI.finish(this.lastHistoricalImport);
 
     if(status==='cancelled')toast('تم إيقاف استيراد SMS · فُحص '+total.scanned+' رسالة',4200);
     else if(status==='complete'&&total.scanned===0)toast('Android لم يُرجع أي SMS من صندوق الرسائل',5000);
@@ -10433,7 +10426,7 @@ const SanadV9 = {
   settingsHtml(){const lang=S.settings.language==='en'?'en':'ar',mode=SanadTheme.mode(),sec=SanadSecurity.cfg.enabled?'مفعّل':'غير مفعّل',langDesc=lang==='en'?'Arabic / English':'العربية / الإنجليزية',enLabel=lang==='en'?'English':'الإنجليزية';return '<div class="sec"><h2>اللغة والمظهر</h2></div><div class="card feature-card"><div class="feature-row"><div><b>🌐 اللغة</b><span>'+langDesc+'</span></div><div class="seg"><button type="button" class="'+(lang==='ar'?'on':'')+'" data-sanad-act="lang" data-value="ar">العربية</button><button type="button" class="'+(lang==='en'?'on':'')+'" data-sanad-act="lang" data-value="en">'+enLabel+'</button></div></div><div class="feature-row"><div><b>🎨 المظهر</b><span>فاتح، داكن أو حسب الجهاز</span></div><div class="seg"><button type="button" class="'+(mode==='light'?'on':'')+'" data-sanad-act="theme" data-value="light">☀️</button><button type="button" class="'+(mode==='dark'?'on':'')+'" data-sanad-act="theme" data-value="dark">🌙</button><button type="button" class="'+(mode==='system'?'on':'')+'" data-sanad-act="theme" data-value="system">◐</button></div></div></div>'+'<div class="sec"><h2>الأمان والخصوصية</h2></div><div class="list"><div class="list-item" data-sanad-act="toggle-security"><div class="li-ico">🔐</div><div class="li-body"><b>قفل بالبصمة / الجهاز</b><span>'+sec+(SanadSecurity.supported()?'':' · يحتاج HTTPS')+'</span></div><div class="li-arrow">›</div></div></div>'+SanadBankInbox.settingsHtml()+'<div class="sec"><h2>السحابة والعائلة</h2></div><div class="list"><div class="list-item" aria-disabled="true"><div class="li-ico">☁️</div><div class="li-body"><b>مؤجل إلى V9.1</b><span>معطّل في النسخة المحلية المستقرة</span></div></div></div>'+'<div class="sec"><h2>نسخة احتياطية كاملة</h2></div><button type="button" class="btn" data-sanad-act="full-export">📦 تصدير كامل مع الفواتير</button><button type="button" class="btn" data-sanad-act="full-import">📥 استيراد نسخة كاملة</button>';},
   async setLanguage(lang){if(!I18nCore.isValidLanguage(lang)||!canWrite())return;const prev=S.settings.language;S.settings.language=lang;const ok=await persist();if(!ok){S.settings.language=prev;return;}render();requestAnimationFrame(()=>SanadI18n.apply(document));},
   async afterStart(fromUnlock=false){SanadTheme.apply();SanadI18n.apply();if(SanadExtStorage.mode==='error')toast('تنبيه: تخزين المرفقات غير متاح مؤقتاً');const validIds=new Set(S.transactions.map(t=>t.id));await SanadExtStorage.pruneReceiptOrphans(validIds);await SanadFamily.pruneMissingTransactions();if(SecurityCrypto.shouldShowLockOverlay({enabled:SanadSecurity.cfg.enabled,unlocked:SanadSecurity.unlocked})){SanadSecurity.show();return;}if(await SanadBankInbox.ensureSmsStart())await SanadBankInbox.refresh();else toast('تعذر حفظ إعدادات سحب الرسائل');hideSanadBootSplash();},
-  async click(el){const a=el.dataset.sanadAct,v=el.dataset.value;if(a==='lang')return this.setLanguage(v);if(a==='theme')return SanadTheme.set(v);if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable();if(a==='amount-visibility')return SanadAmountPrivacy.toggle();if(a==='unlock')return SanadSecurity.unlock();if(a==='recovery-unlock')return SanadSecurity.recovery();if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;}if(a==='remove-receipt')return SanadReceipts.removeCurrent();if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);if(a==='firebase-config')return SanadCloud.openConfig();if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||'');if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle();if(a==='sync-now')return SanadCloud.syncNow();if(a==='verify-phone')return SanadCloud.verifyPhoneSheet();if(a==='send-phone-code')return SanadCloud.sendPhoneCode();if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();if(a==='open-family')return SanadFamily.open();if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||'');if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||'');if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();if(a==='bank-edit-accounts'){closeSheet();return go('accounts');}if(a==='bank-access')return SanadBankInbox.openAccess();if(a==='bank-learning')return SanadBankInbox.openLearning(Number(el.dataset.page)||0);if(a==='bank-learning-toggle')return SanadBankInbox.toggleLearning(el);if(a==='bank-auto-toggle')return SanadBankInbox.toggleAuto();if(a==='bank-sync')return SanadBankInbox.syncNow();if(a==='bank-sms-recent')return SanadBankInbox.refreshRecentSms();if(a==='bank-sms-config')return SanadBankInbox.openSmsConfig();if(a==='bank-sms-config-save')return SanadBankInbox.saveSmsConfig();if(a==='bank-support-export')return SanadBankInbox.openSupportExportInfo();if(a==='bank-support-export-confirm'){closeSheet();return SanadFullBackup.exportSupport();}if(a==='bank-sms-resume'){closeSheet();return SanadBankInbox.importHistoricalSms(0,{resume:true});}if(a==='bank-sms-pause')return SanadBankInbox.cancelHistoricalImport('pause');if(a==='bank-sms-cancel')return SanadBankInbox.cancelHistoricalImport('user');if(a==='bank-sms-history')return SanadBankInbox.historicalImporting?SanadBankInbox.cancelHistoricalImport('user'):SanadBankInbox.openHistoricalImportPicker();if(a==='bank-sms-xml')return SanadBankInbox.openSmsXmlPicker();if(a==='bank-sms-range'){closeSheet();return SanadBankInbox.importHistoricalSms(Number(el.dataset.days)||0);}if(a==='bank-sms-date')return SanadBankInbox.importHistoricalFromDate();if(a==='bank-inbox')return SanadBankInbox.open();if(a==='bank-review-page')return SanadBankInbox.open(Number(el.dataset.page)||0);if(a==='bank-refresh')return SanadBankInbox.open();if(a==='bank-approve')return SanadBankInbox.approve(el.dataset.id);if(a==='bank-fix')return SanadBankInbox.openCorrection(el.dataset.id);if(a==='bank-settlement-save')return SanadBankInbox.savePendingSettlement(el.dataset.id);if(a==='bank-fix-save')return SanadBankInbox.saveCorrection(el.dataset.id);if(a==='bank-dismiss')return SanadBankInbox.dismiss(el.dataset.id);if(a==='full-export')return SanadFullBackup.export();if(a==='full-import')return SanadFullBackup.importPicker();}
+  async click(el){const a=el.dataset.sanadAct,v=el.dataset.value;if(a==='lang')return this.setLanguage(v);if(a==='theme')return SanadTheme.set(v);if(a==='toggle-security')return SanadSecurity.cfg.enabled?SanadSecurity.disable():SanadSecurity.enable();if(a==='amount-visibility')return SanadAmountPrivacy.toggle();if(a==='unlock')return SanadSecurity.unlock();if(a==='recovery-unlock')return SanadSecurity.recovery();if(a==='pick-receipt'){SanadReceipts.ensureInput().click();return;}if(a==='remove-receipt')return SanadReceipts.removeCurrent();if(a==='view-receipt')return SanadReceipts.view(el.dataset.txId);if(a==='firebase-config')return SanadCloud.openConfig();if(a==='save-firebase')return SanadCloud.configure((document.getElementById('firebaseConfigText')||{}).value||'');if(a==='google-auth')return SanadCloud.user?SanadCloud.signOut():SanadCloud.signInGoogle();if(a==='sync-now')return SanadCloud.syncNow();if(a==='verify-phone')return SanadCloud.verifyPhoneSheet();if(a==='send-phone-code')return SanadCloud.sendPhoneCode();if(a==='confirm-phone-code')return SanadCloud.confirmPhoneCode();if(a==='open-family')return SanadFamily.open();if(a==='create-family')return SanadFamily.create((document.getElementById('familyNameInput')||{}).value||'');if(a==='invite-family-phone')return SanadFamily.invitePhone((document.getElementById('familyPhoneInvite')||{}).value||'');if(a==='accept-family-invite')return SanadFamily.acceptPhoneInvite();if(a==='bank-edit-accounts'){closeSheet();return go('accounts');}if(a==='bank-access')return SanadBankInbox.openAccess();if(a==='bank-learning')return SanadBankInbox.openLearning(Number(el.dataset.page)||0);if(a==='bank-learning-toggle')return SanadBankInbox.toggleLearning(el);if(a==='bank-auto-toggle')return SanadBankInbox.toggleAuto();if(a==='bank-sync')return SanadBankInbox.syncNow();if(a==='sms-progress-show')return SanadSmsImportUI.open();if(a==='sms-progress-minimize')return SanadSmsImportUI.minimize();if(a==='sms-progress-done')return SanadSmsImportUI.dismiss();if(a==='sms-progress-pause')return SanadSmsImportUI.pause();if(a==='sms-progress-cancel')return SanadSmsImportUI.cancel();if(a==='sms-progress-resume')return SanadSmsImportUI.resume();if(a==='sms-progress-review')return SanadSmsImportUI.openReview();if(a==='bank-sms-recent')return SanadBankInbox.refreshRecentSms();if(a==='bank-sms-config')return SanadBankInbox.openSmsConfig();if(a==='bank-sms-config-save')return SanadBankInbox.saveSmsConfig();if(a==='bank-support-export')return SanadBankInbox.openSupportExportInfo();if(a==='bank-support-export-confirm'){closeSheet();return SanadFullBackup.exportSupport();}if(a==='bank-sms-resume'){closeSheet();return SanadBankInbox.importHistoricalSms(0,{resume:true});}if(a==='bank-sms-pause')return SanadBankInbox.cancelHistoricalImport('pause');if(a==='bank-sms-cancel')return SanadBankInbox.cancelHistoricalImport('user');if(a==='bank-sms-history')return SanadBankInbox.historicalImporting?SanadSmsImportUI.open():SanadBankInbox.openHistoricalImportPicker();if(a==='bank-sms-xml')return SanadBankInbox.openSmsXmlPicker();if(a==='bank-sms-range'){closeSheet();return SanadBankInbox.importHistoricalSms(Number(el.dataset.days)||0);}if(a==='bank-sms-date')return SanadBankInbox.importHistoricalFromDate();if(a==='bank-inbox')return SanadBankInbox.open();if(a==='bank-review-page')return SanadBankInbox.open(Number(el.dataset.page)||0);if(a==='bank-refresh')return SanadBankInbox.open();if(a==='bank-approve')return SanadBankInbox.approve(el.dataset.id);if(a==='bank-fix')return SanadBankInbox.openCorrection(el.dataset.id);if(a==='bank-settlement-save')return SanadBankInbox.savePendingSettlement(el.dataset.id);if(a==='bank-fix-save')return SanadBankInbox.saveCorrection(el.dataset.id);if(a==='bank-dismiss')return SanadBankInbox.dismiss(el.dataset.id);if(a==='full-export')return SanadFullBackup.export();if(a==='full-import')return SanadFullBackup.importPicker();}
 };
 
 /* ===== non-destructive wrappers around the stable V8.9.1 core ===== */
