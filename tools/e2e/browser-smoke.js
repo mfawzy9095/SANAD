@@ -93,6 +93,9 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
    reviews:SanadBankInbox.smsReviewEvents?.length||0
  }));
  assert.equal(qaRecent.recent,'complete','Recent SMS scan did not complete: '+JSON.stringify(qaRecent));
+ assert.equal(await page.locator('#sanadScanOverlay').isVisible(),true);
+ await page.locator('#sanadScanDone').click(); // Real user closes completion summary before editing a review item.
+ assert.equal(await page.locator('#sanadScanOverlay').isVisible(),false);
  assert.equal(await page.evaluate(()=>S.transactions.length),1,'Generic deposit origin must remain review');
  await page.evaluate(()=>{const item=SanadBankInbox.items.find(x=>x.native.id==='qa-deposit');item.parsed.transactionDate='2026-02-30';SanadBankInbox.openCorrection('qa-deposit');});
  assert.match(await page.locator('#bankFixDate').inputValue(),/^\d{4}-\d{2}-\d{2}$/,'SMS review must present a valid ISO date before saving');
