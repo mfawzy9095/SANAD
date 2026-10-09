@@ -57,8 +57,22 @@ async function locateImportNotificationAction(label){
 }
 const pass=name=>{results.push({name,status:'PASS'});console.log('PASS:',name);};
 const smsShadePresent=()=>{
- const dump=execFileSync('adb',['shell','dumpsys','notification','--noredact'],{encoding:'utf8',maxBuffer:12*1024*1024});
- // Compare only ACTIVE NotificationRecords; historical ranking/usage counts are excluded.
+ // Android 35 emulator occasionally returns dumpsys exit 255 in the moments
+ // after a real force-stop/relaunch even when notification state is healthy.
+ // Retry command failures only; never treat an unavailable dump as "gone".
+ let dump=null,lastError=null;
+ for(let attempt=0;attempt<6;attempt++){
+  try{
+   dump=execFileSync('adb',['shell','dumpsys','notification','--noredact'],{encoding:'utf8',timeout:15000,maxBuffer:32*1024*1024});
+   if(!dump.includes('Current Notification Manager state:'))throw Error('Incomplete system notification dump');
+   break;
+  }catch(e){
+   lastError=e;
+   try{execFileSync('sleep',['0.25']);}catch(_){}
+  }
+ }
+ if(dump===null)throw Error('Cannot verify notification shade after bounded retries: '+(lastError&&lastError.message));
+ // Compare ACTIVE NotificationRecords only, not historical ranking/usage logs.
  return dump.split('\n').some(line=>line.includes('NotificationRecord(')&&line.includes('pkg='+pkg)&&line.includes('id=92013'));
 };
 const waitSmsShadeGone=async(label)=>{
