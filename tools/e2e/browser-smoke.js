@@ -245,6 +245,32 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.evaluate(()=>go('accounts'));
  record('V25 layout QA on 320/360/393/430px: offline Tajawal, full-width home/wallet, icons, no horizontal clipping');
 
+ // Explicit visual regression for the edit sheets from real user feedback.
+ const editorFp=await page.evaluate(()=>stateFingerprint(snapshotState()));
+ await page.evaluate(()=>openInstrumentSheet(null,'debit_card'));
+ await page.waitForSelector('#cardName');
+ for(const width of [320,393]){
+   await page.setViewportSize({width,height:760});
+   const cardBounds=await page.evaluate(()=>({
+     width:document.documentElement.clientWidth,
+     page:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),
+     inputs:['cardName','cardFirst4','cardLast4'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return {id,left:r.left,right:r.right,width:r.width};}),
+     sheet:(()=>{const r=document.getElementById('sheet').getBoundingClientRect();return {left:r.left,right:r.right}})()
+   }));
+   assert(cardBounds.page<=cardBounds.width+2&&cardBounds.inputs.every(x=>x.left>=-1&&x.right<=cardBounds.width+1&&x.width>40),
+     'Card editor must be readable and fit '+width+'px: '+JSON.stringify(cardBounds));
+   await page.screenshot({path:path.join(output,'v25-rebuild-card-editor-'+width+'.png')});
+ }
+ await page.evaluate(()=>closeSheet());
+ await page.evaluate(id=>openAccountSheet(id),bankId);
+ await page.waitForSelector('#wName');
+ await page.screenshot({path:path.join(output,'v25-rebuild-account-editor-393.png')});
+ await page.evaluate(()=>closeSheet());
+ await page.setViewportSize({width:393,height:852});
+ assert.equal(await page.evaluate(()=>stateFingerprint(snapshotState())),editorFp,'Inspecting edit forms must not mutate finance data');
+ record('V25 card/account editors at 320/393px preserve field positions and financial state');
+
+
  await page.screenshot({path:path.join(output,'v25-2-real-wallet.png')});
  await page.evaluate(()=>go('settings'));
  await page.locator('#r25Settings [data-act="go-subs"]').click();
