@@ -12,8 +12,11 @@ const W=window.SanadV252;
 W.settingsTop=()=>'';
 const tr=(ar,en)=>S.settings?.language==='en'?en:ar;
 const ic=name=>window.SanadV25Icons?.vector?.(name)||'<span aria-hidden="true">•</span>';
-const settingsIcon=document.querySelector('#bottomNav [data-tab="settings"] .ico');
-if(settingsIcon)settingsIcon.innerHTML='<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v2M12 19.5v2M21.5 12h-2M4.5 12h-2M18.72 5.28l-1.42 1.42M6.7 17.3l-1.42 1.42M18.72 18.72l-1.42-1.42M6.7 6.7 5.28 5.28"/></svg>';
+const gearMarkup='<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 2.8h3.6l.65 2.35c.45.16.88.34 1.28.55l2.19-1.05 2.55 2.55-1.05 2.19c.21.4.39.83.55 1.28l2.35.65v3.6l-2.35.65c-.16.45-.34.88-.55 1.28l1.05 2.19-2.55 2.55-2.19-1.05c-.4.21-.83.39-1.28.55l-.65 2.35h-3.6l-.65-2.35c-.45-.16-.88-.34-1.28-.55l-2.19 1.05-2.55-2.55 1.05-2.19c-.21-.4-.39-.83-.55-1.28l-2.35-.65v-3.6l2.35-.65c.16-.45.34-.88.55-1.28l-1.05-2.19 2.55-2.55 2.19 1.05c.4-.21.83-.39 1.28-.55z"/><circle cx="12" cy="12" r="3.3"/></svg>';
+const ensureGear=()=>{const el=document.querySelector('#bottomNav [data-tab="settings"] .ico');if(el&&el.dataset.r25Gear!=='true'){el.innerHTML=gearMarkup;el.dataset.r25Gear='true';}};
+const renderBeforeGear=render;
+render=function(){renderBeforeGear();ensureGear();};
+ensureGear();
 
 const n=value=>value===null||value===undefined||!Number.isFinite(Number(value))?'غير مؤكد':amtText(value);
 const money=(val,cur)=>val===null||val===undefined||!Number.isFinite(Number(val))?tr('غير مؤكد','Unconfirmed'):n(val)+' '+esc(Finance.curSymbol(cur));
