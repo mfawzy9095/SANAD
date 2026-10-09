@@ -321,7 +321,6 @@ jobs:
           grep -q "ReminderCore.dueNotifications(S.recurring" "$HTML"
           node --check "$REMINDER_CORE"
           node app/src/test/js/reminder-core.test.js
-          set -x # Temporary diagnostics for silent report-core grep checks
           REPORT_CORE="app/src/main/assets/js/report-core.js"
           test -s "$REPORT_CORE"
           REPORT_CORE_SHA="$(sha256sum "$REPORT_CORE" | awk '{print $1}')"
@@ -600,7 +599,9 @@ jobs:
           grep -q "BankIngestionCore.applyPlan(S,plan)" "app/src/main/assets/index.html"
           grep -Fq "BankIngestionCore.sortNotifications(Array.from(merged.values()))" "app/src/main/assets/index.html"
           grep -q "bankAutoImportEnabled" "app/src/main/assets/index.html"
-          grep -q "مزامنة العمليات الجديدة الآن" "app/src/main/assets/index.html"
+          grep -q "مزامنة الآن" "app/src/main/assets/index.html"
+          grep -q "bank-sync-advanced" "app/src/main/assets/index.html"
+          grep -q "راجع العمليات المعلقة" "app/src/main/assets/index.html"
           grep -q "bankNotificationAccessEnabled" "app/src/main/java/com/sanad/v9test/MainActivity.java"
           grep -q "getPendingBankNotifications" "app/src/main/java/com/sanad/v9test/MainActivity.java"
           grep -q "startRescanActiveBankNotifications" "app/src/main/java/com/sanad/v9test/MainActivity.java"
