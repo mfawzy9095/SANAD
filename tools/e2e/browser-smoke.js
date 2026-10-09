@@ -348,7 +348,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.evaluate(async()=>{const result=await SanadBankInbox.refreshRecentSms();SanadSmsImportUI.dismiss();return result;});assert.equal(await page.evaluate(()=>S.transactions.length),beforeRecent+1);
  record('New unresolved inbound remains one review across repeats, then posts once after origin confirmation');
  await page.evaluate(()=>go('settings'));
- await page.locator('details.bank-sync-advanced').evaluate(el=>{el.open=true;});await page.locator('[data-sanad-act="bank-support-export"]').click();
+ await page.locator('#r25Settings > .r25-settings-group [data-sanad-act="bank-support-export"]').click();
  await page.locator('[data-sheet-type="bank-support-guide"]').count();
  const diagnosticDownload=page.waitForEvent('download');await page.locator('[data-sanad-act="bank-support-export-confirm"]').click();
  const diagnostic=await diagnosticDownload,diagnosticPath=path.join(output,'synthetic-diagnostic-backup.json');await diagnostic.saveAs(diagnosticPath);
