@@ -63,7 +63,7 @@
       budgets:{},saving:{amount:0,currency:'EGP',saved:0,targetDate:null},
       warnPct:80,alertPct:100,lastFx:{},dismissedReminders:{},
       defaultCountry:'UAE',primaryAccountByCountry:{},lastExpenseSourceByCountry:{},
-      categoryBudgets:{},overallSpendingLimits:{},budgetAlerts:{},
+      categoryBudgets:{},categoryOrder:{expense:[],income:[]},overallSpendingLimits:{},budgetAlerts:{}
       defaultAccountByCountry:{}, defaultInstrumentByCountry:{}
     };
     for (const [k,def] of Object.entries(D)){
@@ -246,7 +246,7 @@
         budgets:{},saving:{amount:0,currency:'EGP',saved:0,targetDate:null},
         warnPct:80,alertPct:100,lastFx:{},dismissedReminders:{},
         defaultCountry:'UAE',primaryAccountByCountry:{},lastExpenseSourceByCountry:{},
-        categoryBudgets:{},overallSpendingLimits:{},budgetAlerts:{},
+        categoryBudgets:{},categoryOrder:{expense:[],income:[]},overallSpendingLimits:{},budgetAlerts:{}
         defaultAccountByCountry:{}, defaultInstrumentByCountry:{}
       }, state.settings || {})
     };
@@ -593,6 +593,15 @@
 
     if(state.settings){
       if(state.settings.bankSmsStartAt!=null&&(!Number.isSafeInteger(state.settings.bankSmsStartAt)||state.settings.bankSmsStartAt<=0))push('بداية سحب الرسائل غير صالحة');
+      const categoryOrder=state.settings.categoryOrder;
+      if(categoryOrder!=null){
+        if(typeof categoryOrder!=='object'||Array.isArray(categoryOrder))push('ترتيب الفئات غير صالح');
+        else for(const type of ['expense','income']){
+          const order=categoryOrder[type];
+          if(order==null)continue;
+          if(!Array.isArray(order)||order.length>160||new Set(order).size!==order.length||order.some(id=>typeof id!=='string'||!id||id.length>90||['__proto__','constructor','prototype'].includes(id)))push('ترتيب فئات '+type+' غير صالح');
+        }
+      }
       const decisions=state.settings.bankEventDecisions;
       if(decisions!=null){
         if(typeof decisions!=='object'||Array.isArray(decisions)||Object.keys(decisions).length>50000)push('سجل قرارات الرسائل غير صالح');
