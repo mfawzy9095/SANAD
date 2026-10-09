@@ -1657,6 +1657,20 @@ function getVisibleAssetAccounts(country){
     return true;
   });
 }
+function sanadCardGlyph(emoji,size=26){
+  const paths={
+    '💳':'M3 6h18v12H3z M3 10h18 M7 15h5',
+    '🪪':'M4 4h16v16H4z M8 8a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M6 16q2-3 4 0 M13 9h5 M13 13h5',
+    '💠':'M12 2l8 10-8 10-8-10z M4 12h16 M12 2v20',
+    '🎴':'M5 5h15v12H5z M3 8v11h14',
+    '🏦':'M3 9l9-6 9 6 M5 10v9 M10 10v9 M14 10v9 M19 10v9 M3 21h18',
+    '📱':'M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z M11 18h2',
+    '💎':'M5 4h14l4 7-11 11L1 11z M1 11h22 M9 4l-3 7 6 11 6-11-3-7'
+  };
+  const path=paths[emoji];if(!path)return esc(emoji||'');
+  const n=Math.max(16,Math.min(40,Number(size)||26));
+  return '<svg aria-hidden="true" width="'+n+'" height="'+n+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+path+'"/></svg>';
+}
 function cardNetworkLogoHtml(network){
   const n=String(network||'other').toLowerCase();
   if(n==='visa')return '<span aria-label="Visa" style="display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:20px;padding:0 5px;border-radius:5px;background:#fff;color:#1434CB;font-weight:900;font-style:italic;font-size:13px;letter-spacing:.2px">VISA</span>';
@@ -6370,7 +6384,7 @@ function openInstrumentSheet(id, presetType, preserve){
   const prepaidFundingOptions = '<option value="">— اختر حساب التمويل —</option>' + prepaidFundingAccounts.map(a =>
     '<option value="' + a.id + '"' + (existingTopupId === a.id ? ' selected' : '') + '>' + a.icon + ' ' + esc(a.name) + ' · ' + Finance.curSymbol(a.currency) + '</option>').join('');
   const icons = CARD_ICONS.map(ic =>
-    '<div class="icon-opt ' + (data.icon === ic ? 'on' : '') + '" data-wallet-ic="' + ic + '">' + ic + '</div>').join('');
+    '<button type="button" class="icon-opt ' + (data.icon === ic ? 'on' : '') + '" data-wallet-ic="' + ic + '" aria-label="رمز بطاقة">' + sanadCardGlyph(ic,27) + '</button>').join('');
   const colors = PALETTE.map(p =>
     '<div class="color-opt ' + (data.color === p.c ? 'on' : '') + '" data-wallet-col="' + p.c + '" style="background:' + p.c + '"></div>').join('');
   const countryOpts = Object.values(COUNTRIES).map(c =>
@@ -6384,7 +6398,7 @@ function openInstrumentSheet(id, presetType, preserve){
   let headerBtn = '<div style="width:36px"></div>';
   if (isEdit){
     if (data.archived) headerBtn = '<button type="button" class="close" data-instrument-unarchive="' + id + '" title="استرجاع" style="color:var(--primary)">↩</button>';
-    else headerBtn = '<button type="button" class="danger" data-instrument-archive="' + id + '" title="أرشفة">📦</button>';
+    else headerBtn = '<button type="button" class="danger" data-instrument-archive="' + id + '" title="أرشفة البطاقة" aria-label="أرشفة البطاقة"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v4H4z M5 8v12h14V8 M10 13h4"/></svg></button>';
   }
   let amountFields = '';
   if (isCredit){
@@ -6475,7 +6489,7 @@ function openInstrumentSheet(id, presetType, preserve){
           '<span style="font-size:12px;color:var(--text-3);white-space:nowrap">XXXX XXXX</span>' +
           '<input type="text" id="cardLast4" maxlength="4" inputmode="numeric" value="' + esc(data.last4 || '') + '" placeholder="0308">' +
         '</div><div class="field-hint">يحفظ SANAD أول 4 وآخر 4 فقط. لا يتم حفظ الرقم الكامل أو تاريخ الانتهاء أو CVV.</div></div>' +
-      '<div class="field"><label>الأيقونة</label><div class="icon-grid">' + icons + '</div><input type="hidden" id="cardIco" value="' + data.icon + '"></div>' +
+      '<div class="field"><label>رمز البطاقة</label><div class="icon-grid">' + icons + '</div><input type="hidden" id="cardIco" value="' + data.icon + '"><div class="field-hint">رموز موحدة بدون تغيير هوية البنك أو بيانات البطاقة.</div></div>' +
       '<div class="field"><label>اللون</label><div class="color-row">' + colors + '</div><input type="hidden" id="cardCol" value="' + data.color + '"></div>' +
       ((isDebit || isWalletCard) ? '<input type="hidden" id="cardCountry" value="' + data.country + '">' : '') +
       defaultToggleHtml +
