@@ -678,6 +678,21 @@ main>.wallet-hero,main>.country-summary,main>.debt-summary,main>.card,main>.stat
   main{padding-inline:12px}
 }
 
+.cat-scroll{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;overflow:visible;max-height:none;padding:3px 0 12px}
+.cat-scroll .cat-chip-s{min-width:0;min-height:78px;max-width:100%;width:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;padding:10px 5px;border-radius:15px;text-align:center;white-space:normal;line-height:1.3;font-size:12px}
+.cat-scroll .cat-chip-s .ci{display:grid;place-items:center}
+.cat-sort-item{gap:9px;transition:box-shadow .14s,background .14s}
+.cat-sort-item .cat-sort-handle{width:44px;min-height:44px;display:grid;place-items:center;border:1px solid var(--outline);border-radius:12px;background:var(--surface-2);color:var(--text-2);cursor:grab;touch-action:none;user-select:none;font-size:23px}
+.cat-sort-item.dragging{background:var(--primary-soft);box-shadow:inset 0 0 0 1px var(--primary);opacity:.8}
+.cat-sort-item .cat-sort-tools{display:flex;gap:2px}
+.cat-sort-item .cat-sort-tools button{border:0;background:transparent;color:var(--text-2);min-width:35px;min-height:40px;border-radius:9px;font-size:18px}
+.cat-sort-item .cat-sort-tools button:disabled{opacity:.27}
+.bank-required{color:#d02b3c;font-weight:900;margin-inline-start:4px}
+.bank-field-error{color:#ba2640;font-size:12px;margin-top:5px;line-height:1.6}
+.bank-field-invalid{outline:2px solid #d02b3c;outline-offset:2px}
+.bank-review-intro{padding:12px 14px;border:1px solid var(--outline);border-radius:15px;background:var(--surface-2);margin-bottom:16px}
+.bank-review-optional{border:1px solid var(--outline);border-radius:15px;padding:12px 14px;margin:12px 0}
+.bank-review-optional summary{font-weight:800;cursor:pointer;color:var(--text)}
 /* ===== SANAD V9 product polish ===== */
 body{font-family:"Cairo",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Tahoma,sans-serif;background:
   radial-gradient(circle at 15% -10%,color-mix(in srgb,var(--primary) 9%,transparent),transparent 32%),var(--bg)}
@@ -1403,7 +1418,10 @@ const Finance = {
   allCats(type){
     const base = S.categories[type] || [];
     const defs = (DEFAULT_CATS[type] || []).filter(c => !base.some(b => b.id === c.id));
-    return base.concat(defs);
+    const rows=base.concat(defs),order=S.settings&&S.settings.categoryOrder&&S.settings.categoryOrder[type];
+    if(!Array.isArray(order)||!order.length)return rows;
+    const rank=new Map(order.map((id,i)=>[id,i]));
+    return rows.map((c,i)=>({c,i})).sort((a,b)=>(rank.has(a.c.id)?rank.get(a.c.id):10000+a.i)-(rank.has(b.c.id)?rank.get(b.c.id):10000+b.i)).map(x=>x.c);
   },
   periodRange(period, monthKey){
     return ReportCore.periodRange(period,monthKey||S.month,Date.now());
@@ -3499,7 +3517,7 @@ function renderTxSheet(){
     '<div class="sheet-body tx-sheet-body">' +
       sourceArea +
       '<div style="font-size:12.5px;color:var(--text-2);margin:2px 2px 6px">' + (isIncome ? 'مصدر الدخل' : 'الفئة') + '</div>' +
-      '<div class="cat-scroll">' + catChips + '</div>' +
+      '<div class="cat-scroll" role="group" aria-label="اختر فئة العملية">' + catChips + '</div>' +
       '<div class="tx-pay-block">' +
         '<div class="amount-display native-amount-wrap">' +
           '<div class="amount-entry-row"><span class="amount-symbol">' + Finance.curSymbol(f.currency) + '</span>' +
@@ -5917,21 +5935,78 @@ function openCatsManage(type){
   if (!canWrite()){ toast('وضع القراءة فقط'); return; }
   const cats = Finance.allCats(type);
   const customIds = (S.categories[type] || []).map(c => c.id);
-  const rows = cats.map(c => {
+  const rows = cats.map((c,i) => {
     const isCustom = customIds.includes(c.id);
-    return '<div class="list-item"><div class="li-ico" style="background:' + c.c + '22;color:' + c.c + '">' + categoryIconHtml(c,20) + '</div>' +
+    return '<div class="list-item cat-sort-item" data-cat-sort-item="'+esc(c.id)+'" data-cat-sort-type="'+esc(type)+'">' +
+      '<button type="button" class="cat-sort-handle" data-cat-drag="'+esc(c.id)+'" aria-label="اضغط واسحب لترتيب '+esc(c.n)+'">⠿</button>' +
+      '<div class="li-ico" style="background:' + c.c + '22;color:' + c.c + '">' + categoryIconHtml(c,20) + '</div>' +
       '<div class="li-body"><b>' + esc(c.n) + '</b><span>' + (isCustom ? 'مخصصة' : 'افتراضية') + '</span></div>' +
-      (isCustom ? '<button type="button" class="li-del" data-cat-edit="' + type + ':' + c.id + '">✏️</button>' +
-        '<button type="button" class="li-del" data-cat-del="' + type + ':' + c.id + '">🗑</button>' : '') + '</div>';
+      '<div class="cat-sort-tools"><button type="button" data-cat-step="-1" aria-label="تحريك لأعلى" '+(i===0?'disabled':'')+'>↑</button><button type="button" data-cat-step="1" aria-label="تحريك لأسفل" '+(i===cats.length-1?'disabled':'')+'>↓</button></div>' +
+      (isCustom ? '<button type="button" class="li-del" data-cat-edit="' + type + ':' + c.id + '" aria-label="تعديل الفئة">✎</button>' +
+        '<button type="button" class="li-del" data-cat-del="' + type + ':' + c.id + '" aria-label="حذف الفئة">×</button>' : '') + '</div>';
   }).join('');
   openSheet(
     '<div class="sheet-head"><button type="button" class="close" data-act="close-sheet">✕</button>' +
       '<h2>فئات ' + (type === 'expense' ? 'المصاريف' : 'الدخل') + '</h2>' +
       '<button type="button" class="close" data-cat-add="' + type + '" style="color:var(--primary)">＋</button></div>' +
-    '<div class="sheet-body" style="padding:8px 0 24px"><div class="list" style="box-shadow:none;margin:0 20px">' + rows + '</div></div>',
+    '<div class="sheet-body" style="padding:8px 0 24px"><p class="field-hint" style="padding:5px 20px 10px">رتّب الفئات من علامة ⠿ بالسحب، أو استخدم السهمين. الترتيب يظهر في مربعات إضافة المصروف.</p><div class="list" data-cat-sort-list="'+esc(type)+'" style="box-shadow:none;margin:0 20px">' + rows + '</div></div>',
     'cats-manage'
   );
 }
+async function saveCategorySort(type,ids){
+  if(!canWrite()||!['expense','income'].includes(type))return false;
+  const available=Finance.allCats(type).map(x=>x.id);
+  if(ids.length!==available.length||new Set(ids).size!==ids.length||ids.some(id=>!available.includes(id)))return false;
+  const result=await commitCriticalMutation(async()=>{
+    S.settings.categoryOrder=Object.assign({},S.settings.categoryOrder||{},{[type]:ids.slice()});
+    return true;
+  });
+  if(!result.ok){toast('لم يتم حفظ ترتيب الفئات؛ لا توجد تغييرات في البيانات');return false;}
+  return true;
+}
+async function categorySortStep(button){
+  const row=button.closest('[data-cat-sort-item]'),list=row&&row.parentElement;
+  if(!row||!list)return;
+  const rows=Array.from(list.querySelectorAll('[data-cat-sort-item]'));
+  const i=rows.indexOf(row),next=i+Number(button.dataset.catStep);
+  if(next<0||next>=rows.length)return;
+  if(next>i)rows[next].after(row);else rows[next].before(row);
+  const ids=Array.from(list.querySelectorAll('[data-cat-sort-item]')).map(el=>el.dataset.catSortItem);
+  const type=list.dataset.catSortList;
+  await saveCategorySort(type,ids);openCatsManage(type);
+}
+let categoryDragState=null;
+document.addEventListener('pointerdown',ev=>{
+  const handle=ev.target.closest('[data-cat-drag]');
+  if(!handle||!canWrite()||ev.button!==0)return;
+  const row=handle.closest('[data-cat-sort-item]'),list=row&&row.parentElement;
+  if(!row||!list)return;
+  categoryDragState={pointerId:ev.pointerId,row,list,type:list.dataset.catSortList,startY:ev.clientY,moved:false};
+  try{handle.setPointerCapture(ev.pointerId);}catch(_){}
+  row.classList.add('dragging');ev.preventDefault();
+},true);
+document.addEventListener('pointermove',ev=>{
+  const d=categoryDragState;
+  if(!d||d.pointerId!==ev.pointerId)return;
+  if(Math.abs(ev.clientY-d.startY)>6)d.moved=true;
+  if(!d.moved)return;
+  const hit=document.elementFromPoint(ev.clientX,ev.clientY)?.closest('[data-cat-sort-item]');
+  if(!hit||hit===d.row||hit.parentElement!==d.list)return;
+  const middle=hit.getBoundingClientRect().top+hit.getBoundingClientRect().height/2;
+  if(ev.clientY<middle)hit.before(d.row);else hit.after(d.row);
+  ev.preventDefault();
+},true);
+document.addEventListener('pointerup',async ev=>{
+  const d=categoryDragState;
+  if(!d||d.pointerId!==ev.pointerId)return;
+  categoryDragState=null;d.row.classList.remove('dragging');
+  if(!d.moved)return;
+  const ids=Array.from(d.list.querySelectorAll('[data-cat-sort-item]')).map(el=>el.dataset.catSortItem);
+  await saveCategorySort(d.type,ids);openCatsManage(d.type);
+},true);
+document.addEventListener('pointercancel',()=>{
+  const d=categoryDragState;if(!d)return;categoryDragState=null;d.row.classList.remove('dragging');openCatsManage(d.type);
+},true);
 function openCatEdit(type, id){
   const isEdit = !!id;
   const c = isEdit ? (S.categories[type] || []).find(x => x.id === id) : null;
@@ -7662,6 +7737,8 @@ document.addEventListener('click', e => {
       document.querySelectorAll('[data-cat-col]').forEach(el => el.classList.toggle('on', el === cCol)); return; }
     const saveC2 = t.closest('[data-act="save-cat"]');
     if (saveC2){ saveCat(saveC2.dataset.type, saveC2.dataset.id || null); return; }
+    const catMove=t.closest('[data-cat-step]');
+    if(catMove){categorySortStep(catMove);return;}
     const catAdd = t.closest('[data-cat-add]');
     if (catAdd){ const ty = catAdd.dataset.catAdd; closeSheet(); setTimeout(() => openCatEdit(ty, null), 320); return; }
     const catEdit = t.closest('[data-cat-edit]');
