@@ -82,10 +82,15 @@ V.walletView=function(){
   const cards=chosen?Finance.getCountryInstruments(S.activeCountry).filter(i=>!i.archived&&i.accountId===chosen.id&&['credit_card','debit_card','prepaid_card','wallet_card'].includes(i.type)):[];
   if(!cards.some(i=>i.id===this.cardId))this.cardId=cards[0]?.id||null;
   const bankItems=groups.map(g=>{
-    const inst=g.institution,name=inst?.name||'حساب غير مرتبط',short=String(name).slice(0,2);
-    const img=inst&&(inst.bankRegistryId||inst.providerRegistryId)?institutionLogoHtml(inst,28,''):'<span>'+esc(short)+'</span>';
-    return '<button class="v252-bank" type="button" data-v252-bank="'+esc(g.id)+'" aria-pressed="'+(g.id===this.bankId)+'">'+
-      '<span class="v252-mark">'+img+'</span><span><b>'+esc(name)+'</b><small>'+g.accounts.length+' حساب</small></span></button>';
+    const inst=g.institution,name=inst?.name||tr('حساب غير مرتبط','Unlinked account');
+    const b=inst?.bankRegistryId?UaeBankRegistryCore.get(inst.bankRegistryId):null;
+    const p=inst?.providerRegistryId?UaeBankRegistryCore.getProvider(inst.providerRegistryId):null;
+    const abbreviation=b?bankUiShort(b):p?providerUiShort(p):String(name).slice(0,3);
+    // Use an honest offline institutional monogram until licensed master
+    // brand artwork is available. Never display a false "official" bank logo.
+    const mark='<span role="img" aria-label="'+esc(name)+'">'+esc(abbreviation.slice(0,4))+'</span>';
+    return '<button class="v252-bank" type="button" title="'+esc(name)+'" data-v252-bank="'+esc(g.id)+'" aria-pressed="'+(g.id===this.bankId)+'">'+
+      '<span class="v252-mark">'+mark+'</span><span><b>'+esc(abbreviation)+'</b><small>'+g.accounts.length+' '+tr('حساب','accounts')+'</small></span></button>';
   }).join('');
   const accountItems=selected?selected.accounts.map(a=>{
     const pres=!isLiabilityAccount(a)?Finance.accountBalancePresentation(a.id):null;
@@ -128,6 +133,17 @@ const formerBank=V.bank;
 V.bank=function(id){
   // A selected bank opens its read-only sheet on a second tap.
   return formerBank.call(this,id);
+};
+// After durable scan completion, keep the result visible briefly and then
+// minimize into the tappable summary chip. Do not stop or alter the import.
+const coreFinish=SanadSmsImportUI.finish.bind(SanadSmsImportUI);
+SanadSmsImportUI.finish=function(result){
+  coreFinish(result);
+  if(this.state==='complete'){
+    setTimeout(()=>{
+      if(this.result===result&&this.state==='complete'&&this.visible)this.minimize();
+    },6500);
+  }
 };
 document.addEventListener('click',e=>{
   if(!e.target.closest('[data-act="go-tx"]'))return;
