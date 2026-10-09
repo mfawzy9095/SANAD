@@ -5,6 +5,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
@@ -28,6 +29,21 @@ public final class SmsImportService extends Service {
     private long scanned, added, review, total = -1;
     static void attach(Control owner) { control = new WeakReference<>(owner); }
     static boolean running() { return active.get() != null; }
+    /**
+     * Idempotently terminate a completed/cancelled import and remove the
+     * foreground notification. Must be called on the main thread by the bridge.
+     * A foreground-service notification can outlive stopService() unless removed
+     * explicitly on certain Android/One UI builds.
+     */
+    static void finish(Context context) {
+        SmsImportService service = active.get();
+        if (service != null) {
+            service.stopForeground(STOP_FOREGROUND_REMOVE);
+            service.stopSelf();
+        }
+        context.stopService(new Intent(context, SmsImportService.class));
+        context.getSystemService(NotificationManager.class).cancel(NOTIFICATION);
+    }
     static void progress(long scanned, long added, long review, long total) {
         SmsImportService service = active.get();
         if (service != null) service.update(scanned, added, review, total);
@@ -83,11 +99,15 @@ public final class SmsImportService extends Service {
     }
     private void requestStop(String reason) {
         Control owner = control.get();if (owner != null) owner.stop(reason);
-        stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();
+        finish(this);
     }
     @Override public void onTimeout(int startId, int fgsType) { requestStop("pause"); }
     @Override public void onTaskRemoved(Intent rootIntent) { requestStop("pause");super.onTaskRemoved(rootIntent); }
     @Override public void onDestroy() {
+        // Android OEM notification panels may retain ongoing FGS entries after
+        // stopService unless both the FGS association and notification are cleared.
+        stopForeground(STOP_FOREGROUND_REMOVE);
+        getSystemService(NotificationManager.class).cancel(NOTIFICATION);
         if (active.get() == this) active = new WeakReference<>(null);
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         super.onDestroy();
