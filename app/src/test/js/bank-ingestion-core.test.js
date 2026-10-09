@@ -793,3 +793,18 @@ console.log('bank ingestion core regression tests: PASS');
  assert.strictEqual(F.accountBalanceAt(s,'to',at+2000),110);
  assert.strictEqual(I.duplicateOf(outgoing,s).id,'receipt');assert.strictEqual(I.duplicateOf(incoming,s).id,'receipt');
 }
+
+
+// Repayment destination must be the exact credit-card account named in the bank SMS.
+{
+ const state={institutions:[],transactions:[],
+  accounts:[{id:'debit',type:'bank',country:'UAE',currency:'AED'},{id:'credit',type:'credit',country:'UAE',currency:'AED'}],
+  paymentInstruments:[{id:'actual',accountId:'credit',country:'UAE',type:'credit_card',last4:'0308'}]};
+ const base={kind:'card_repayment',country:'UAE',currency:'AED',amount:684.19,postedAt:1791000000000};
+ const correct=I.routeFromManualChoice({...base,cardLast4:'0308'},state,{sourceType:'account',sourceId:'debit',targetAccountId:'credit'});
+ assert.strictEqual(correct.status,'routed');
+ assert.strictEqual(correct.instrument.id,'actual');
+ const wrong=I.routeFromManualChoice({...base,cardLast4:'4021'},state,{sourceType:'account',sourceId:'debit',targetAccountId:'credit'});
+ assert.strictEqual(wrong.status,'needs-review');
+ assert.strictEqual(wrong.reason,'manual-repayment-card-mismatch');
+}
