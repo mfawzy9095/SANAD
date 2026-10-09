@@ -289,6 +289,10 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
      .map(el=>({className:el.className,opacity:Number(getComputedStyle(el).opacity),animation:getComputedStyle(el).animationName})));
    assert(visiblePanels.length>0,'Expected visible panels in '+tab);
    assert(visiblePanels.every(x=>x.opacity>=0.99&&x.animation==='none'),'Financial panels must not fade/blank on '+tab+': '+JSON.stringify(visiblePanels.slice(0,10)));
+   if(tab==='rep'){
+     const selected=await page.evaluate(()=>{const e=document.querySelector('#view .tabs button.on');if(!e)return null;const s=getComputedStyle(e);return {text:e.textContent.trim(),color:s.color,bg:s.backgroundColor};});
+     assert(selected&&selected.text.length>0&&selected.color!==selected.bg,'Selected report period should be readable: '+JSON.stringify(selected));
+   }
    await page.screenshot({path:path.join(output,'v25-screen-'+tab+'-no-fade.png')});
  }
  record('V25 transaction/report/settings visuals, SVG icon assets and navigation are live and read-only');
