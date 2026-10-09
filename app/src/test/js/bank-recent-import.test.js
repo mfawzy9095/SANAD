@@ -182,3 +182,22 @@ assert(html.includes('data-sanad-act="bank-fix"'));
 }
 assert(html.includes('id="bankFixIssues"')&&html.includes('bank-required')&&html.includes('data-bank-conditional="target"')&&html.includes('data-bank-conditional="incoming"'));
 assert(html.includes('data-sanad-act="bank-edit-accounts"'));
+
+
+// Beneficiary display ordering must never change the identities used by historical transfers.
+(async()=>{
+ const start=html.indexOf('async function saveBeneficiarySort(ids){'),end=html.indexOf('function openBeneficiariesManage(){',start);
+ assert(start>=0&&end>start);
+ const a={id:'a',name:'First',archived:false},b={id:'b',name:'Often',archived:false},c={id:'c',name:'Old',archived:true};
+ const state={beneficiaries:[a,b,c]};
+ let commits=0;
+ const ctx={S:state,Map,Set,Array,canWrite:()=>true,toast:()=>{},commitCriticalMutation:async fn=>{await fn();commits++;return {ok:true};}};
+ vm.createContext(ctx);vm.runInContext(html.slice(start,end),ctx);
+ assert.strictEqual(await ctx.saveBeneficiarySort(['b','a']),true);
+ assert.deepStrictEqual(state.beneficiaries.map(x=>x.id),['b','a','c']);
+ assert.strictEqual(state.beneficiaries[0],b);
+ assert.strictEqual(state.beneficiaries[2],c);
+ assert.strictEqual(await ctx.saveBeneficiarySort(['b','b']),false);
+ assert.strictEqual(commits,1);
+ console.log('Beneficiaries: persistent touch order preserves IDs, history references and archived membership: PASS');
+})().catch(e=>{console.error(e);process.exitCode=1;});
