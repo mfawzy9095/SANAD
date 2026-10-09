@@ -1,0 +1,70 @@
+/* SANAD V25.2 hybrid visual integration. Financial logic remains authoritative in existing modules. */
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap');
+:root{--bg:#f6fafb;--surface:#fff;--surface-2:#edf5f6;--surface-3:#e4f0f1;--outline:#dce9ec;--text:#103c4d;--text-2:#64828d;--text-3:#829ca5;--primary:#076d82;--primary-2:#00a795;--primary-soft:#e2f5ef;--on-primary:#fff;--success:#008870;--info:#167b98;--shadow-1:0 2px 12px #1648570a;--shadow-2:0 8px 24px #0b617520}
+[data-theme="dark"]{--bg:#102a34;--surface:#1b3b45;--surface-2:#224650;--surface-3:#2a515b;--outline:#315560;--text:#f0f8fa;--text-2:#b0cdd2;--text-3:#94b4bc;--primary:#22b8b0;--primary-2:#36b7a2;--primary-soft:#184b4e;--on-primary:#072936}
+html,body{font-family:Tajawal,Tahoma,Arial,sans-serif!important}
+body,button,input,textarea,select{font-family:Tajawal,Tahoma,Arial,sans-serif!important}
+body{background:var(--bg)}
+#app{background:var(--bg)}
+.top-bar{padding:15px 16px 10px;background:var(--bg);min-height:62px}
+.top-bar h1{font-size:20px;font-weight:800;color:var(--text)}
+.top-bar h1:before{content:"";display:inline-block;width:26px;height:31px;vertical-align:middle;margin-left:9px;background:url("../img/sanad-logo.webp") center/contain no-repeat}
+.top-bar .tb-btn{border:1px solid var(--outline);background:var(--surface);border-radius:12px}
+main{padding:2px 14px 132px}
+.bottom-nav{border:1px solid var(--outline);border-bottom:0;border-radius:18px 18px 0 0;box-shadow:0 -8px 28px #0a3b4d12;padding:7px 4px calc(8px + env(safe-area-inset-bottom));background:var(--surface);gap:0}
+.bottom-nav button{padding:7px 2px 5px;min-height:55px;font-weight:700}
+.bottom-nav button span{font-size:11px;font-weight:700}
+.bottom-nav button.on{color:var(--primary)}
+.bottom-nav button.on .ico{background:var(--primary-soft)}
+.fab{bottom:calc(84px + env(safe-area-inset-bottom));background:linear-gradient(135deg,#07567b,#00a78d);box-shadow:0 6px 20px #06798255;border-radius:18px}
+.wallet-hero,.debt-summary{background:linear-gradient(115deg,#083f65,#066f82 51%,#05ad87);border-radius:22px;box-shadow:0 8px 25px #064d5c26}
+.card,.country-summary,.list,.tx-list{border:1px solid var(--outline);box-shadow:var(--shadow-1);border-radius:17px}
+.sec h2{font-weight:800;font-size:16px}
+.country-btn .flag,.country-opt .flag{display:none}
+.tile{border-radius:21px;box-shadow:var(--shadow-2)}
+#sanadScanDialog{border:1px solid var(--outline)!important;border-radius:25px!important;box-shadow:0 24px 90px #051a2660!important}
+.sanad-scan-art{width:86px!important;height:86px!important;margin:8px auto 14px!important;border-radius:23px!important;background:linear-gradient(140deg,#e6f9f4,#dff0f8)!important;display:grid!important;place-items:center!important;animation:v252Breath 2.8s ease-in-out infinite}
+.sanad-scan-art svg{display:none!important}
+.sanad-scan-art:before{content:"";display:block;width:56px;height:65px;background:url("../img/sanad-logo.webp") center/contain no-repeat}
+#sanadScanFill{background:linear-gradient(90deg,#00677a,#05ae97)!important}
+#sanadScanTrack[data-indeterminate="true"] #sanadScanFill{animation:v252Load 1.6s ease-in-out infinite}
+@keyframes v252Load{0%{margin-right:0;width:14%}55%{margin-right:30%;width:54%}100%{margin-right:82%;width:14%}}
+@keyframes v252Breath{50%{transform:scale(1.045)}}
+.sanad-scan-metric{border-radius:13px!important}
+.v252-country{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:0 0 13px}
+.v252-country button{border:1px solid var(--outline);background:var(--surface);color:var(--text-2);padding:11px 4px;border-radius:11px;font-size:13px;font-weight:800}
+.v252-country button.active{background:linear-gradient(112deg,#075476,#00a68d);color:white;border-color:transparent;box-shadow:0 6px 15px #0d716d25}
+.v252-card{background:var(--surface);border:1px solid var(--outline);border-radius:17px;padding:14px;margin:0 0 13px}
+.v252-heading{font-weight:900;font-size:19px;margin:0 0 11px}
+.v252-section{display:flex;align-items:center;justify-content:space-between;margin:14px 0 8px;gap:10px}
+.v252-section h3{font-size:14px;font-weight:800;margin:0}
+.v252-hint{color:var(--text-2);font-size:12px;line-height:1.5}
+.v252-strip{display:flex;gap:9px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;touch-action:pan-x;overscroll-behavior-x:contain;padding:4px 2px 10px;-webkit-overflow-scrolling:touch}
+.v252-strip::-webkit-scrollbar{display:none}
+.v252-bank{width:154px;min-width:154px;min-height:63px;display:flex;align-items:center;gap:9px;text-align:right;border:1px solid var(--outline);background:var(--surface);border-radius:13px;padding:8px 10px;color:var(--text);font-weight:800;font-size:12px}
+.v252-bank[aria-pressed="true"]{background:linear-gradient(115deg,#07516f,#058b89);color:#fff;border-color:transparent}
+.v252-bank small{font-size:10px;font-weight:500;opacity:.8;display:block;margin-top:3px}
+.v252-mark{width:34px;height:34px;min-width:34px;border-radius:10px;background:#e2f2f5;color:#07667b;display:flex;align-items:center;justify-content:center;font-weight:900}
+.v252-bank[aria-pressed="true"] .v252-mark{background:#ffffff25;color:white}
+.v252-mark img{object-fit:contain;max-height:33px;max-width:33px}
+.v252-account{min-width:158px;max-width:158px;text-align:right;padding:12px;border:1px solid var(--outline);border-radius:13px;background:var(--surface);color:var(--text)}
+.v252-account[aria-pressed="true"]{border:2px solid var(--primary);background:var(--primary-soft);padding:11px}
+.v252-account strong{display:block;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v252-account span{display:block;color:var(--text-2);font-size:11px;margin-top:5px}
+.v252-account .amt-val{font-size:14px;font-weight:900;direction:ltr;text-align:right}
+.v252-cards .tile{min-width:267px;width:267px;min-height:170px;flex:0 0 267px;scroll-snap-align:start}
+.v252-cards .tile{cursor:default}
+.v252-card-wrap{scroll-snap-align:start;flex:0 0 267px;display:block}
+.v252-card-wrap .tile{width:267px}
+.v252-card-wrap button{border:0;color:inherit;display:block;text-align:inherit;background:transparent;padding:0;max-width:100%}
+.v252-empty{color:var(--text-2);font-size:13px;text-align:center;padding:21px 12px;border:1px dashed var(--outline);border-radius:12px}
+.v252-advanced{margin:12px 0 4px;border:1px solid var(--outline);border-radius:14px;padding:0 11px;background:var(--surface)}
+.v252-advanced summary{padding:15px 4px;font-size:13px;font-weight:800;color:var(--primary);cursor:pointer}
+.v252-advanced[open]{padding-bottom:8px}
+.v252-advanced .hscroll{overflow-x:auto}
+.v252-card .v252-strip button:focus-visible,.v252-country button:focus-visible{outline:3px solid var(--primary);outline-offset:2px}
+.v252-quick{width:100%;background:#e6f7f2;color:#075b65;border:1px solid #a7e4d5;border-radius:12px;padding:12px 8px;text-align:center;font-weight:800}
+.v252-quick:disabled{opacity:.6}
+#v252VersionNotice{font-size:11px;color:var(--text-2);text-align:center;padding:10px 2px}
+@media(max-width:360px){.v252-bank{width:140px;min-width:140px}.v252-account{min-width:146px;max-width:146px}.bottom-nav button span{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.sanad-scan-art,#sanadScanFill{animation:none!important}}
