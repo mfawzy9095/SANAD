@@ -510,7 +510,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
      pageWidth:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),
      header:(()=>{let r=document.querySelector('#sanadScanDialog .sanad-scan-top h2').getBoundingClientRect();return {left:r.left,right:r.right,width:r.width}})(),
      panel:(()=>{let r=document.querySelector('#sanadScanDialog').getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,height:r.height}})(),
-     actions:[...document.querySelectorAll('#sanadScanDialog .sanad-scan-actions button')].map(b=>{let r=b.getBoundingClientRect();return {left:r.left,right:r.right,width:r.width}})
+     actions:[...document.querySelectorAll('#sanadScanDialog .sanad-scan-actions button')].filter(b=>b.getClientRects().length>0).map(b=>{let r=b.getBoundingClientRect();return {left:r.left,right:r.right,width:r.width}})
    }));
    assert(ui.pageWidth<=ui.viewport+2&&ui.panel.left>=-1&&ui.panel.right<=ui.viewport+1,'Import panel must fit viewport '+width+': '+JSON.stringify(ui));
    assert(ui.header.left>=-1&&ui.header.right<=ui.viewport+1,'Import heading clipped on '+width+': '+JSON.stringify(ui));
