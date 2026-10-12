@@ -184,7 +184,7 @@ W.walletView=function(){
    const scale=1-Math.min(d,3)*0.065;
    el.style.transform='translate3d('+dx+'%, '+(Math.min(d,3)*6)+'px, 0) scale('+scale+')';
    el.style.zIndex=String(100-d);
-   el.style.opacity=d>2?'0':'1';
+   el.style.removeProperty('opacity'); // no transparent cards while selecting or dragging
    el.style.pointerEvents=d<2?'auto':'none';
    el.setAttribute('aria-pressed',String(i===selected));
    el.dataset.r25CardIndex=String(i);
@@ -205,24 +205,46 @@ W.card=function(id){
  this.cardId=id;render();
 };
 let touchStart=null;
+function restoreCardDrag(start){
+ if(!start||!start.card||!start.card.isConnected)return;
+ start.card.style.transform=start.previousTransform;
+ start.card.style.transition=start.previousTransition;
+}
 document.addEventListener('pointerdown',e=>{
  const deck=e.target.closest('#v252CardStrip.r25-card-deck');
  if(!deck||!e.isPrimary)return;
- touchStart={x:e.clientX,y:e.clientY,id:e.pointerId,deck};
+ const card=deck.querySelector('[data-v252-card][aria-pressed="true"]');
+ touchStart={x:e.clientX,y:e.clientY,id:e.pointerId,deck,card,
+   previousTransform:card?.style.transform||'',previousTransition:card?.style.transition||'',moved:false};
+},true);
+document.addEventListener('pointermove',e=>{
+ const start=touchStart;
+ if(!start||start.id!==e.pointerId||!start.card?.isConnected)return;
+ const dx=e.clientX-start.x,dy=e.clientY-start.y;
+ // Vertical movements belong to the Android page scroll.
+ if(Math.abs(dx)<8||Math.abs(dx)<=Math.abs(dy)*1.2)return;
+ start.moved=true;
+ start.card.style.transition='none';
+ // The selected card tracks the pointer on every move; never alter opacity.
+ start.card.style.transform='translate3d('+dx+'px, 0px, 0px) scale(1)';
 },true);
 document.addEventListener('pointerup',e=>{
  if(!touchStart||touchStart.id!==e.pointerId)return;
  const start=touchStart;touchStart=null;
  if(!start.deck.isConnected)return;
  const dx=e.clientX-start.x,dy=e.clientY-start.y;
- if(Math.abs(dx)<35||Math.abs(dx)<Math.abs(dy)*1.2)return;
+ if(Math.abs(dx)<35||Math.abs(dx)<Math.abs(dy)*1.2){restoreCardDrag(start);return;}
  ignoreCardClickUntil=performance.now()+400;
  const cards=[...start.deck.querySelectorAll('[data-v252-card]')];
  const i=cards.findIndex(x=>x.dataset.v252Card===W.cardId);
  const next=Math.max(0,Math.min(cards.length-1,i+(dx>0?1:-1)));
- if(cards[next]){W.cardId=cards[next].dataset.v252Card;render();}
+ if(cards[next]&&next!==i){W.cardId=cards[next].dataset.v252Card;render();}
+ else restoreCardDrag(start);
 },true);
-document.addEventListener('pointercancel',()=>{touchStart=null;},true);
+document.addEventListener('pointercancel',()=>{
+ restoreCardDrag(touchStart);
+ touchStart=null;
+},true);
 document.addEventListener('click',e=>{
  const step=e.target.closest('[data-r25-card-step]'),dot=e.target.closest('[data-r25-card-index]');
  if(!step&&!dot)return;
