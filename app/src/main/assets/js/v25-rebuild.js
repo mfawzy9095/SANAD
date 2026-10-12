@@ -199,10 +199,14 @@ W.walletView=function(){
 };
 W.card=function(id){
  if(performance.now()<ignoreCardClickUntil)return;
- const cards=Finance.getCountryInstruments(S.activeCountry).filter(i=>!i.archived);
- if(!cards.some(i=>i.id===id))return;
+ const card=Finance.getCountryInstruments(S.activeCountry).find(i=>i.id===id&&!i.archived);
+ if(!card)return;
  if(this.cardId===id){this.cardDetails(id);return;}
- this.cardId=id;render();
+ // Selection changes only visual context. The underlying account/ledger
+ // remains unchanged; show the account that actually funds this card.
+ this.cardId=id;
+ if(card.accountId&&Finance.getAccount(card.accountId)?.country===S.activeCountry)this.accountId=card.accountId;
+ render();
 };
 let touchStart=null;
 document.addEventListener('pointerdown',e=>{
@@ -220,7 +224,7 @@ document.addEventListener('pointerup',e=>{
  const cards=[...start.deck.querySelectorAll('[data-v252-card]')];
  const i=cards.findIndex(x=>x.dataset.v252Card===W.cardId);
  const next=Math.max(0,Math.min(cards.length-1,i+(dx>0?1:-1)));
- if(cards[next]){W.cardId=cards[next].dataset.v252Card;render();}
+ if(cards[next]){const id=cards[next].dataset.v252Card;W.cardId=id;const linked=Finance.getInstrument(id);if(linked?.accountId)W.accountId=linked.accountId;render();}
 },true);
 document.addEventListener('pointercancel',()=>{touchStart=null;},true);
 document.addEventListener('click',e=>{
@@ -231,7 +235,7 @@ document.addEventListener('click',e=>{
  let i=cards.findIndex(x=>x.dataset.v252Card===W.cardId);
  if(step)i=Math.max(0,Math.min(cards.length-1,i+Number(step.dataset.r25CardStep)));
  else i=Number(dot.dataset.r25CardIndex);
- if(cards[i]){W.cardId=cards[i].dataset.v252Card;render();}
+ if(cards[i]){const id=cards[i].dataset.v252Card;W.cardId=id;const linked=Finance.getInstrument(id);if(linked?.accountId)W.accountId=linked.accountId;render();}
 },true);
 
 window.SanadV25Rebuild={previous,version:'v25-structural-rebuild-1'};
