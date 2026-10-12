@@ -79,7 +79,11 @@ V.walletView=function(){
   const selected=groups.find(g=>g.id===this.bankId);
   if(selected&&!selected.accounts.some(a=>a.id===this.accountId)){this.accountId=selected.accounts[0]?.id||null;this.cardId=null;}
   const chosen=selected&&selected.accounts.find(a=>a.id===this.accountId);
-  const cards=chosen?Finance.getCountryInstruments(S.activeCountry).filter(i=>!i.archived&&i.accountId===chosen.id&&['credit_card','debit_card','prepaid_card','wallet_card'].includes(i.type)):[];
+  // A bank can own several financial accounts. A wallet must show its cards
+  // even if the first default-selected account happens to have no card.
+  // Every instrument stays associated with its actual account in finance state.
+  const linkedAccountIds=new Set(selected?selected.accounts.map(a=>a.id):[]);
+  const cards=selected?Finance.getCountryInstruments(S.activeCountry).filter(i=>!i.archived&&linkedAccountIds.has(i.accountId)&&['credit_card','debit_card','prepaid_card','wallet_card'].includes(i.type)):[];
   if(!cards.some(i=>i.id===this.cardId))this.cardId=cards[0]?.id||null;
   const bankItems=groups.map(g=>{
     const inst=g.institution,name=inst?.name||tr('حساب غير مرتبط','Unlinked account');
