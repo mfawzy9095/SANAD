@@ -211,6 +211,36 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(()=>S.activeCountry),'UAE');
  assert.equal(await page.evaluate(()=>stateFingerprint(snapshotState())),v252Before,'Visual country/account selection must not mutate ledger');
 
+ // Multi-account bank regression: a debit card belonging to a sibling account
+ // must remain visible when the bank's default account is selected.
+ // This is an in-memory fixture: all finance state is restored immediately.
+ const walletSnapshot=await page.evaluate(()=>deepClone(snapshotState()));
+ const bankwide=await page.evaluate(({bankId,savingsId})=>{
+   const base=Finance.getAccount(bankId),sibling=Finance.getAccount(savingsId);
+   if(!base||!sibling)throw new Error('QA bank accounts unavailable');
+   sibling.institutionId=base.institutionId;
+   S.paymentInstruments.push({id:'qa-sibling-card',name:'QA Sibling Card',accountId:savingsId,
+      institutionId:base.institutionId,country:'UAE',type:'debit_card',network:'visa',
+      first4:'4321',last4:'9876',archived:false,color:'#0f718c',created:isoToday()});
+   SanadV252.bankId=base.institutionId||'unlinked';
+   SanadV252.accountId=bankId;SanadV252.cardId=null;
+   go('accounts');
+   return {selectedAccount:SanadV252.accountId,cards:document.querySelectorAll('#v252CardStrip [data-v252-card]').length,
+      card:!!document.querySelector('[data-v252-card="qa-sibling-card"]')};
+ },{bankId,savingsId});
+ assert.equal(bankwide.selectedAccount,bankId,'First account remains active before card selection');
+ assert.equal(bankwide.card,true,'Card on second account in same bank must be visible');
+ assert.equal(bankwide.cards,1,'Bank-level deck must show real linked cards, not duplicate entries');
+ await page.evaluate(()=>SanadV252.card('qa-sibling-card'));
+ assert.equal(await page.evaluate(()=>SanadV252.accountId),savingsId,'Selecting card updates linked account UI context');
+ const visibleCard=await page.locator('#v252CardStrip [data-v252-card="qa-sibling-card"]').count();
+ assert.equal(visibleCard,1,'Selected sibling card remains visible in carousel');
+ await page.screenshot({path:path.join(output,'v25-bank-multi-account-card.png')});
+ await page.evaluate(snapshot=>{loadStateInto(snapshot);SanadV252.bankId=null;SanadV252.accountId=null;SanadV252.cardId=null;go('accounts');},walletSnapshot);
+ assert.equal(await page.evaluate(()=>stateFingerprint(snapshotState())),v252Before,'Card carousel testing must not mutate ledger');
+ record('Bank-wide card deck shows sibling-account cards, selection follows linked account, and financial fingerprint is unchanged');
+
+
  // Responsive smoke at compact, standard and wide phones, including 200% font sizes.
  const fit=await page.evaluate(async()=>{
    const width=document.documentElement.clientWidth;
