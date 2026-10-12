@@ -53,7 +53,12 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  // initialized local profile. Exercise the welcome component independently as
  // a presentation/interaction flow without fabricating a first-run state.
  await page.waitForFunction(()=>S.ready&&(!document.getElementById('app').hidden||!document.getElementById('onboard').hidden));
- if(!await page.locator('#onboard').isVisible())await page.evaluate(()=>showOnboarding());
+ // Boot is allowed to finish a deferred startApp() after S.ready turns true.
+ // Avoid competing with that bootstrap transition before testing the optional tour.
+ if(await page.locator('#onboard').isVisible())await page.evaluate(()=>{S.settings.onboarded=true;startApp();});
+ await page.waitForFunction(()=>!document.getElementById('app').hidden);
+ await page.waitForTimeout(450);
+ await page.evaluate(()=>showOnboarding());
  await page.locator('#onboard').waitFor({state:'visible',timeout:8000});
  {
    assert.equal(await page.locator('#onboard[data-v25-entry-ready="yes"]').count(),1,'First-run onboarding must use rebuilt V25 presentation');
