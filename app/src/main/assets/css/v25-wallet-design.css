@@ -1,0 +1,52 @@
+/* Dedicated finance-backed wallet design — no legacy wallet markup dependencies. */
+.r25-wallet-design{width:100%;min-width:0;display:flex;flex-direction:column;gap:0;direction:rtl}
+.r25-wallet-design .r25-page-title{margin:9px 1px 13px}
+.r25-wallet-design .v252-country{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:0 0 12px}
+.r25-wallet-design .v252-country button{height:43px;min-width:0;border-radius:11px;border:1px solid var(--r25-line);background:var(--r25-paper);color:var(--r25-ink);font-weight:900;font-size:13px}
+.r25-wallet-design .v252-country button.active{color:#fff;border-color:transparent;background:linear-gradient(110deg,#0b5875,#00a790);box-shadow:0 4px 11px #08756a26}
+.r25-wallet-section{margin:17px 2px 9px;display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.r25-wallet-section h3{font-size:16px;line-height:1.3;color:var(--r25-ink);font-weight:900;flex:0 0 auto}
+.r25-wallet-section small{min-width:0;text-align:left;font-size:11px;line-height:1.5;color:var(--r25-muted)}
+.r25-wallet-slider{display:flex;align-items:stretch;gap:11px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;scroll-snap-type:x proximity;overscroll-behavior-x:contain;padding:3px 3px 10px;direction:rtl}
+.r25-wallet-slider::-webkit-scrollbar{display:none}
+.r25-bank-item,.r25-account-item{color:var(--r25-ink);text-align:right;flex:0 0 auto;box-sizing:border-box;scroll-snap-align:start;box-shadow:var(--r25-shadow);background:var(--r25-paper);border:1px solid var(--r25-line);border-radius:16px;transition:border-color .18s,box-shadow .18s,background .18s}
+.r25-bank-item{width:min(73vw,250px);min-height:87px;display:flex;align-items:center;gap:12px;padding:13px}
+.r25-bank-item[aria-pressed="true"],.r25-account-item[aria-pressed="true"]{border:2px solid #07788b;background:var(--r25-soft);box-shadow:0 5px 19px #046d7918}
+.r25-bank-monogram{display:grid;place-items:center;flex:0 0 48px;width:48px;height:48px;color:#086a82;background:linear-gradient(135deg,#e7f6f7,#c9ece9);border-radius:13px;font:900 13px system-ui,sans-serif;direction:ltr;letter-spacing:-.5px}
+.r25-bank-item[aria-pressed="true"] .r25-bank-monogram{background:#ffffffcf}
+.r25-bank-text{display:block;min-width:0;flex:1}
+.r25-bank-text b{display:block;font:900 15px "Tajawal Local",Tahoma,sans-serif;line-height:1.2;overflow-wrap:anywhere}
+.r25-bank-text small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.25;font-size:11px;color:var(--r25-muted);overflow-wrap:anywhere;margin-top:4px}
+.r25-bank-text em{display:block;font-style:normal;font-size:10px;color:#057d81;margin-top:5px}
+.r25-account-item{width:min(78vw,276px);min-height:122px;padding:14px 15px;display:flex;flex-direction:column;gap:7px}
+.r25-account-header{display:flex;align-items:flex-start;gap:9px;justify-content:space-between;min-width:0}
+.r25-account-header strong{font-size:14px;font-weight:900;line-height:1.4;overflow-wrap:anywhere;min-width:0;flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.r25-account-header small{flex:none;padding:3px 5px;border-radius:6px;background:#ddf0f3;color:#075f72;font:800 10px system-ui,sans-serif;direction:ltr}
+.r25-account-amount{font-size:22px;font-weight:900;line-height:1.2;overflow-wrap:anywhere;direction:rtl;text-align:right;margin-top:2px}
+.r25-account-note{font-size:11px;color:var(--r25-muted);line-height:1.45}
+.r25-wallet-design #v252CardStrip.r25-card-deck{height:232px;display:block;position:relative;max-width:100%;width:100%;padding:6px 0 2px;overflow:hidden;touch-action:pan-y;user-select:none}
+.r25-wallet-design #v252CardStrip.r25-card-deck .r25-wallet-payment{position:absolute;right:4%;left:4%;top:5px;width:92%;height:208px;min-height:208px;max-width:none;display:flex;flex-direction:column;justify-content:space-between;border-radius:21px;margin:0;box-shadow:0 11px 23px #07566a2f;transition:transform .23s ease,opacity .16s ease;cursor:pointer;backface-visibility:hidden}
+.r25-wallet-payment .r25-wallet-payment-title{min-width:0;flex:1}
+.r25-wallet-payment .r25-wallet-payment-title b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3;font-size:15px;overflow-wrap:anywhere}
+.r25-wallet-payment .r25-wallet-payment-title small{line-height:1.3;font-size:11px;opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r25-wallet-payment .v25-payment-card-number{font:900 clamp(16px,4.8vw,22px) system-ui,sans-serif;letter-spacing:.05em;line-height:1.25;direction:ltr;text-align:center}
+.r25-wallet-payment .v25-payment-card-foot small{font-size:11px;line-height:1.3}
+.r25-wallet-payment .v25-payment-card-foot b{font-size:17px;line-height:1.35}
+.r25-wallet-design .r25-card-pager{margin:0 0 6px}
+.r25-wallet-quick-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0 7px}
+.r25-wallet-quick-actions button{min-height:55px;border:1px solid #bce0d9;border-radius:13px;padding:9px 8px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--r25-soft);color:var(--r25-primary);font-size:12px;line-height:1.5;font-weight:900;min-width:0}
+.r25-wallet-quick-actions button:nth-child(2){background:var(--r25-paper);border-color:var(--r25-line)}
+.r25-wallet-quick-actions svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.r25-wallet-design :is(button,[role="button"]):focus-visible{outline:3px solid #18bda7;outline-offset:2px}
+@media(max-width:355px){
+ .r25-bank-item{width:min(76vw,235px);padding:10px;gap:8px}
+ .r25-account-item{width:82vw;padding:12px;min-height:115px}
+ .r25-wallet-design #v252CardStrip.r25-card-deck{height:205px}
+ .r25-wallet-design #v252CardStrip.r25-card-deck .r25-wallet-payment{min-height:184px;height:184px}
+ .r25-wallet-payment .v25-payment-card-number{font-size:15px}
+ .r25-wallet-section small{font-size:10px}
+ .r25-wallet-quick-actions button{font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){
+ .r25-wallet-payment,.r25-account-item,.r25-bank-item{transition:none!important}
+}
