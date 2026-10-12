@@ -25,7 +25,7 @@
 .r25-account-amount{font-size:22px;font-weight:900;line-height:1.2;overflow-wrap:anywhere;direction:rtl;text-align:right;margin-top:2px}
 .r25-account-note{font-size:11px;color:var(--r25-muted);line-height:1.45}
 .r25-wallet-design #v252CardStrip.r25-card-deck{height:232px;display:block;position:relative;max-width:100%;width:100%;padding:6px 0 2px;overflow:hidden;touch-action:pan-y;user-select:none}
-.r25-wallet-design #v252CardStrip.r25-card-deck .r25-wallet-payment{position:absolute;right:4%;left:4%;top:5px;width:92%;height:208px;min-height:208px;max-width:none;display:flex;flex-direction:column;justify-content:space-between;border-radius:21px;margin:0;box-shadow:0 11px 23px #07566a2f;transition:transform .23s ease,opacity .16s ease;cursor:pointer;backface-visibility:hidden}
+.r25-wallet-design #v252CardStrip.r25-card-deck .r25-wallet-payment{position:absolute;right:4%;left:4%;top:5px;width:92%;height:208px;min-height:208px;max-width:none;display:flex;flex-direction:column;justify-content:space-between;border-radius:21px;margin:0;box-shadow:0 11px 23px #07566a2f;transition:transform .23s ease;cursor:pointer;backface-visibility:hidden}
 .r25-wallet-payment .r25-wallet-payment-title{min-width:0;flex:1}
 .r25-wallet-payment .r25-wallet-payment-title b{display:block;overflow-wrap:anywhere;line-height:1.3;font-size:15px;overflow-wrap:anywhere}
 .r25-wallet-payment .r25-wallet-payment-title small{line-height:1.3;font-size:11px;opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -36,6 +36,10 @@
 .r25-wallet-payment .r25-wallet-balance-warning{display:block;font-size:10px;font-weight:850;line-height:1.4;margin-top:3px;color:#ffe0a9}
 .r25-wallet-payment .v25-payment-card-foot{min-height:53px;align-items:flex-end}
 .r25-wallet-payment .v25-card-network{flex:0 0 auto}
+/* SANAD V25.2 requires solid cards throughout touch drag and selection. */
+#v252CardStrip .r25-wallet-payment{opacity:1!important;will-change:transform}
+.r25-account-header strong{word-break:normal;overflow-wrap:break-word;unicode-bidi:plaintext}
+
 
 .r25-wallet-design .r25-card-pager{margin:0 0 6px}
 .r25-wallet-quick-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0 7px}
