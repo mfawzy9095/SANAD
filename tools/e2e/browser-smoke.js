@@ -321,6 +321,39 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(()=>S.tab),'subs','Legacy obligations remain reachable through settings');
  await page.evaluate(()=>go('home'));
  record('V25.2 live wallet: 5 tabs, country/provider/account selection, read-only double tap, financial invariant, obligations access');
+
+ // Two REALISTIC but SYNTHETIC payment instruments are added only inside the
+ // transient browser QA session to test multi-card navigation. They are never
+ // persisted, imported or shipped as APK demo financial data.
+ const deckFingerprint=await page.evaluate(()=>stateFingerprint(snapshotState()));
+ await page.evaluate(bankId=>{
+   const account=Finance.getAccount(bankId);
+   for(const sample of [
+    {id:'qa-ui-visa',name:'QA Visa',network:'visa',first4:'4578',last4:'3993',color:'#086c83'},
+    {id:'qa-ui-mastercard',name:'QA Mastercard',network:'mastercard',first4:'5432',last4:'8801',color:'#15505d'}
+   ]) S.paymentInstruments.push({...sample,type:'debit_card',country:account.country,accountId:bankId,institutionId:account.institutionId,archived:false});
+   S.activeCountry=account.country;
+   SanadV252.bankId=account.institutionId||'unlinked';
+   SanadV252.accountId=bankId;
+   SanadV252.cardId=null;
+   go('accounts');
+ },bankId);
+ assert.equal(await page.locator('#v252CardStrip .r25-wallet-payment').count(),2,'Both live account-linked cards must appear in wallet carousel');
+ assert.equal(await page.locator('#v252CardStrip [data-v252-card][aria-pressed="true"]').count(),1,'Exactly one financial card is selected');
+ assert.match(await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').innerText(),/4578 XXXX XXXX 3993/);
+ await page.screenshot({path:path.join(output,'v25-wallet-two-cards-first-393.png')});
+ await page.locator('nav.r25-card-pager [data-r25-card-step="1"]').click();
+ assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-mastercard"]').getAttribute('aria-pressed'),'true','Wallet next-card button must select linked Mastercard');
+ assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').getAttribute('aria-pressed'),'false');
+ await page.screenshot({path:path.join(output,'v25-wallet-two-cards-second-393.png')});
+ await page.evaluate(()=>{
+   S.paymentInstruments=S.paymentInstruments.filter(i=>!String(i.id).startsWith('qa-ui-'));
+   SanadV252.cardId=null;
+   render();
+ });
+ assert.equal(await page.evaluate(()=>stateFingerprint(snapshotState())),deckFingerprint,'Wallet carousel test must not change persisted or real financial records');
+ record('Real data adapter: two account-linked cards, masked numbers, card selection, network and immutable financial snapshot');
+
  await page.evaluate(()=>openNewTransfer());await page.locator('#fromAmtIn').fill('100');
  await page.locator('[data-act="save-tx"]').click();
  await page.waitForFunction(()=>S.transactions.some(t=>t.type==='transfer')&&!_financialFlowInFlight);
