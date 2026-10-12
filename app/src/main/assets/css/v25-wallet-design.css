@@ -16,7 +16,7 @@
 .r25-bank-item[aria-pressed="true"] .r25-bank-monogram{background:#ffffffcf}
 .r25-bank-text{display:block;min-width:0;flex:1}
 .r25-bank-text b{display:block;font:900 15px "Tajawal Local",Tahoma,sans-serif;line-height:1.2;overflow-wrap:anywhere}
-.r25-bank-text small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.25;font-size:11px;color:var(--r25-muted);overflow-wrap:anywhere;margin-top:4px}
+.r25-bank-text small{display:block;overflow-wrap:anywhere;line-height:1.25;font-size:11px;color:var(--r25-muted);overflow-wrap:anywhere;margin-top:4px}
 .r25-bank-text em{display:block;font-style:normal;font-size:10px;color:#057d81;margin-top:5px}
 .r25-account-item{width:min(78vw,276px);min-height:122px;padding:14px 15px;display:flex;flex-direction:column;gap:7px}
 .r25-account-header{display:flex;align-items:flex-start;gap:9px;justify-content:space-between;min-width:0}
@@ -27,7 +27,7 @@
 .r25-wallet-design #v252CardStrip.r25-card-deck{height:232px;display:block;position:relative;max-width:100%;width:100%;padding:6px 0 2px;overflow:hidden;touch-action:pan-y;user-select:none}
 .r25-wallet-design #v252CardStrip.r25-card-deck .r25-wallet-payment{position:absolute;right:4%;left:4%;top:5px;width:92%;height:208px;min-height:208px;max-width:none;display:flex;flex-direction:column;justify-content:space-between;border-radius:21px;margin:0;box-shadow:0 11px 23px #07566a2f;transition:transform .23s ease,opacity .16s ease;cursor:pointer;backface-visibility:hidden}
 .r25-wallet-payment .r25-wallet-payment-title{min-width:0;flex:1}
-.r25-wallet-payment .r25-wallet-payment-title b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3;font-size:15px;overflow-wrap:anywhere}
+.r25-wallet-payment .r25-wallet-payment-title b{display:block;overflow-wrap:anywhere;line-height:1.3;font-size:15px;overflow-wrap:anywhere}
 .r25-wallet-payment .r25-wallet-payment-title small{line-height:1.3;font-size:11px;opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .r25-wallet-payment .v25-payment-card-number{font:900 clamp(16px,4.8vw,22px) system-ui,sans-serif;letter-spacing:.05em;line-height:1.25;direction:ltr;text-align:center}
 .r25-wallet-payment .v25-payment-card-foot small{font-size:11px;line-height:1.3}
