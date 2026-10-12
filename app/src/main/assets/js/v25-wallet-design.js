@@ -98,9 +98,10 @@ W.walletView=function(){
 const priorRender=render;
 render=function(){
   priorRender();
-  if(['accounts','tx'].includes(S.tab)){
-    const fab=document.getElementById('fab');
-    if(fab)fab.style.display='none';
+  const fab=document.getElementById('fab');
+  if(fab){
+    fab.classList.toggle('r25-home-fab',S.tab==='home');
+    if(['accounts','tx'].includes(S.tab))fab.style.display='none';
   }
 };
 window.SanadWalletDesign={source:'Finance',version:2};
