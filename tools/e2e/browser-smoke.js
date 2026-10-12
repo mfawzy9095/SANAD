@@ -193,6 +193,19 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.evaluate(()=>go('accounts'));
  assert.equal(await page.locator('#bottomNav [data-tab]').count(),5);
  assert.equal(await page.locator('#v252Wallet').count(),1,'Live V25.2 wallet adapter must be mounted');
+
+ assert.equal(await page.locator('#v252Wallet.r25-wallet-design').count(),1,'Wallet must use independent rebuilt design, not legacy markup');
+ assert.equal(await page.evaluate(()=>window.SanadWalletDesign?.source),'Finance','Wallet render source is stable finance engine');
+ assert.equal(await page.locator('#v252BankStrip .r25-bank-item').count()>0,true,'Financial institutions use full-size dedicated components');
+ assert.equal(await page.locator('#v252AccountStrip .r25-account-item').count()>0,true,'Accounts use full-size readable cards');
+ const walletSizes=await page.evaluate(()=>{
+   const bank=document.querySelector('.r25-bank-item')?.getBoundingClientRect();
+   const account=document.querySelector('.r25-account-item')?.getBoundingClientRect();
+   return {bank:bank?.width||0,account:account?.width||0,screen:document.documentElement.clientWidth,
+     legacyPanels:document.querySelectorAll('#v252Wallet .v252-account,#v252Wallet .v252-bank').length};
+ });
+ assert(walletSizes.bank>=205&&walletSizes.account>=215&&!walletSizes.legacyPanels,'Untruncated bank/account layout: '+JSON.stringify(walletSizes));
+
  assert.equal(await page.locator('[data-v252-country]').count(),3,'Country tabs must render without flag icons');
  assert((await page.locator('[data-v252-bank]').count())>0,'Real account must appear in provider selector');
  assert.equal(await page.locator('[data-v252-bank][aria-pressed="true"]').count(),1,'First institution is selected on entry');
@@ -240,6 +253,17 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
    await page.evaluate(()=>go('accounts'));
    const wallet=await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:Math.max(document.body.scrollWidth,document.documentElement.scrollWidth),bank:!!document.querySelector('[data-v252-bank]'),accounts:!!document.querySelector('[data-v252-account]')}));
    assert(wallet.scroll<=wallet.width+2&&wallet.bank&&wallet.accounts,'Wallet overflow or blank account '+width+': '+JSON.stringify(wallet));
+
+   const selected=await page.evaluate(()=>({
+     bank:document.querySelectorAll('#v252Wallet [data-v252-bank][aria-pressed="true"]').length,
+     account:document.querySelectorAll('#v252Wallet [data-v252-account][aria-pressed="true"]').length,
+     old:document.querySelectorAll('#v252Wallet .v252-account').length,
+     bankWidth:Math.round(document.querySelector('#v252Wallet .r25-bank-item')?.getBoundingClientRect().width||0),
+     accountWidth:Math.round(document.querySelector('#v252Wallet .r25-account-item')?.getBoundingClientRect().width||0)
+   }));
+   assert(selected.bank===1&&selected.account===1&&selected.old===0,'Native data-backed selection without legacy wallet components: '+JSON.stringify(selected));
+   assert(selected.bank>0&&selected.bankWidth>=190&&selected.accountWidth>=205,'Bank/account names need readable width at '+width+': '+JSON.stringify(selected));
+
    await page.screenshot({path:path.join(output,'v25-2-wallet-'+width+'.png')});
  }
  await page.setViewportSize({width:393,height:852});
