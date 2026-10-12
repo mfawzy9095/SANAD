@@ -389,14 +389,20 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  const oldTransform=await activeCard.evaluate(el=>el.style.transform);
  await page.mouse.move(dragX,dragY);
  await page.mouse.down();
- await page.mouse.move(dragX+72,dragY,{steps:5});
+ await page.mouse.move(dragX-72,dragY,{steps:5});
  const dragPose=await activeCard.evaluate(el=>({transform:el.style.transform,opacity:getComputedStyle(el).opacity,transition:el.style.transition}));
  assert.notEqual(dragPose.transform,oldTransform,'Selected card must follow live pointer movement');
- assert.match(dragPose.transform,/translate3d\(\d+px/,'Card transform must include live pixel offset');
+ assert.match(dragPose.transform,/translate3d\(-?\d+px/,'Card transform must include live pixel offset');
  assert.equal(Number(dragPose.opacity),1,'Card stays fully opaque during real drag');
  await page.screenshot({path:path.join(output,'v25-wallet-finger-drag-in-progress-393.png')});
  await page.mouse.up();
- assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').getAttribute('aria-pressed'),'true','Real swipe-right returns to previous Visa');
+ assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').getAttribute('aria-pressed'),'true','RTL swipe-left returns to previous Visa');
+ // RTL opposite direction: swipe right from the first card to the next.
+ await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').scrollIntoViewIfNeeded();
+ const firstBox=await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').boundingBox();
+ const firstX=firstBox.x+firstBox.width/2,firstY=firstBox.y+firstBox.height/2;
+ await page.mouse.move(firstX,firstY);await page.mouse.down();await page.mouse.move(firstX+69,firstY,{steps:4});await page.mouse.up();
+ assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-mastercard"]').getAttribute('aria-pressed'),'true','RTL swipe-right selects next Mastercard');
  // Four card states are necessary to catch the old opacity:0 fade beyond
  // two visible neighbors.
  await page.evaluate(bankId=>{
