@@ -380,6 +380,35 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-mastercard"]').getAttribute('aria-pressed'),'true','Wallet next-card button must select linked Mastercard');
  assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').getAttribute('aria-pressed'),'false');
  await page.screenshot({path:path.join(output,'v25-wallet-two-cards-second-393.png')});
+ // A pointer MOVE must animate the payment card with the user's finger,
+ // rather than jumping only when pointerup occurs.
+ const activeCard=page.locator('#v252CardStrip [data-v252-card="qa-ui-mastercard"]');
+ await activeCard.scrollIntoViewIfNeeded();
+ const dragBox=await activeCard.boundingBox();
+ const dragX=dragBox.x+dragBox.width*.5,dragY=dragBox.y+dragBox.height*.5;
+ const oldTransform=await activeCard.evaluate(el=>el.style.transform);
+ await page.mouse.move(dragX,dragY);
+ await page.mouse.down();
+ await page.mouse.move(dragX+72,dragY,{steps:5});
+ const dragPose=await activeCard.evaluate(el=>({transform:el.style.transform,opacity:getComputedStyle(el).opacity,transition:el.style.transition}));
+ assert.notEqual(dragPose.transform,oldTransform,'Selected card must follow live pointer movement');
+ assert.match(dragPose.transform,/translate3d\\(\\d+px/,'Card transform must include live pixel offset');
+ assert.equal(Number(dragPose.opacity),1,'Card stays fully opaque during real drag');
+ await page.screenshot({path:path.join(output,'v25-wallet-finger-drag-in-progress-393.png')});
+ await page.mouse.up();
+ assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').getAttribute('aria-pressed'),'true','Real swipe-right returns to previous Visa');
+ // Four card states are necessary to catch the old opacity:0 fade beyond
+ // two visible neighbors.
+ await page.evaluate(bankId=>{
+   const a=Finance.getAccount(bankId);
+   for(const sample of [{id:'qa-ui-third',network:'discover',last4:'6603'},{id:'qa-ui-fourth',network:'visa',last4:'4404'}]){
+     S.paymentInstruments.push({...sample,name:'QA Additional',type:'debit_card',country:a.country,accountId:bankId,institutionId:a.institutionId,archived:false});
+   }
+   render();
+ },bankId);
+ const opaque=await page.locator('#v252CardStrip [data-v252-card]').evaluateAll(nodes=>nodes.map(n=>Number(getComputedStyle(n).opacity)));
+ assert.equal(opaque.length,4,'Full deck with four linked cards must render');
+ assert(opaque.every(x=>x===1),'No card may be semi-transparent in any carousel state: '+JSON.stringify(opaque));
  await page.evaluate(()=>{
    S.paymentInstruments=S.paymentInstruments.filter(i=>!String(i.id).startsWith('qa-ui-'));
    SanadV252.cardId=null;
