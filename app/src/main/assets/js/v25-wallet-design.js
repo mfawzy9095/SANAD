@@ -31,13 +31,25 @@ function bankChip(g,chosen){
     '<span class="r25-bank-monogram" aria-hidden="true">'+h(acronym)+'</span>'+
     '<span class="r25-bank-text"><b>'+h(v.short)+'</b><small>'+h(v.full)+'</small><em>'+g.accounts.length+' '+label('حساب','accounts')+'</em></span></button>';
 }
+function compactAccountName(a){
+  const name=String(a&&a.name||'').trim();
+  const inst=a&&a.institutionId?Finance.getInstitution(a.institutionId):null;
+  if(!name||!inst||!inst.name)return name;
+  const full=String(inst.name).trim();
+  // Shorten ONLY a verified institution prefix; preserve user-defined names.
+  if(!full||!name.toLocaleLowerCase().startsWith(full.toLocaleLowerCase()))return name;
+  const bank=inst.bankRegistryId&&UaeBankRegistryCore.get?.(inst.bankRegistryId);
+  const provider=inst.providerRegistryId&&UaeBankRegistryCore.getProvider?.(inst.providerRegistryId);
+  const short=bank?bankUiShort(bank):provider?providerUiShort(provider):'';
+  return short?String(short)+name.slice(full.length):name;
+}
 function accountChip(a,chosen){
   const liability=isLiabilityAccount(a);
   const p=!liability?Finance.accountBalancePresentation(a.id):null;
   const balance=liability?Finance.accountDebt(a.id):(p?p.display:Finance.accountBalance(a.id));
   const note=liability?label('المديونية','Debt'):p?.mismatch?label('رصيد السجل — يحتاج مطابقة','Balance needs reconciliation'):label('رصيد الحساب','Account balance');
   return '<button type="button" class="r25-account-item" data-v252-account="'+h(a.id)+'" aria-pressed="'+(a.id===chosen)+'" title="'+h(a.name)+'">'+
-    '<span class="r25-account-header"><strong>'+h(a.name)+'</strong><small>'+h(a.currency)+'</small></span>'+
+    '<span class="r25-account-header"><strong dir="auto">'+h(compactAccountName(a))+'</strong><small>'+h(a.currency)+'</small></span>'+
     '<span class="r25-account-amount amt-val">'+realMoney(balance,a.currency)+'</span>'+
     '<span class="r25-account-note">'+note+'</span></button>';
 }
@@ -54,7 +66,7 @@ function cardView(i,index,selected){
   const transform='translate3d('+((offset<0?1:-1)*distance*52)+'%, '+(distance*6)+'px, 0) scale('+(1-distance*.065)+')';
   const active=index===selected;
   return '<div role="button" tabindex="0" class="v25-payment-card r25-wallet-payment" data-v252-card="'+h(i.id)+'" aria-pressed="'+active+'" data-r25-card-index="'+index+'"'+
-    ' style="background:linear-gradient(125deg,'+base+',#063d54);transform:'+transform+';z-index:'+(100-distance)+';opacity:'+(distance>2?0:1)+';pointer-events:'+(distance<2?'auto':'none')+'">'+
+    ' style="background:linear-gradient(125deg,'+base+',#063d54);transform:'+transform+';z-index:'+(100-distance)+';pointer-events:'+(distance<2?'auto':'none')+'">'+
     '<div class="v25-payment-card-head"><div class="r25-wallet-payment-title"><b>'+h(i.name)+'</b><small>'+h(a?.name||'')+'</small></div>'+
     '<span class="v25-card-type">'+h(cardTypeShortLabel(i.type))+'</span></div>'+
     '<div class="v25-payment-card-number" dir="ltr">'+h(maskedCardNumber(i)||'XXXX XXXX XXXX XXXX')+'</div>'+
@@ -109,5 +121,5 @@ render=function(){
     if(['accounts','tx'].includes(S.tab))fab.style.display='none';
   }
 };
-window.SanadWalletDesign={source:'Finance',version:2};
+window.SanadWalletDesign={source:'Finance',version:3,compactAccountName};
 })();
