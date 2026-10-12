@@ -1,0 +1,23 @@
+/* Offline, accessible SANAD welcome — same saved preferences/flow. */
+#onboard[data-v25-entry-ready="yes"]{background:linear-gradient(168deg,#f7fcfd,#ecf9f7 69%,#e1f1f2);color:#103d4b;direction:rtl;font-family:"Tajawal Local",Tahoma,sans-serif}
+#onboard .r25-welcome-brand{display:flex;align-items:center;gap:10px;justify-content:center;padding:calc(27px + env(safe-area-inset-top)) 16px 4px;flex-shrink:0}
+#onboard .r25-welcome-brand img{width:51px;height:51px;object-fit:contain}
+#onboard .r25-welcome-brand div{display:flex;flex-direction:column;text-align:right}
+#onboard .r25-welcome-brand strong{font-size:25px;line-height:1.05;font-weight:900;letter-spacing:0}
+#onboard .r25-welcome-brand span{font:800 11px system-ui,sans-serif;letter-spacing:.18em;color:#139d8a;direction:ltr}
+#onboard .ob-slides{min-height:260px}
+#onboard .ob-slide{padding:22px clamp(18px,7vw,36px);transform:translateX(18px);justify-content:center}
+#onboard .ob-slide.on{transform:translateX(0)}
+#onboard .ob-slide .em{display:grid;place-items:center;width:114px;height:114px;margin:0 auto 28px;border-radius:34px;border:1px solid #c3e5e5;background:linear-gradient(135deg,#e5f6f6,#c7ebe5);color:#06788a;box-shadow:0 16px 37px #0b738518;font-size:0}
+#onboard .ob-slide .em svg{width:57px;height:57px;display:block}
+#onboard .ob-slide h2{font-size:clamp(20px,6vw,26px);font-weight:900;line-height:1.35;margin:0 0 12px;color:#113e4b}
+#onboard .ob-slide p{font-size:clamp(13px,3.8vw,16px);line-height:1.7;max-width:320px;color:#5f8089;margin:0}
+#onboard .ob-bottom{padding:10px 22px calc(20px + env(safe-area-inset-bottom));max-width:500px;width:100%;margin-inline:auto;box-sizing:border-box}
+#onboard .r25-welcome-label{text-align:center;color:#698790;font-size:12px;font-weight:800;padding:2px 0 14px}
+#onboard .ob-dots{gap:7px;margin-bottom:18px}
+#onboard .ob-dot{width:8px;height:8px;background:#c6dcdf}
+#onboard .ob-dot.on{width:27px;background:#009e92}
+#onboard .r25-welcome-next{width:100%;min-height:49px;border-radius:13px;border:0;background:linear-gradient(105deg,#075c7c,#00aa94);color:#fff;font-size:16px;font-weight:900;box-shadow:0 6px 19px #0e7c8924}
+#onboard .r25-welcome-skip{width:100%;min-height:42px;margin-top:6px;color:#587884;font-size:13px;font-weight:850}
+@media(max-height:620px){#onboard .r25-welcome-brand{padding-top:12px}#onboard .ob-slide .em{width:82px;height:82px;border-radius:24px;margin-bottom:12px}#onboard .ob-slide .em svg{width:43px;height:43px}#onboard .ob-slide h2{font-size:19px}#onboard .r25-welcome-label{padding-bottom:4px}#onboard .ob-bottom{padding-bottom:calc(9px + env(safe-area-inset-bottom))}}
+@media(prefers-reduced-motion:reduce){#onboard .ob-slide{transition:none}}
