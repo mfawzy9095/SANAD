@@ -392,7 +392,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.mouse.move(dragX+72,dragY,{steps:5});
  const dragPose=await activeCard.evaluate(el=>({transform:el.style.transform,opacity:getComputedStyle(el).opacity,transition:el.style.transition}));
  assert.notEqual(dragPose.transform,oldTransform,'Selected card must follow live pointer movement');
- assert.match(dragPose.transform,/translate3d\\(\\d+px/,'Card transform must include live pixel offset');
+ assert.match(dragPose.transform,/translate3d\(\d+px/,'Card transform must include live pixel offset');
  assert.equal(Number(dragPose.opacity),1,'Card stays fully opaque during real drag');
  await page.screenshot({path:path.join(output,'v25-wallet-finger-drag-in-progress-393.png')});
  await page.mouse.up();
