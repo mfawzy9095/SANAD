@@ -32,6 +32,11 @@
 .r25-wallet-payment .v25-payment-card-number{font:900 clamp(16px,4.8vw,22px) system-ui,sans-serif;letter-spacing:.05em;line-height:1.25;direction:ltr;text-align:center}
 .r25-wallet-payment .v25-payment-card-foot small{font-size:11px;line-height:1.3}
 .r25-wallet-payment .v25-payment-card-foot b{font-size:17px;line-height:1.35}
+.r25-wallet-payment .r25-wallet-credit-available{display:block;font-size:11px;font-weight:800;line-height:1.45;margin-top:3px;color:#d5fff7}
+.r25-wallet-payment .r25-wallet-balance-warning{display:block;font-size:10px;font-weight:850;line-height:1.4;margin-top:3px;color:#ffe0a9}
+.r25-wallet-payment .v25-payment-card-foot{min-height:53px;align-items:flex-end}
+.r25-wallet-payment .v25-card-network{flex:0 0 auto}
+
 .r25-wallet-design .r25-card-pager{margin:0 0 6px}
 .r25-wallet-quick-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0 7px}
 .r25-wallet-quick-actions button{min-height:55px;border:1px solid #bce0d9;border-radius:13px;padding:9px 8px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--r25-soft);color:var(--r25-primary);font-size:12px;line-height:1.5;font-weight:900;min-width:0}
