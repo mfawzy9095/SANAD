@@ -32,7 +32,7 @@ function bankChip(g,chosen){
 function accountChip(a,chosen){
   const liability=isLiabilityAccount(a);
   const p=!liability?Finance.accountBalancePresentation(a.id):null;
-  const balance=p?p.display:Finance.accountBalance(a.id);
+  const balance=liability?Finance.accountDebt(a.id):(p?p.display:Finance.accountBalance(a.id));
   const note=liability?label('المديونية','Debt'):p?.mismatch?label('رصيد السجل — يحتاج مطابقة','Balance needs reconciliation'):label('رصيد الحساب','Account balance');
   return '<button type="button" class="r25-account-item" data-v252-account="'+h(a.id)+'" aria-pressed="'+(a.id===chosen)+'" title="'+h(a.name)+'">'+
     '<span class="r25-account-header"><strong>'+h(a.name)+'</strong><small>'+h(a.currency)+'</small></span>'+
@@ -43,9 +43,7 @@ function cardView(i,index,selected){
   const a=Finance.getAccount(i.accountId);
   const isCredit=i.type==='credit_card';
   const available=isCredit&&a?Finance.creditAvailable(a.id):null;
-  const debtBalance=isCredit&&a?Finance.accountBalance(a.id):null;
-  const debt=isCredit&&debtBalance!==null&&Number.isFinite(Number(debtBalance))
-    ?Math.max(0,-Number(debtBalance)):null;
+  const debt=isCredit&&a?Finance.accountDebt(a.id):null;
   const p=!isCredit&&a&&!isLiabilityAccount(a)?Finance.accountBalancePresentation(a.id):null;
   const balance=isCredit?debt:(p?p.display:a?Finance.accountBalance(a.id):null);
   let base=String(i.color||a?.color||'#076b80');
