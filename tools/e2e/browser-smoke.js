@@ -222,15 +222,26 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
    S.paymentInstruments.push({id:'qa-sibling-card',name:'QA Sibling Card',accountId:savingsId,
       institutionId:base.institutionId,country:'UAE',type:'debit_card',network:'visa',
       first4:'4321',last4:'9876',archived:false,color:'#0f718c',created:isoToday()});
+   // Owned credit-card accounts were silently excluded by older wallet logic.
+   S.accounts.push({id:'qa-owned-credit',name:'QA Credit Account',country:'UAE',currency:'AED',type:'credit',
+     institutionId:base.institutionId,ownedByInstrumentId:'qa-credit-card',openingBalanceKnown:true,
+     openingBalance:0,openingDebt:0,creditLimit:5000,archived:false,created:isoToday()});
+   S.paymentInstruments.push({id:'qa-credit-card',name:'QA Credit Card',accountId:'qa-owned-credit',
+     institutionId:base.institutionId,country:'UAE',type:'credit_card',network:'mastercard',
+     first4:'5555',last4:'4444',archived:false,color:'#0b6188',created:isoToday()});
    SanadV252.bankId=base.institutionId||'unlinked';
    SanadV252.accountId=bankId;SanadV252.cardId=null;
    go('accounts');
    return {selectedAccount:SanadV252.accountId,cards:document.querySelectorAll('#v252CardStrip [data-v252-card]').length,
-      card:!!document.querySelector('[data-v252-card="qa-sibling-card"]')};
+      card:!!document.querySelector('[data-v252-card="qa-sibling-card"]'),
+      credit:!!document.querySelector('[data-v252-card="qa-credit-card"]')};
  },{bankId,savingsId});
  assert.equal(bankwide.selectedAccount,bankId,'First account remains active before card selection');
  assert.equal(bankwide.card,true,'Card on second account in same bank must be visible');
- assert.equal(bankwide.cards,1,'Bank-level deck must show real linked cards, not duplicate entries');
+ assert.equal(bankwide.credit,true,'Owned credit-card backing account must not hide its actual card');
+ assert.equal(bankwide.cards,2,'Bank-level deck must include debit and credit without duplicate entries');
+ await page.evaluate(()=>SanadV252.card('qa-credit-card'));
+ assert.equal(await page.evaluate(()=>SanadV252.accountId),'qa-owned-credit','Selecting credit card updates linked debt account context');
  await page.evaluate(()=>SanadV252.card('qa-sibling-card'));
  assert.equal(await page.evaluate(()=>SanadV252.accountId),savingsId,'Selecting card updates linked account UI context');
  const visibleCard=await page.locator('#v252CardStrip [data-v252-card="qa-sibling-card"]').count();
