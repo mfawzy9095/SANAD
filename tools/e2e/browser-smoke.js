@@ -354,6 +354,38 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(()=>stateFingerprint(snapshotState())),deckFingerprint,'Wallet carousel test must not change persisted or real financial records');
  record('Real data adapter: two account-linked cards, masked numbers, card selection, network and immutable financial snapshot');
 
+ // A credit card is tested against the REAL Finance.accountDebt /
+ // Finance.creditAvailable implementation, not UI arithmetic or fake release data.
+ const creditBefore=await page.evaluate(()=>stateFingerprint(snapshotState()));
+ await page.evaluate(bankId=>{
+   const bank=Finance.getAccount(bankId);
+   S.accounts.push({id:'qa-ui-credit-account',name:'QA Credit Owed',country:bank.country,currency:bank.currency,
+     institutionId:bank.institutionId,type:'credit',openingDebt:500,openingDebtKnown:true,
+     openingBalance:0,creditLimit:3000,archived:false,created:isoToday()});
+   S.paymentInstruments.push({id:'qa-ui-credit-card',name:'QA Credit Visa',country:bank.country,
+     accountId:'qa-ui-credit-account',institutionId:bank.institutionId,type:'credit_card',
+     network:'visa',first4:'4123',last4:'1991',color:'#0f5781',archived:false});
+   SanadV252.bankId=bank.institutionId||'unlinked';
+   SanadV252.accountId='qa-ui-credit-account';
+   SanadV252.cardId=null;
+   go('accounts');
+ },bankId);
+ assert.equal(await page.evaluate(()=>Finance.accountDebt('qa-ui-credit-account')),500);
+ assert.equal(await page.evaluate(()=>Finance.creditAvailable('qa-ui-credit-account')),2500);
+ assert.equal(await page.locator('[data-v252-account="qa-ui-credit-account"] .r25-account-amount').innerText(), '500 د.إ','Credit account UI must show positive owed amount');
+ const creditLabel=await page.locator('#v252CardStrip [data-v252-card="qa-ui-credit-card"]').innerText();
+ assert.match(creditLabel,/المديونية الحالية/,'Credit card must label its debt rather than claiming it is available balance');
+ assert.match(creditLabel,/المتاح/,'Available credit must appear separately from owed debt');
+ await page.screenshot({path:path.join(output,'v25-wallet-credit-debt-vs-limit-393.png')});
+ await page.evaluate(()=>{
+   S.accounts=S.accounts.filter(a=>a.id!=='qa-ui-credit-account');
+   S.paymentInstruments=S.paymentInstruments.filter(i=>i.id!=='qa-ui-credit-card');
+   SanadV252.accountId=null;SanadV252.cardId=null;render();
+ });
+ assert.equal(await page.evaluate(()=>stateFingerprint(snapshotState())),creditBefore,'Credit UI fixture may not alter the underlying ledger');
+ record('Credit card UI: exact debt 500 versus separate available 2500, no mixed balances or persistent test data');
+
+
  await page.evaluate(()=>openNewTransfer());await page.locator('#fromAmtIn').fill('100');
  await page.locator('[data-act="save-tx"]').click();
  await page.waitForFunction(()=>S.transactions.some(t=>t.type==='transfer')&&!_financialFlowInFlight);
