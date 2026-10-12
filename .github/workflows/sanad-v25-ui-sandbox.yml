@@ -5,6 +5,7 @@ on:
     branches:
       - ui/v25.2-android-integration
       - ui/v25-prototype-rebuild
+      - ui/v25-design-parity-review
     paths:
       - '.github/workflows/sanad-v25-ui-sandbox.yml'
       - '.github/workflows/build-v9-device-test.yml'
