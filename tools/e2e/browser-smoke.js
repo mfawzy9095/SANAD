@@ -201,7 +201,8 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.evaluate(()=>getComputedStyle(document.getElementById('fab')).display),'none','Old floating FAB must not overlap the new wallet actions');
  await page.evaluate(()=>go('home'));
  assert.equal(await page.locator('#r25Home [data-act="account-add-menu"]').count()>0,true,'Home retains the real add menu');
- assert.equal(await page.evaluate(()=>getComputedStyle(document.getElementById('fab')).display),'none','Home add action must not be obscured by duplicate FAB');
+ const homeFab=await page.evaluate(()=>{const el=document.getElementById('fab'),r=el.getBoundingClientRect();return {shown:getComputedStyle(el).display!=='none',width:r.width,left:r.left,screen:document.documentElement.clientWidth};});
+ assert(homeFab.shown&&homeFab.width<=50&&homeFab.left>=0&&homeFab.left<homeFab.screen*.22,'Home + shortcut must remain visible, small and left-docked: '+JSON.stringify(homeFab));
  await page.evaluate(()=>go('tx'));
  assert.equal(await page.locator('#r25Tx [data-act="account-add-menu"]').count()>0,true,'Transactions retains the real add action');
  assert.equal(await page.evaluate(()=>getComputedStyle(document.getElementById('fab')).display),'none','Transactions add action must not be obscured by duplicate FAB');
