@@ -49,6 +49,11 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.match(reviewDates.invalid,/^\d{4}-\d{2}-\d{2}$/);
  assert.notEqual(reviewDates.invalid,'2026-02-30');
  assert.equal(reviewDates.invalid,reviewDates.malformed);
+ // Initial bootstrap may intentionally go directly to Home on an already
+ // initialized local profile. Exercise the welcome component independently as
+ // a presentation/interaction flow without fabricating a first-run state.
+ await page.waitForFunction(()=>S.ready&&(!document.getElementById('app').hidden||!document.getElementById('onboard').hidden));
+ if(!await page.locator('#onboard').isVisible())await page.evaluate(()=>showOnboarding());
  if(await page.locator('#onboard').isVisible()){
    assert.equal(await page.locator('#onboard[data-v25-entry-ready="yes"]').count(),1,'First-run onboarding must use rebuilt V25 presentation');
    assert.equal(await page.locator('#onboard .ob-slide .em svg').count(),3,'Welcome illustrations are all local vectors, not emoji');
