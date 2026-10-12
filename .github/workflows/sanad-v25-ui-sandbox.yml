@@ -6,6 +6,7 @@ on:
       - ui/v25.2-android-integration
       - ui/v25-prototype-rebuild
       - ui/v25-design-parity-review
+      - ui/v25.2-rebuild-candidate
     paths:
       - '.github/workflows/sanad-v25-ui-sandbox.yml'
       - '.github/workflows/build-v9-device-test.yml'
@@ -77,11 +78,12 @@ jobs:
           grep -q "versionCode='92014'" qa-apk/APK-BADGING.txt
           sha256sum qa-apk/*.apk > qa-apk/SHA256SUMS.txt
           cat > qa-apk/READ-ME-FIRST.txt <<'EOF'
-          SANAD V25.2 UI SANDBOX — FUNCTIONAL BASELINE ONLY, V25.2 SCREENS NOT YET PORTED.
+          SANAD V25.2 REBUILD CANDIDATE — LIVE UI QA, NOT APPROVED FOR PRODUCTION.
           Debug-signed com.sanad.v9test.v25uipreview; separate private app data. Cannot overwrite stable SANAD.
           Do NOT import irreplaceable data; preview signing key may rotate between CI builds.
-          Android device, biometrics, notifications, and signing continuity
-          have NOT been tested by this pipeline.
+          The emulator gate checks SMS and notification progress after packaging.
+          Physical Samsung hardware, visual prototype parity, biometrics, and
+          signing continuity require additional release approval.
           No private signing key or real SMS is used or uploaded here.
           EOF
       - name: Upload browser evidence
