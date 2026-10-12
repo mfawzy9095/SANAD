@@ -54,7 +54,8 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  // a presentation/interaction flow without fabricating a first-run state.
  await page.waitForFunction(()=>S.ready&&(!document.getElementById('app').hidden||!document.getElementById('onboard').hidden));
  if(!await page.locator('#onboard').isVisible())await page.evaluate(()=>showOnboarding());
- if(await page.locator('#onboard').isVisible()){
+ await page.locator('#onboard').waitFor({state:'visible',timeout:8000});
+ {
    assert.equal(await page.locator('#onboard[data-v25-entry-ready="yes"]').count(),1,'First-run onboarding must use rebuilt V25 presentation');
    assert.equal(await page.locator('#onboard .ob-slide .em svg').count(),3,'Welcome illustrations are all local vectors, not emoji');
    assert.equal(await page.locator('#onboard .r25-welcome-brand img').count(),1,'SANAD shield is available in onboarding');
