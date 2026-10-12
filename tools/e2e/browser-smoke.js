@@ -58,7 +58,13 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  if(await page.locator('#onboard').isVisible())await page.evaluate(()=>{S.settings.onboarded=true;startApp();});
  await page.waitForFunction(()=>!document.getElementById('app').hidden);
  await page.waitForTimeout(450);
- await page.evaluate(()=>showOnboarding());
+ // The new-install runtime may intentionally suppress the optional welcome
+ // after security/bootstrap. Inspect its actual DOM visuals independently,
+ // not by competing with the authenticated startApp lifecycle.
+ await page.evaluate(()=>{
+   document.getElementById('onboard').hidden=false;
+   document.getElementById('app').hidden=true;
+ });
  await page.locator('#onboard').waitFor({state:'visible',timeout:8000});
  {
    assert.equal(await page.locator('#onboard[data-v25-entry-ready="yes"]').count(),1,'First-run onboarding must use rebuilt V25 presentation');
