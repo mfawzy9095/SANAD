@@ -71,7 +71,7 @@ const V = {
     openSheet('<div class="sheet-head"><h2>تفاصيل الحساب</h2><button type="button" class="close" data-act="close-sheet">×</button></div>'+
       '<div class="sheet-body"><div class="v252-card"><h3>'+esc(a.name)+'</h3>'+
       '<p class="v252-hint">'+esc(inst?inst.name:'غير مرتبط بمؤسسة')+' · '+esc(a.currency)+'</p>'+
-      '<div class="sec"><h2>'+label+'</h2><strong class="amt-val">'+amtText(balance)+' '+esc(Finance.curSymbol(a.currency))+'</strong></div>'+
+      '<div class="sec"><h2>'+label+'</h2><strong class="amt-val">'+(balance===null||balance===undefined||!Number.isFinite(Number(balance))?'غير مؤكد':amtText(balance)+' '+esc(Finance.curSymbol(a.currency)))+'</strong></div>'+
       (present&&present.mismatch?'<p class="v252-hint">الرصيد المبلغ من البنك يختلف عن رصيد السجل؛ راجع الحساب قبل الاعتماد.</p>':'')+
       '</div>'+(canWrite()?'<button class="v252-quick" type="button" data-account-edit="'+esc(a.id)+'">تعديل الحساب</button>':'')+
       '</div>','v252-account-details');
