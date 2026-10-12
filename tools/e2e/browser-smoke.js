@@ -49,7 +49,23 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.match(reviewDates.invalid,/^\d{4}-\d{2}-\d{2}$/);
  assert.notEqual(reviewDates.invalid,'2026-02-30');
  assert.equal(reviewDates.invalid,reviewDates.malformed);
- if(await page.locator('#onboard').isVisible())await page.locator('[onclick="onboardSkip()"]').click();
+ if(await page.locator('#onboard').isVisible()){
+   assert.equal(await page.locator('#onboard[data-v25-entry-ready="yes"]').count(),1,'First-run onboarding must use rebuilt V25 presentation');
+   assert.equal(await page.locator('#onboard .ob-slide .em svg').count(),3,'Welcome illustrations are all local vectors, not emoji');
+   assert.equal(await page.locator('#onboard .r25-welcome-brand img').count(),1,'SANAD shield is available in onboarding');
+   for(const [width,height] of [[320,640],[393,852]]){
+     await page.setViewportSize({width,height});
+     const layout=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,brand:document.querySelector('#onboard .r25-welcome-brand').getBoundingClientRect().width,next:document.querySelector('#onboard .r25-welcome-next').getBoundingClientRect(),skip:document.querySelector('#onboard .r25-welcome-skip').getBoundingClientRect()}));
+     assert(layout.scroll<=layout.width+2&&layout.next.right<=layout.width+1&&layout.skip.right<=layout.width+1,'Welcome fits viewport '+width);
+     await page.screenshot({path:path.join(output,'v25-welcome-first-run-'+width+'.png')});
+   }
+   await page.locator('[onclick="onboardNext()"]').click();
+   assert.match(await page.locator('#onboard .ob-slide.on h2').innerText(),/بطاقاتك/);
+   await page.locator('[onclick="onboardNext()"]').click();
+   assert.match(await page.locator('#onboard .ob-slide.on h2').innerText(),/حدود إنفاق/);
+   await page.locator('[onclick="onboardSkip()"]').click();
+   await page.setViewportSize({width:393,height:852});
+ }
  await page.waitForFunction(()=>!document.getElementById('app').hidden);
  await page.waitForFunction(()=>!document.getElementById('sanadBootSplash')||getComputedStyle(document.getElementById('sanadBootSplash')).visibility==='hidden');
  assert((await page.locator('#view').innerText()).length>30);
