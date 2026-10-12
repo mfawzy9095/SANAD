@@ -42,9 +42,12 @@ function accountChip(a,chosen){
 function cardView(i,index,selected){
   const a=Finance.getAccount(i.accountId);
   const isCredit=i.type==='credit_card';
-  const available=isCredit?Finance.creditAvailable(a?.id):null;
-  const p=!isCredit&&a?Finance.accountBalancePresentation(a.id):null;
-  const balance=isCredit?available:(p?p.display:a?Finance.accountBalance(a.id):null);
+  const available=isCredit&&a?Finance.creditAvailable(a.id):null;
+  const debtBalance=isCredit&&a?Finance.accountBalance(a.id):null;
+  const debt=isCredit&&debtBalance!==null&&Number.isFinite(Number(debtBalance))
+    ?Math.max(0,-Number(debtBalance)):null;
+  const p=!isCredit&&a&&!isLiabilityAccount(a)?Finance.accountBalancePresentation(a.id):null;
+  const balance=isCredit?debt:(p?p.display:a?Finance.accountBalance(a.id):null);
   let base=String(i.color||a?.color||'#076b80');
   if(!/^#[0-9a-f]{6}$/i.test(base))base='#076b80';
   const offset=index-selected,distance=Math.min(3,Math.abs(offset));
@@ -55,9 +58,11 @@ function cardView(i,index,selected){
     '<div class="v25-payment-card-head"><div class="r25-wallet-payment-title"><b>'+h(i.name)+'</b><small>'+h(a?.name||'')+'</small></div>'+
     '<span class="v25-card-type">'+h(cardTypeShortLabel(i.type))+'</span></div>'+
     '<div class="v25-payment-card-number" dir="ltr">'+h(maskedCardNumber(i)||'XXXX XXXX XXXX XXXX')+'</div>'+
-    '<div class="v25-payment-card-foot"><div><small>'+label(isCredit?'الائتمان المتاح':'الرصيد المرتبط',isCredit?'Available credit':'Linked balance')+'</small>'+
-    '<b class="amt-val">'+realMoney(balance,a?.currency||'AED')+'</b></div>'+
-    '<div class="v25-card-network">'+cardNetworkLogoHtml(i.network)+'</div></div></div>';
+    '<div class="v25-payment-card-foot"><div><small>'+label(isCredit?'المديونية الحالية':'الرصيد المرتبط',isCredit?'Outstanding debt':'Linked balance')+'</small>'+
+    '<b class="amt-val">'+realMoney(balance,a?.currency||'AED')+'</b>'+
+    (isCredit?'<small class="r25-wallet-credit-available">'+label('المتاح: ','Available: ')+realMoney(available,a?.currency||'AED')+'</small>':'')+
+    (p&&p.mismatch?'<small class="r25-wallet-balance-warning">'+label('الرصيد يحتاج مطابقة','Balance needs reconciliation')+'</small>':'')+
+    '</div><div class="v25-card-network">'+cardNetworkLogoHtml(i.network)+'</div></div></div>';
 }
 W.walletView=function(){
   const groups=this.groups();
