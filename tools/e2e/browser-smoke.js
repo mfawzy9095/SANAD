@@ -195,6 +195,18 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.locator('#v252Wallet').count(),1,'Live V25.2 wallet adapter must be mounted');
 
  assert.equal(await page.locator('#v252Wallet.r25-wallet-design').count(),1,'Wallet must use independent rebuilt design, not legacy markup');
+
+ await page.waitForFunction(()=>!document.getElementById('toast')?.classList.contains('on'),null,{timeout:4000});
+ assert.equal(await page.locator('#v252Wallet .r25-wallet-quick-actions button').count(),2,'Wallet retains explicit add/SMS actions');
+ assert.equal(await page.evaluate(()=>getComputedStyle(document.getElementById('fab')).display),'none','Old floating FAB must not overlap the new wallet actions');
+ await page.evaluate(()=>go('home'));
+ assert.equal(await page.locator('#r25Home [data-act="account-add-menu"]').count()>0,true,'Home retains the real add menu');
+ assert.equal(await page.evaluate(()=>getComputedStyle(document.getElementById('fab')).display),'none','Home add action must not be obscured by duplicate FAB');
+ await page.evaluate(()=>go('tx'));
+ assert.equal(await page.locator('#r25Tx [data-act="account-add-menu"]').count()>0,true,'Transactions retains the real add action');
+ assert.equal(await page.evaluate(()=>getComputedStyle(document.getElementById('fab')).display),'none','Transactions add action must not be obscured by duplicate FAB');
+ await page.evaluate(()=>go('accounts'));
+
  assert.equal(await page.evaluate(()=>window.SanadWalletDesign?.source),'Finance','Wallet render source is stable finance engine');
  assert.equal(await page.locator('#v252BankStrip .r25-bank-item').count()>0,true,'Financial institutions use full-size dedicated components');
  assert.equal(await page.locator('#v252AccountStrip .r25-account-item').count()>0,true,'Accounts use full-size readable cards');
