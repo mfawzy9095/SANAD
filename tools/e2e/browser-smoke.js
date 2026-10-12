@@ -66,6 +66,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
    document.getElementById('app').hidden=true;
  });
  await page.locator('#onboard').waitFor({state:'visible',timeout:8000});
+ await page.waitForFunction(()=>!document.getElementById('sanadBootSplash')||getComputedStyle(document.getElementById('sanadBootSplash')).visibility==='hidden',{},{timeout:5000});
  {
    assert.equal(await page.locator('#onboard[data-v25-entry-ready="yes"]').count(),1,'First-run onboarding must use rebuilt V25 presentation');
    assert.equal(await page.locator('#onboard .ob-slide .em svg').count(),3,'Welcome illustrations are all local vectors, not emoji');
