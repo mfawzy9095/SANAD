@@ -17,8 +17,10 @@ const mark=(g)=>{
   const inst=g.institution;
   const bank=inst?.bankRegistryId&&UaeBankRegistryCore.get?.(inst.bankRegistryId);
   const provider=inst?.providerRegistryId&&UaeBankRegistryCore.getProvider?.(inst.providerRegistryId);
-  const full=bank?bankUiName(bank):provider?providerUiName(provider):(inst?.name||label('غير مرتبط بمؤسسة','Unlinked'));
-  const short=bank?bankUiShort(bank):provider?providerUiShort(provider):String(full).slice(0,3);
+  const full=bank?bankUiName(bank):provider?providerUiName(provider):(inst?.name||label('حسابات مستقلة','Independent accounts'));
+  const short=bank?bankUiShort(bank):provider?providerUiShort(provider):inst?.name
+    ?String(inst.name).trim().split(/\s+/).slice(0,3).map(x=>x.slice(0,1)).join('').toUpperCase()
+    :label('مستقل','Other');
   // Deliberately not presented as an official logo without a verified asset.
   return {full:String(full),short:String(short||full)};
 };
