@@ -11,12 +11,28 @@ const V = {
     render();
   },
   groups(){
-    const accounts=Finance.getCountryAccounts(S.activeCountry).filter(a=>!a.archived&&!a.ownedByInstrumentId);
+    // A credit or prepaid card owns a backing account. The old wallet excluded
+    // those accounts entirely and consequently dropped the user's credit cards.
+    // Preserve bank grouping while keeping owned accounts visible only once.
+    const accounts=Finance.getCountryAccounts(S.activeCountry).filter(a=>!a.archived);
+    const instruments=Finance.getCountryInstruments(S.activeCountry).filter(i=>!i.archived);
     const groups=new Map();
-    for(const a of accounts){
-      const key=a.institutionId||'unlinked';
-      if(!groups.has(key))groups.set(key,{id:key,institution:a.institutionId?Finance.getInstitution(a.institutionId):null,accounts:[]});
-      groups.get(key).accounts.push(a);
+    const ensure=key=>{
+      const id=key||'unlinked';
+      if(!groups.has(id))groups.set(id,{id,institution:id==='unlinked'?null:Finance.getInstitution(id),accounts:[]});
+      return groups.get(id);
+    };
+    const attach=(group,a)=>{
+      if(a&&!group.accounts.some(existing=>existing.id===a.id))group.accounts.push(a);
+    };
+    for(const a of accounts.filter(a=>!a.ownedByInstrumentId)){
+      attach(ensure(a.institutionId),a);
+    }
+    for(const card of instruments){
+      const account=card.accountId?Finance.getAccount(card.accountId):null;
+      const issuer=card.institutionId||account?.institutionId||'unlinked';
+      const group=ensure(issuer);
+      if(account&&!account.archived&&account.country===S.activeCountry)attach(group,account);
     }
     return Array.from(groups.values());
   },
