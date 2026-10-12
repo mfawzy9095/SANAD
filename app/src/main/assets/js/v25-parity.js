@@ -107,7 +107,7 @@ V.walletView=function(){
     const a=Finance.getAccount(i.accountId);
     const debt=i.type==='credit_card';
     const presented=!debt&&a?Finance.accountBalancePresentation(a.id):null;
-    const amount=debt?Finance.creditAvailable(a.id):(presented?presented.display:Finance.accountBalance(a.id));
+    const amount=debt?(a?Finance.creditAvailable(a.id):null):(a?(presented?presented.display:Finance.accountBalance(a.id)):null);
     const safe=safeColor(i.color||a?.color);
     const network=String(i.network||'').replace(/[^A-Za-z0-9 \-]/g,'').slice(0,20);
     return '<div class="v25-payment-card" role="button" tabindex="0" data-v252-card="'+esc(i.id)+'" aria-pressed="'+(i.id===this.cardId)+'" style="background:linear-gradient(125deg,'+safe+',#063d54)">'+
@@ -121,7 +121,7 @@ V.walletView=function(){
     (groups.length?'<div class="v252-strip" id="v252BankStrip">'+bankItems+'</div>':'<div class="v252-empty">لا توجد حسابات في هذا البلد بعد.</div>')+
     '<div class="v252-section"><h3>الحسابات</h3><small class="v252-hint">اختيار مباشر</small></div>'+
     (accountItems?'<div class="v252-strip" id="v252AccountStrip">'+accountItems+'</div>':'<div class="v252-empty">أضف حسابًا لعرض رصيده.</div>')+
-    '<div class="v252-section"><h3>البطاقات</h3><small class="v252-hint">اسحب البطاقات بأصبعك</small></div>'+
+    '<div class="v252-section"><h3>بطاقات البنك</h3><small class="v252-hint">بطاقات كل حسابات البنك · اسحب للتصفح</small></div>'+
     (cardItems?'<div class="v252-strip v252-cards" id="v252CardStrip">'+cardItems+'</div>':'<div class="v25-card-list-empty">لا توجد بطاقات مرتبطة بالحساب المختار.</div>')+
     '<div class="v25-actions"><button type="button" data-act="account-add-menu">'+svg('plus')+' إضافة حساب أو بطاقة</button>'+
     '<button type="button" data-sanad-act="bank-sms-recent">'+svg('sms')+' استيراد رسائل SMS</button></div>'+
