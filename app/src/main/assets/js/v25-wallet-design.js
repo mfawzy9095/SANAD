@@ -93,12 +93,12 @@ W.walletView=function(){
       label('استيراد الرسائل','Import SMS')+'</button></div>'+
     '</section>';
 };
-// All three rebuilt entry screens expose a working add action already.
+// Wallet and transactions have their own add actions. Home intentionally retains the accessible main '+' shortcut.
 // The floating legacy FAB covered those actions and the bottom card rail.
 const priorRender=render;
 render=function(){
   priorRender();
-  if(['home','accounts','tx'].includes(S.tab)){
+  if(['accounts','tx'].includes(S.tab)){
     const fab=document.getElementById('fab');
     if(fab)fab.style.display='none';
   }
