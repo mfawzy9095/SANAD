@@ -35,7 +35,19 @@ function previewCard(){
  '<small>للمعاينة فقط — لا يتم تخزين الرقم الكامل</small>';
  return result;
 }
+function normalizeCardDigits(root){
+ // Normalize presentation inputs only. The original save handler still validates four ASCII digits.
+ const ascii=value=>String(value||'').replace(/[\u0660-\u0669\u06F0-\u06F9]/g,
+  digit=>String(digit.charCodeAt(0)-(digit.charCodeAt(0)<=0x0669?0x0660:0x06F0)));
+ for(const id of ['cardFirst4','cardLast4']){
+  const field=root.querySelector('#'+id);if(!field)continue;
+  const canonical=ascii(field.value);
+  if(canonical!==field.value)field.value=canonical;
+  field.setAttribute('dir','ltr');
+ }
+}
 function updatePreview(root){
+ normalizeCardDigits(root);
  const name=(root.querySelector('#cardName')?.value||'بطاقة').trim()||'بطاقة';
  const network=(root.querySelector('#cardNetwork')?.value||'other').toUpperCase();
  const first=String(root.querySelector('#cardFirst4')?.value||'').replace(/\D/g,'').slice(0,4);
@@ -45,7 +57,7 @@ function updatePreview(root){
  const preview=root.querySelector('.r25-form-card-preview');if(!preview)return;
  root.querySelector('#r25PreviewName').textContent=name;
  root.querySelector('#r25PreviewNetwork').textContent=network;
- root.querySelector('#r25PreviewNumber').textContent=(first||'XXXX')+' XXXX XXXX '+(last||'XXXX');
+ root.querySelector('#r25PreviewNumber').textContent=(first+'XXXX').slice(0,4)+' XXXX XXXX '+('XXXX'+last).slice(-4);
  preview.style.background='linear-gradient(125deg,'+safe+',#063e56)';
 }
 let controller=new AbortController();
