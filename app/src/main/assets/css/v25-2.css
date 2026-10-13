@@ -1,5 +1,5 @@
 /* SANAD V25.2 hybrid visual integration. Financial logic remains authoritative in existing modules. */
-@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap');
+/* Tajawal weights and license are bundled in assets/fonts for offline use. */
 :root{--bg:#f6fafb;--surface:#fff;--surface-2:#edf5f6;--surface-3:#e4f0f1;--outline:#dce9ec;--text:#103c4d;--text-2:#64828d;--text-3:#829ca5;--primary:#076d82;--primary-2:#00a795;--primary-soft:#e2f5ef;--on-primary:#fff;--success:#008870;--info:#167b98;--shadow-1:0 2px 12px #1648570a;--shadow-2:0 8px 24px #0b617520}
 [data-theme="dark"]{--bg:#102a34;--surface:#1b3b45;--surface-2:#224650;--surface-3:#2a515b;--outline:#315560;--text:#f0f8fa;--text-2:#b0cdd2;--text-3:#94b4bc;--primary:#22b8b0;--primary-2:#36b7a2;--primary-soft:#184b4e;--on-primary:#072936}
 html,body{font-family:Tajawal,Tahoma,Arial,sans-serif!important}

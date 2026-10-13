@@ -88,6 +88,13 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.waitForFunction(()=>!document.getElementById('sanadBootSplash')||getComputedStyle(document.getElementById('sanadBootSplash')).visibility==='hidden');
  assert((await page.locator('#view').innerText()).length>30);
  assert.equal(await page.locator('#bottomNav .ico svg').count(),5,'All bottom navigation icons must render as local vector icons');
+ assert.equal(await page.locator('link[href*="fonts.googleapis.com"]').count(),0,'V25 must never block startup fetching Cairo/Tajawal remotely');
+ const bundledTajawal=await page.evaluate(async()=>{
+   await document.fonts.load('900 18px "Tajawal Local"');
+   return document.fonts.check('900 18px "Tajawal Local"');
+ });
+ assert.equal(bundledTajawal,true,'Bundled local Tajawal Black must load without the network');
+
  assert.equal(await page.locator('#bottomNav [data-tab="settings"] .ico[data-r25-gear="true"] svg').count(),1,'Settings must show the persistent gear, not the obsolete sun icon');
  const quickActionCount=await page.locator('.quick-chip[data-quick]').count();
  if(quickActionCount===0){
