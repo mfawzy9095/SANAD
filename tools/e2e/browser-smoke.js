@@ -380,7 +380,13 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
 
  await page.screenshot({path:path.join(output,'v25-2-real-wallet.png')});
  await page.evaluate(()=>go('settings'));
- await page.locator('#r25Settings [data-act="go-subs"]').click();
+ const settingsLegacy=page.locator('#r25Settings .r25-extras[data-r25-advanced="settings"]');
+ assert.equal(await settingsLegacy.locator('.r25-legacy').innerHTML(),'',
+  'Closed settings advanced panel must not render the large original settings tree');
+ await settingsLegacy.locator('summary').click();
+ await page.waitForFunction(()=>document.querySelector('#r25Settings [data-r25-advanced="settings"] .r25-legacy')?.dataset.r25Loaded==='yes');
+ assert((await settingsLegacy.locator('.r25-legacy').innerHTML()).length>120,'Original advanced settings remain fully reachable');
+ await page.locator('#r25Settings [data-act="go-subs"]').first().click();
  assert.equal(await page.evaluate(()=>S.tab),'subs','Legacy obligations remain reachable through settings');
  await page.evaluate(()=>go('home'));
  record('V25.2 live wallet: 5 tabs, country/provider/account selection, read-only double tap, financial invariant, obligations access');
@@ -422,7 +428,12 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-mastercard"] > :first-child').evaluate(el=>getComputedStyle(el).visibility),'hidden','Inactive payment card content cannot peek through at the deck edge');
 
  await page.screenshot({path:path.join(output,'v25-wallet-two-cards-first-393.png')});
+ // Replacing the entire #view on every card click causes freezes on real
+ // accounts with thousands of messages. The visual deck must stay mounted.
+ await page.evaluate(()=>document.getElementById('v252Wallet').dataset.qaStableRoot='mounted');
  await page.locator('nav.r25-card-pager [data-r25-card-step="1"]').click();
+ assert.equal(await page.locator('#v252Wallet').getAttribute('data-qa-stable-root'),'mounted',
+   'Changing cards must not reconstruct the wallet or rerun financial page rendering');
  assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-mastercard"]').getAttribute('aria-pressed'),'true','Wallet next-card button must select linked Mastercard');
  assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').getAttribute('aria-pressed'),'false');
  await page.screenshot({path:path.join(output,'v25-wallet-two-cards-second-393.png')});
@@ -443,6 +454,8 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await page.screenshot({path:path.join(output,'v25-wallet-finger-drag-in-progress-393.png')});
  await page.mouse.up();
  assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').getAttribute('aria-pressed'),'true','RTL swipe-left returns to previous Visa');
+ assert.equal(await page.locator('#v252Wallet').getAttribute('data-qa-stable-root'),'mounted',
+  'Swipe completion should only move payment cards, not reconstruct the financial DOM');
  // RTL opposite direction: swipe right from the first card to the next.
  await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').scrollIntoViewIfNeeded();
  const firstBox=await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').boundingBox();
