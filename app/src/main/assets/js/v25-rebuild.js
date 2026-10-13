@@ -22,6 +22,18 @@ const n=value=>value===null||value===undefined||!Number.isFinite(Number(value))?
 const money=(val,cur)=>val===null||val===undefined||!Number.isFinite(Number(val))?tr('غير مؤكد','Unconfirmed'):n(val)+' '+esc(Finance.curSymbol(cur));
 const frame=(name,sub,body)=>'<section class="r25-page" id="r25'+name+'"><header class="r25-page-title"><h2>'+esc(tr(name==='Home'?'الرئيسية':name==='Wallet'?'محفظتي':name==='Tx'?'العمليات':name==='Reports'?'التقارير':'الإعدادات',name))+'</h2><span>'+esc(sub||countryInfo(S.activeCountry).name)+'</span></header>'+body+'</section>';
 const countryBar=()=>W.countryBar();
+// Keep a bounded, stable newest-three view of the ledger. Avoid sorting the
+// entire historical transaction collection on every home navigation.
+function recentCountryTransactions(ids){
+ const newest=[];
+ for(const transaction of (S.transactions||[])){
+  if(![transaction.accountId,transaction.fromAccountId,transaction.toAccountId].some(id=>ids.has(id)))continue;
+  let position=0;
+  while(position<newest.length&&compareTxDesc(newest[position],transaction)<=0)position++;
+  if(position<3){newest.splice(position,0,transaction);if(newest.length>3)newest.pop();}
+ }
+ return newest;
+}
 const section=(label,action='',text='')=>'<div class="r25-section"><h3>'+label+'</h3>'+(action?'<button type="button" '+action+'>'+text+'</button>':'')+'</div>';
 const warning=()=>previewBannerHtml()+recoveryBannerHtml();
 const act=(name,label,description,icon,extra='')=>'<button type="button" class="r25-list-row" '+name+'><span class="r25-action-icon">'+ic(icon)+'</span><span class="r25-action-text"><b>'+label+'</b><small>'+description+'</small></span>'+extra+'<span class="r25-chevron" aria-hidden="true">‹</span></button>';
@@ -54,7 +66,7 @@ viewHome=function(){
  const out=ds&&Object.prototype.hasOwnProperty.call(ds.spendingByCur||{},cur)?ds.spendingByCur[cur]:null;
  const reviewCount=(SanadBankInbox.items||[]).filter(x=>x?.plan?.decision==='review'||x?.plan?.needsReview).length||Number(SanadBankInbox.lastSummary?.review||0);
  const ids=new Set(accounts.map(a=>a.id));
- const recent=(S.transactions||[]).filter(t=>[t.accountId,t.fromAccountId,t.toAccountId].some(x=>ids.has(x))).sort(compareTxDesc).slice(0,3);
+ const recent=recentCountryTransactions(ids);
  const balances=currencies.length?currencies.map(([k,v])=>'<div class="r25-currency"><small>'+esc(k)+'</small><b class="amt-val">'+money(v,k)+'</b></div>').join(''):'<div class="r25-currency"><small>'+tr('الأرصدة','Balances')+'</small><b>'+tr('غير مؤكدة','Unconfirmed')+'</b></div>';
  const hero='<div class="r25-hero"><span class="r25-eyebrow">'+tr('إجمالي أرصدة الأصول · ','Asset balances · ')+esc(cur)+'</span><strong class="amt-val">'+money(mainBal,cur)+'</strong>'+
  '<div class="r25-hero-bottom"><span>'+tr('العملات منفصلة؛ لا يشمل حد الائتمان','Currencies remain separate; credit limits excluded')+'</span><button type="button" data-act="go-accounts">'+tr('محفظتي ←','My wallet →')+'</button></div></div>';
@@ -75,14 +87,34 @@ viewAccounts=function(){
  return warning()+'<div class="r25-wallet-root">'+html+'</div>';
 };
 const buildTypes=[['','الكل'],['expense','مصروفات'],['income','دخل'],['transfer','تحويلات']];
-let txMode='history';
+let txMode='history',txPageSize=60,txPageKey='';
+function pagedTxListHtml(){
+ // All original filter rules and sort comparator remain authoritative.
+ // This limits DOM rows only; it does not alter records or report totals.
+ const key=JSON.stringify([S.activeCountry,S.month,S.filter.type,S.filter.cat,S.filter.source,S.filter.q]);
+ if(txPageKey!==key){txPageKey=key;txPageSize=60;}
+ const all=filteredTx(),visible=all.slice(0,txPageSize);
+ if(!all.length)return '<div class="r25-empty">لا توجد عمليات تطابق الفلاتر.</div>';
+ const groups=new Map();
+ for(const tx of visible){
+  if(!groups.has(tx.date))groups.set(tx.date,[]);
+  groups.get(tx.date).push(tx);
+ }
+ let html='';
+ for(const [day,items] of groups){
+  html+='<div class="day-head"><span>'+esc(dayLabel(day))+'</span><span>'+items.length+' معاملة</span></div>'+
+   '<div class="tx-list" style="margin-bottom:12px">'+items.map(tx=>txRowHtml(tx,true)).join('')+'</div>';
+ }
+ if(all.length>visible.length)html+='<button type="button" class="r25-primary" data-r25-load-more="1" aria-label="إظهار عمليات أخرى">عرض المزيد ('+(all.length-visible.length)+')</button>';
+ return html;
+}
 viewTx=function(){
  const count=Number(SanadBankInbox.lastSummary?.review)||0;
  const tabs='<div class="r25-segment" role="group" aria-label="العمليات"><button type="button" data-r25-mode="history" aria-pressed="'+(txMode==='history')+'">السجل</button>'+
  '<button type="button" data-r25-mode="review" aria-pressed="'+(txMode==='review')+'">المراجعة'+(count?' ('+count+')':'')+'</button></div>';
  const search=txMode==='history'?'<div class="r25-search">'+ic('search')+'<input type="search" id="searchIn" autocomplete="off" value="'+esc(S.filter.q||'')+'" placeholder="ابحث عن عملية أو حساب..." aria-label="بحث العمليات"></div>':'';
  const filters=txMode==='history'?'<div class="r25-filters">'+buildTypes.map(([id,label])=>'<button type="button" data-r25-filter="'+id+'" aria-pressed="'+(String(S.filter.type||'')===id)+'">'+label+'</button>').join('')+'</div>':'';
- const body=txMode==='history'?'<div class="r25-transactions" id="txList">'+txListHtml()+'</div>'+
+ const body=txMode==='history'?'<div class="r25-transactions" id="txList">'+pagedTxListHtml()+'</div>'+
  '<button type="button" class="r25-primary" data-act="account-add-menu">'+ic('plus')+'إضافة عملية</button>':
  '<div class="r25-review-screen"><p>العمليات غير المحسومة لا تدخل في الأرصدة قبل تأكيدها.</p>'+
  '<button type="button" class="r25-primary" data-sanad-act="bank-inbox">'+ic('shield')+'فتح قائمة المراجعة</button></div>';
@@ -170,6 +202,14 @@ document.addEventListener('toggle',event=>{
 },true);
 // Stay inside existing application event architecture for all financial writes.
 document.addEventListener('click',e=>{
+ const more=e.target.closest('[data-r25-load-more]');
+ if(more){
+  e.preventDefault();e.stopPropagation();
+  const view=document.getElementById('view'),y=view?.scrollTop||0;
+  txPageSize+=60;render();
+  if(view)view.scrollTop=y;
+  return;
+ }
  const mode=e.target.closest('[data-r25-mode]');
  if(mode){e.preventDefault();e.stopPropagation();txMode=mode.dataset.r25Mode;render();return;}
  const chip=e.target.closest('[data-r25-filter]');
