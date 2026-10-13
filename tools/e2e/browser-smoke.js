@@ -323,6 +323,13 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
    }));
    assert(selected.bank===1&&selected.account===1&&selected.old===0,'Native data-backed selection without legacy wallet components: '+JSON.stringify(selected));
    assert(selected.bank>0&&selected.bankWidth>=190&&selected.accountWidth>=205,'Bank/account names need readable width at '+width+': '+JSON.stringify(selected));
+   const readableNames=await page.evaluate(()=>{
+    const a=getComputedStyle(document.querySelector('#v252Wallet .r25-account-header strong'));
+    const b=getComputedStyle(document.querySelector('#v252Wallet .r25-bank-text small'));
+    return {aWhite:a.whiteSpace,aLines:a.webkitLineClamp,bWhite:b.whiteSpace,bLines:b.webkitLineClamp};
+   });
+   assert.deepEqual(readableNames,{aWhite:'normal',aLines:'2',bWhite:'normal',bLines:'2'},
+     'Institution/account labels must allow two lines at '+width+': '+JSON.stringify(readableNames));
 
    await page.screenshot({path:path.join(output,'v25-2-wallet-'+width+'.png')});
  }
@@ -334,6 +341,21 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  const editorFp=await page.evaluate(()=>stateFingerprint(snapshotState()));
  await page.evaluate(()=>openInstrumentSheet(null,'debit_card'));
  await page.waitForSelector('#cardName');
+ assert.equal(await page.locator('.r25-form-card-preview').count(),1,'Card editor must include its real masked preview');
+ await page.locator('#cardFirst4').fill('٤٥٧٨');
+ await page.locator('#cardLast4').fill('۳۰٠٨');
+ const localized=await page.evaluate(()=>({
+  first:document.getElementById('cardFirst4').value,
+  last:document.getElementById('cardLast4').value,
+  preview:document.getElementById('r25PreviewNumber').textContent,
+  direction:getComputedStyle(document.getElementById('cardFirst4')).direction
+ }));
+ assert.deepEqual(localized,{first:'4578',last:'3008',preview:'4578 XXXX XXXX 3008',direction:'ltr'},
+   'Localized card fragments must normalize and preserve masked middle digits');
+ await page.locator('#cardFirst4').fill('45');
+ await page.locator('#cardLast4').fill('08');
+ assert.equal(await page.locator('#r25PreviewNumber').innerText(),'45XX XXXX XXXX XX08',
+   'Partially entered card fragments must stay four characters wide');
  for(const width of [320,393]){
    await page.setViewportSize({width,height:760});
    const cardBounds=await page.evaluate(()=>({
