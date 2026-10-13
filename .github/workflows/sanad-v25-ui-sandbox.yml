@@ -7,6 +7,7 @@ on:
       - ui/v25-prototype-rebuild
       - ui/v25-design-parity-review
       - ui/v25.2-rebuild-candidate
+      - 'ui/v25.2-qa-*'
     paths:
       - '.github/workflows/sanad-v25-ui-sandbox.yml'
       - '.github/workflows/build-v9-device-test.yml'
