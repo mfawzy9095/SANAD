@@ -270,21 +270,27 @@ document.addEventListener('pointermove',e=>{
  start.card.style.transform='translate3d('+dx+'px, 0px, 0px) scale(1)';
 },true);
 document.addEventListener('pointerup',e=>{
- if(!touchStart||touchStart.id!==e.pointerId)return;
+ const trace=(phase,extra={})=>{
+  if(Array.isArray(window.__qaPointerTrace))window.__qaPointerTrace.push({type:'ui-'+phase,...extra});
+ };
+ if(!touchStart||touchStart.id!==e.pointerId){trace('no-start',{touchId:touchStart?.id,pointerId:e.pointerId});return;}
  const start=touchStart;touchStart=null;
  // The host may repaint the WebView/HTML during an in-flight gesture.
  // Use the live deck instead of dropping a swipe from a detached old element.
- if(S.tab!=='accounts'||W.accountId!==start.accountId)return;
+ if(S.tab!=='accounts'||W.accountId!==start.accountId){trace('skip-account',{tab:S.tab,now:W.accountId,was:start.accountId});return;}
  const liveDeck=document.getElementById('v252CardStrip');
- if(!liveDeck)return;
+ if(!liveDeck){trace('missing-deck');return;}
  const dx=e.clientX-start.x,dy=e.clientY-start.y;
+ trace('delta',{dx,dy,account:W.accountId,card:W.cardId});
  if(Math.abs(dx)<35||Math.abs(dx)<Math.abs(dy)*1.2){restoreCardDrag(start);return;}
  ignoreCardClickUntil=performance.now()+400;
  const cards=[...liveDeck.querySelectorAll('[data-v252-card]')];
  const i=cards.findIndex(x=>x.dataset.v252Card===W.cardId);
  const next=Math.max(0,Math.min(cards.length-1,i+(dx>0?1:-1)));
+ trace('decision',{selectedIndex:i,next,length:cards.length,nextId:cards[next]?.dataset.v252Card});
  if(cards[next]&&next!==i)selectCardWithoutRender(cards[next].dataset.v252Card);
  else restoreCardDrag(start);
+ trace('after-selection',{cardId:W.cardId});
 },true);
 document.addEventListener('pointercancel',()=>{
  restoreCardDrag(touchStart);
