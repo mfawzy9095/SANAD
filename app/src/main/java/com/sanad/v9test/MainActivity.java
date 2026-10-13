@@ -31,6 +31,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
+import android.widget.FrameLayout;
 import android.view.ViewGroup;
 
 import androidx.annotation.Nullable;
@@ -88,28 +89,32 @@ public final class MainActivity extends Activity {
         SmsImportService.attach(importControl);
 
         WebView.setWebContentsDebuggingEnabled((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0);
+        // Android 15+ edge-to-edge layout: reserve real native space for
+        // system bars. Padding a WebView itself does NOT reliably move its
+        // compositor surface or fixed-position HTML controls out of the bars.
+        // The WebView therefore occupies a child frame with inset margins.
+        FrameLayout viewport = new FrameLayout(this);
+        viewport.setBackgroundColor(Color.rgb(244, 255, 253));
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(244, 255, 253));
-        setContentView(webView);
-        // Android 15+ enforces edge-to-edge at our targetSdk. WebView's CSS
-        // safe-area env variables are not a reliable substitute for native
-        // status/navigation bar insets: native bars previously covered logo
-        // and sometimes the bottom navigation controls on API 35 screenshots.
-        // Earlier Android versions keep system-managed non-edge-to-edge layout.
+        viewport.addView(webView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        setContentView(viewport);
         if (android.os.Build.VERSION.SDK_INT >= 35) {
-            ViewCompat.setOnApplyWindowInsetsListener(webView, (view, windowInsets) -> {
+            ViewCompat.setOnApplyWindowInsetsListener(viewport, (view, windowInsets) -> {
                 Insets safe = windowInsets.getInsets(
                         WindowInsetsCompat.Type.systemBars()
                                 | WindowInsetsCompat.Type.displayCutout());
-                if (view.getPaddingLeft() != safe.left ||
-                        view.getPaddingTop() != safe.top ||
-                        view.getPaddingRight() != safe.right ||
-                        view.getPaddingBottom() != safe.bottom) {
-                    view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+                FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) webView.getLayoutParams();
+                if (params.leftMargin != safe.left || params.topMargin != safe.top ||
+                        params.rightMargin != safe.right || params.bottomMargin != safe.bottom) {
+                    params.setMargins(safe.left, safe.top, safe.right, safe.bottom);
+                    webView.setLayoutParams(params);
                 }
                 return windowInsets;
             });
-            ViewCompat.requestApplyInsets(webView);
+            ViewCompat.requestApplyInsets(viewport);
         }
 
         final WebSettings settings = webView.getSettings();
