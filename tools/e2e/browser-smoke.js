@@ -296,7 +296,7 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.locator('#r25Home .r25-hero').count(),1);
  assert.equal(await page.locator('#r25Home .r25-review').count(),1);
  await page.screenshot({path:path.join(output,'v25-2-responsive-home-393.png')});
- for(const width of [320,360,430]){
+ for(const width of [320,360,393,412,430]){
    await page.setViewportSize({width,height:780});
    await page.evaluate(()=>go('home'));
    const metrics=await page.evaluate(()=>({
@@ -309,6 +309,17 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
    assert(metrics.scroll<=metrics.width+2,'Global horizontal overflow '+width+': '+JSON.stringify(metrics));
    assert(metrics.hero.left>=-1&&metrics.hero.right<=metrics.width+1,'Hero goes beyond viewport '+width+': '+JSON.stringify(metrics));
    assert.equal(metrics.navbar,5);assert(metrics.font,'Tajawal font lost at '+width);
+   const navigationGeometry=await page.evaluate(()=>{
+     const items=[...document.querySelectorAll('#bottomNav [data-tab]')];
+     const r=items.map(i=>i.getBoundingClientRect());
+     const icons=items.map(i=>i.querySelector('.ico svg')?.getBoundingClientRect());
+     const overlaps=r.some((a,i)=>r.some((b,j)=>j>i&&Math.min(a.right,b.right)>Math.max(a.left,b.left)+1
+       &&Math.min(a.bottom,b.bottom)>Math.max(a.top,b.top)+1));
+     return {overlaps,buttons:r.length,iconsInside:icons.every((ic,i)=>ic&&ic.width>0&&ic.height>0&&
+      ic.left>=r[i].left-1&&ic.right<=r[i].right+1&&ic.top>=r[i].top-1&&ic.bottom<=r[i].bottom+1)};
+   });
+   assert(!navigationGeometry.overlaps&&navigationGeometry.buttons===5&&navigationGeometry.iconsInside,
+     'Five navigation targets and their vector icons must never overlap at '+width+': '+JSON.stringify(navigationGeometry));
    await page.screenshot({path:path.join(output,'v25-2-home-'+width+'.png')});
    await page.evaluate(()=>go('accounts'));
    const wallet=await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:Math.max(document.body.scrollWidth,document.documentElement.scrollWidth),bank:!!document.querySelector('[data-v252-bank]'),accounts:!!document.querySelector('[data-v252-account]')}));
