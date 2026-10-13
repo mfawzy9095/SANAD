@@ -464,7 +464,14 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(Number(dragPose.opacity),1,'Card stays fully opaque during real drag');
  await page.screenshot({path:path.join(output,'v25-wallet-finger-drag-in-progress-393.png')});
  await page.mouse.up();
- assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').getAttribute('aria-pressed'),'true','RTL swipe-left returns to previous Visa');
+ const swipeAfter=await page.evaluate(()=>({
+  cardId:SanadV252.cardId,
+  active:[...document.querySelectorAll('#v252CardStrip [data-v252-card][aria-pressed="true"]')].map(e=>e.dataset.v252Card),
+  deckConnected:!!document.getElementById('v252CardStrip'),
+  detailsOpen:document.getElementById('sheet')?.classList.contains('on')
+ }));
+ assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').getAttribute('aria-pressed'),'true',
+  'RTL swipe-left returns to previous Visa: '+JSON.stringify(swipeAfter));
  assert.equal(await page.locator('#v252Wallet').getAttribute('data-qa-stable-root'),'mounted',
   'Swipe completion should only move payment cards, not reconstruct the financial DOM');
  // RTL opposite direction: swipe right from the first card to the next.
