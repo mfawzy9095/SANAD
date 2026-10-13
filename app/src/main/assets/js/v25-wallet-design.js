@@ -65,7 +65,7 @@ function cardView(i,index,selected){
   const offset=index-selected,distance=Math.min(3,Math.abs(offset));
   const transform='translate3d('+((offset<0?1:-1)*distance*91)+'%, '+(distance*5)+'px, 0) scale('+(1-distance*.045)+')';
   const active=index===selected;
-  return '<div role="button" tabindex="0" class="v25-payment-card r25-wallet-payment" data-v252-card="'+h(i.id)+'" aria-pressed="'+active+'" data-r25-card-index="'+index+'"'+
+  return '<div role="button" tabindex="0" class="v25-payment-card r25-wallet-payment" data-v252-card="'+h(i.id)+'" aria-pressed="'+active+'" aria-label="'+h(i.name)+'" data-r25-card-index="'+index+'"'+
     ' style="background:linear-gradient(125deg,'+base+',#063d54);transform:'+transform+';z-index:'+(100-distance)+';pointer-events:'+(distance<2?'auto':'none')+'">'+
     '<div class="v25-payment-card-head"><div class="r25-wallet-payment-title"><b>'+h(i.name)+'</b><small>'+h(a?.name||'')+'</small></div>'+
     '<span class="v25-card-type">'+h(cardTypeShortLabel(i.type))+'</span></div>'+

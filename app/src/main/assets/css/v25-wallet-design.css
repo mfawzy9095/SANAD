@@ -99,3 +99,9 @@
  .r25-wallet-design #v252CardStrip.r25-card-deck{height:192px}
  .r25-wallet-design #v252CardStrip.r25-card-deck .r25-wallet-payment{height:176px;min-height:176px}
 }
+
+
+/* Card deck privacy: only the selected card shows its financial contents.
+   Adjacent cards retain an opaque colored edge without clipped text. */
+.r25-wallet-design #v252CardStrip .r25-wallet-payment[aria-pressed="false"] > *{visibility:hidden!important}
+.r25-wallet-design #v252CardStrip .r25-wallet-payment[aria-pressed="true"] > *{visibility:visible!important}

@@ -385,6 +385,13 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  });
  assert(deckVisual.mainWidth>250&&deckVisual.exposed<=28,'Inactive card should peek as a narrow edge without readable fragments: '+JSON.stringify(deckVisual));
 
+ await page.waitForFunction(()=>{
+   const sheet=document.getElementById('sheet'),shade=document.getElementById('backdrop');
+   return !sheet?.classList.contains('on')&&!shade?.classList.contains('on');
+ });
+ await page.waitForTimeout(380); // Real modal CSS closing transition must be complete before image QA.
+ assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-mastercard"] > :first-child').evaluate(el=>getComputedStyle(el).visibility),'hidden','Inactive payment card content cannot peek through at the deck edge');
+
  await page.screenshot({path:path.join(output,'v25-wallet-two-cards-first-393.png')});
  await page.locator('nav.r25-card-pager [data-r25-card-step="1"]').click();
  assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-mastercard"]').getAttribute('aria-pressed'),'true','Wallet next-card button must select linked Mastercard');
