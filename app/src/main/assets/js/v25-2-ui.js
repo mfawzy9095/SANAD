@@ -50,7 +50,7 @@ const V = {
     const a=Finance.getAccount(id);if(!a)return;
     const inst=a.institutionId?Finance.getInstitution(a.institutionId):null;
     const present=isLiabilityAccount(a)?null:Finance.accountBalancePresentation(a.id);
-    const balance=present?present.display:Finance.accountBalance(a.id);
+    const balance=isLiabilityAccount(a)?Finance.accountDebt(a.id):(present?present.display:Finance.accountBalance(a.id));
     const label=isLiabilityAccount(a)?'المديونية':'رصيد السجل';
     openSheet('<div class="sheet-head"><h2>تفاصيل الحساب</h2><button type="button" class="close" data-act="close-sheet">×</button></div>'+
       '<div class="sheet-body"><div class="v252-card"><h3>'+esc(a.name)+'</h3>'+

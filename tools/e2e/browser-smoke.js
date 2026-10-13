@@ -463,6 +463,13 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.match(creditLabel,/المديونية الحالية/,'Credit card must label its debt rather than claiming it is available balance');
  assert.match(creditLabel,/المتاح/,'Available credit must appear separately from owed debt');
  await page.screenshot({path:path.join(output,'v25-wallet-credit-debt-vs-limit-393.png')});
+ await page.locator('[data-v252-account="qa-ui-credit-account"]').click();
+ assert.equal(await page.locator('#sheet[data-sheet-type="v252-account-details"]').count(),1,'Selecting current credit account opens its read-only details');
+ const displayedDebt=await page.locator('#sheet[data-sheet-type="v252-account-details"] .amt-val').innerText();
+ assert.match(displayedDebt,/500/,'Debt detail must show the positive 500 owed amount');
+ assert(!displayedDebt.includes('-500'),'Credit debt must not appear as a negative cash balance in details');
+ await page.evaluate(()=>closeSheet());
+
  await page.evaluate(()=>{
    S.accounts=S.accounts.filter(a=>a.id!=='qa-ui-credit-account');
    S.paymentInstruments=S.paymentInstruments.filter(i=>i.id!=='qa-ui-credit-card');
