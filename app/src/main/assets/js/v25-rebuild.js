@@ -211,12 +211,39 @@ W.walletView=function(){
  strip.insertAdjacentElement('afterend',pager);
  return box.innerHTML;
 };
+// Card-only selection must not reconstruct all financial screens, reset
+// horizontal scroll or recompute reports on every swipe. This is UI state only.
+function selectCardWithoutRender(id){
+ const deck=document.getElementById('v252CardStrip');
+ const cards=deck?[...deck.querySelectorAll('[data-v252-card]')]:[];
+ const selected=cards.findIndex(el=>el.dataset.v252Card===id);
+ if(selected<0){W.cardId=id;render();return;}
+ W.cardId=id;
+ cards.forEach((card,index)=>{
+  const offset=index-selected,dist=Math.min(3,Math.abs(offset));
+  card.style.transition='';
+  card.style.transform='translate3d('+((offset<0?1:-1)*dist*91)+'%, '+(dist*5)+'px, 0) scale('+(1-dist*.045)+')';
+  card.style.zIndex=String(100-dist);
+  card.style.pointerEvents=dist<2?'auto':'none';
+  card.setAttribute('aria-pressed',String(index===selected));
+ });
+ const pager=deck.nextElementSibling?.matches('.r25-card-pager')?deck.nextElementSibling:null;
+ if(pager){
+  pager.querySelectorAll('[data-r25-card-index]').forEach(dot=>{
+   dot.setAttribute('aria-pressed',String(Number(dot.dataset.r25CardIndex)===selected));
+  });
+  pager.querySelectorAll('[data-r25-card-step]').forEach(button=>{
+   const step=Number(button.dataset.r25CardStep);
+   button.disabled=selected+step<0||selected+step>=cards.length;
+  });
+ }
+}
 W.card=function(id){
  if(performance.now()<ignoreCardClickUntil)return;
- const cards=Finance.getCountryInstruments(S.activeCountry).filter(i=>!i.archived);
- if(!cards.some(i=>i.id===id))return;
+ const inst=Finance.getInstrument(id);
+ if(!inst||inst.archived||inst.country!==S.activeCountry||inst.accountId!==W.accountId)return;
  if(this.cardId===id){this.cardDetails(id);return;}
- this.cardId=id;render();
+ selectCardWithoutRender(id);
 };
 let touchStart=null;
 function restoreCardDrag(start){
@@ -252,7 +279,7 @@ document.addEventListener('pointerup',e=>{
  const cards=[...start.deck.querySelectorAll('[data-v252-card]')];
  const i=cards.findIndex(x=>x.dataset.v252Card===W.cardId);
  const next=Math.max(0,Math.min(cards.length-1,i+(dx>0?1:-1)));
- if(cards[next]&&next!==i){W.cardId=cards[next].dataset.v252Card;render();}
+ if(cards[next]&&next!==i)selectCardWithoutRender(cards[next].dataset.v252Card);
  else restoreCardDrag(start);
 },true);
 document.addEventListener('pointercancel',()=>{
@@ -267,7 +294,7 @@ document.addEventListener('click',e=>{
  let i=cards.findIndex(x=>x.dataset.v252Card===W.cardId);
  if(step)i=Math.max(0,Math.min(cards.length-1,i+Number(step.dataset.r25CardStep)));
  else i=Number(dot.dataset.r25CardIndex);
- if(cards[i]){W.cardId=cards[i].dataset.v252Card;render();}
+ if(cards[i])selectCardWithoutRender(cards[i].dataset.v252Card);
 },true);
 
 window.SanadV25Rebuild={previous,version:'v25-structural-rebuild-1'};
