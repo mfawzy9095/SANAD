@@ -297,7 +297,15 @@ document.addEventListener('pointercancel',()=>{
  touchStart=null;
 },true);
 document.addEventListener('click',e=>{
- const step=e.target.closest('[data-r25-card-step]'),dot=e.target.closest('[data-r25-card-index]');
+ // A drag produces a synthetic click on whichever payment card ends up below
+ // the pointer. It must never undo the completed swipe or open card details.
+ if(performance.now()<ignoreCardClickUntil&&e.target.closest('#v252CardStrip')){
+  e.preventDefault();e.stopImmediatePropagation();return;
+ }
+ // Card wrappers also carry a numeric index; only actual pager dots may
+ // drive pager navigation. Card taps are handled by W.card instead.
+ const step=e.target.closest('.r25-card-pager [data-r25-card-step]');
+ const dot=e.target.closest('.r25-card-pager [data-r25-card-index]');
  if(!step&&!dot)return;
  e.preventDefault();e.stopPropagation();
  const cards=[...document.querySelectorAll('#v252CardStrip [data-v252-card]')];
