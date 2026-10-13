@@ -25,7 +25,8 @@ const countryBar=()=>W.countryBar();
 const section=(label,action='',text='')=>'<div class="r25-section"><h3>'+label+'</h3>'+(action?'<button type="button" '+action+'>'+text+'</button>':'')+'</div>';
 const warning=()=>previewBannerHtml()+recoveryBannerHtml();
 const act=(name,label,description,icon,extra='')=>'<button type="button" class="r25-list-row" '+name+'><span class="r25-action-icon">'+ic(icon)+'</span><span class="r25-action-text"><b>'+label+'</b><small>'+description+'</small></span>'+extra+'<span class="r25-chevron" aria-hidden="true">‹</span></button>';
-const more=(body,label)=>'<details class="r25-extras"><summary>'+label+'</summary><div class="r25-legacy">'+body+'</div></details>';
+// Legacy read-only panels can be expensive with large historical SMS datasets.
+const more=(key,label)=>'<details class="r25-extras" data-r25-advanced="'+key+'"><summary>'+label+'</summary><div class="r25-legacy"></div></details>';
 const previous={home:viewHome,wallet:viewAccounts,tx:viewTx,report:viewRep,settings:viewSet};
 function brandHeader(title){
  const isSettings=S.tab==='settings',hide=!!S.settings.hideAmounts,masked=amountsMasked();
@@ -120,7 +121,7 @@ viewRep=function(){
  const avg=spend===null?'غير معروف':money(count?spend/count:0,cur);
  const average='<div class="r25-stat r25-report-average stat-card"><span class="lbl">متوسط المعاملة</span><b class="v amt-val">'+avg+'</b></div>';
  // Detailed legacy reporting remains available without occupying the new UI.
- const advanced=more(previous.report(),'تفاصيل التقارير والميزانيات المتقدمة');
+ const advanced=more('report','تفاصيل التقارير والميزانيات المتقدمة');
  const body=tabs+(S.repPeriod==='month'||S.repPeriod==='6months'?month:'')+
  '<div class="r25-report-filter"><label>العملة'+currencies+'</label><label>الحساب'+acctOpts+'</label></div>'+
  uncertainty+main+metrics+average+section('المصروفات عبر الفترة')+'<div class="r25-paper">'+bars+'</div>'+section('التصنيفات')+'<div class="r25-paper">'+cat+'</div>'+advanced;
@@ -151,9 +152,22 @@ viewSet=function(){
  '<div class="r25-inline-options"><span>المظهر</span><div><button type="button" data-sanad-act="theme" data-value="light" aria-pressed="'+(settings.theme!=='dark')+'">فاتح</button><button type="button" data-sanad-act="theme" data-value="dark" aria-pressed="'+(settings.theme==='dark')+'">داكن</button></div></div>'+
  act('data-act="go-subs"','الالتزامات والاشتراكات','إدارة الدفعات الدورية','calendar'));
  const countries='<div class="r25-default-countries">'+[['UAE','الإمارات'],['EGY','مصر'],['MAR','المغرب']].map(([id,label])=>'<button type="button" data-default-country="'+id+'" aria-pressed="'+(settings.defaultCountry===id)+'">'+label+'</button>').join('')+'</div>';
- const advanced=more(oldSet(),'كل الإعدادات والتصنيفات وإدارة البيانات المتقدمة');
+ const advanced=more('settings','كل الإعدادات والتصنيفات وإدارة البيانات المتقدمة');
  return warning()+frame('Settings','SANAD',sec('البلد الافتراضية',countries)+core+advanced);
 };
+// toggle is non-bubbling: capturing at document mounts the unchanged legacy
+// view only on explicit expansion, preserving original controls and handlers.
+document.addEventListener('toggle',event=>{
+ const details=event.target;
+ if(!(details instanceof HTMLDetailsElement)||!details.open||!details.matches('.r25-extras[data-r25-advanced]'))return;
+ const host=details.querySelector(':scope > .r25-legacy');
+ if(!host||host.dataset.r25Loaded==='yes')return;
+ const key=details.dataset.r25Advanced;
+ if(key!=='report'&&key!=='settings')return;
+ host.innerHTML=key==='report'?previous.report():oldSet();
+ host.dataset.r25Loaded='yes';
+ if(key==='report')requestAnimationFrame(()=>drawPie(true));
+},true);
 // Stay inside existing application event architecture for all financial writes.
 document.addEventListener('click',e=>{
  const mode=e.target.closest('[data-r25-mode]');
