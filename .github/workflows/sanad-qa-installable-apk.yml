@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature-v9.2-ui-features
+      - recovery/v9.2.14-clean-dev-20261013
     paths:
       - '.github/workflows/sanad-qa-installable-apk.yml'
       - '.github/workflows/build-v9-device-test.yml'
