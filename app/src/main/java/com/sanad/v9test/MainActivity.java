@@ -36,6 +36,9 @@ import android.view.ViewGroup;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.FileProvider;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewFeature;
 import androidx.webkit.WebSettingsCompat;
@@ -88,6 +91,26 @@ public final class MainActivity extends Activity {
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(244, 255, 253));
         setContentView(webView);
+        // Android 15+ enforces edge-to-edge at our targetSdk. WebView's CSS
+        // safe-area env variables are not a reliable substitute for native
+        // status/navigation bar insets: native bars previously covered logo
+        // and sometimes the bottom navigation controls on API 35 screenshots.
+        // Earlier Android versions keep system-managed non-edge-to-edge layout.
+        if (android.os.Build.VERSION.SDK_INT >= 35) {
+            ViewCompat.setOnApplyWindowInsetsListener(webView, (view, windowInsets) -> {
+                Insets safe = windowInsets.getInsets(
+                        WindowInsetsCompat.Type.systemBars()
+                                | WindowInsetsCompat.Type.displayCutout());
+                if (view.getPaddingLeft() != safe.left ||
+                        view.getPaddingTop() != safe.top ||
+                        view.getPaddingRight() != safe.right ||
+                        view.getPaddingBottom() != safe.bottom) {
+                    view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+                }
+                return windowInsets;
+            });
+            ViewCompat.requestApplyInsets(webView);
+        }
 
         final WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
