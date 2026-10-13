@@ -375,6 +375,16 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  assert.equal(await page.locator('#v252CardStrip .r25-wallet-payment').count(),2,'Both live account-linked cards must appear in wallet carousel');
  assert.equal(await page.locator('#v252CardStrip [data-v252-card][aria-pressed="true"]').count(),1,'Exactly one financial card is selected');
  assert.match(await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').innerText(),/4578 XXXX XXXX 3993/);
+ const deckVisual=await page.evaluate(()=>{
+   const deck=document.getElementById('v252CardStrip');
+   const main=deck.querySelector('[data-v252-card][aria-pressed="true"]').getBoundingClientRect();
+   const side=deck.querySelector('[data-v252-card][aria-pressed="false"]').getBoundingClientRect();
+   const boundary=deck.getBoundingClientRect();
+   const exposed=side.x<main.x?Math.max(0,main.left-Math.max(side.left,boundary.left)):Math.max(0,Math.min(side.right,boundary.right)-main.right);
+   return {exposed,deckWidth:boundary.width,mainWidth:main.width,deckHeight:boundary.height};
+ });
+ assert(deckVisual.mainWidth>250&&deckVisual.exposed<=28,'Inactive card should peek as a narrow edge without readable fragments: '+JSON.stringify(deckVisual));
+
  await page.screenshot({path:path.join(output,'v25-wallet-two-cards-first-393.png')});
  await page.locator('nav.r25-card-pager [data-r25-card-step="1"]').click();
  assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-mastercard"]').getAttribute('aria-pressed'),'true','Wallet next-card button must select linked Mastercard');

@@ -73,3 +73,29 @@
 }
 .fab.r25-home-fab:active{transform:scale(.94)!important}
 @media(min-width:500px){.fab.r25-home-fab{left:calc(50% - 145px)!important}}
+
+/* Compact V25.2 wallet hierarchy: all ledger values and action hooks unchanged.
+   The surrounding card may reveal only a visual edge, never detached text. */
+.r25-wallet-design .r25-page-title{margin:5px 1px 8px}
+.r25-wallet-design .v252-country{margin-bottom:8px}
+.r25-wallet-design .v252-country button{height:40px}
+.r25-wallet-design .r25-wallet-section{margin:11px 2px 7px}
+.r25-wallet-design .r25-wallet-section h3{font-size:15px}
+.r25-wallet-design .r25-wallet-section small{font-size:10px}
+.r25-wallet-design .r25-bank-item{min-height:76px;padding:10px 12px}
+.r25-wallet-design .r25-bank-monogram{height:41px;width:41px;flex-basis:41px;font-size:12px}
+.r25-wallet-design .r25-bank-text small{white-space:nowrap;text-overflow:ellipsis;overflow:hidden;line-height:1.35}
+.r25-wallet-design .r25-bank-text em{margin-top:2px}
+.r25-wallet-design .r25-account-item{min-height:102px;gap:5px;padding:11px 13px}
+.r25-wallet-design .r25-account-header strong{display:block;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;line-height:1.5}
+.r25-wallet-design .r25-account-amount{font-size:21px;margin-top:0}
+.r25-wallet-design #v252CardStrip.r25-card-deck{height:213px;margin-top:0}
+.r25-wallet-design #v252CardStrip.r25-card-deck .r25-wallet-payment{height:195px;min-height:195px}
+.r25-wallet-design .r25-card-pager{margin:0 0 4px}
+.r25-wallet-design .r25-wallet-quick-actions{margin:9px 0 7px}
+@media(max-width:355px){
+ .r25-wallet-design .r25-bank-item{min-height:70px;padding:8px 9px}
+ .r25-wallet-design .r25-account-item{min-height:98px;padding:10px 11px}
+ .r25-wallet-design #v252CardStrip.r25-card-deck{height:192px}
+ .r25-wallet-design #v252CardStrip.r25-card-deck .r25-wallet-payment{height:176px;min-height:176px}
+}
