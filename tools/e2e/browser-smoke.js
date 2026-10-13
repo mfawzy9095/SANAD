@@ -454,6 +454,15 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
  await activeCard.scrollIntoViewIfNeeded();
  const dragBox=await activeCard.boundingBox();
  const dragX=dragBox.x+dragBox.width*.5,dragY=dragBox.y+dragBox.height*.5;
+ await page.evaluate(()=>{
+  window.__qaPointerTrace=[];
+  for(const type of ['pointerdown','pointermove','pointerup','pointercancel','click']){
+   window.addEventListener(type,event=>{
+    window.__qaPointerTrace.push({type,x:Math.round(event.clientX||0),y:Math.round(event.clientY||0),
+      pid:event.pointerId,card:SanadV252.cardId,target:event.target?.getAttribute?.('data-v252-card')||event.target?.tagName});
+   },true);
+  }
+ });
  const oldTransform=await activeCard.evaluate(el=>el.style.transform);
  await page.mouse.move(dragX,dragY);
  await page.mouse.down();
@@ -468,7 +477,8 @@ async function stableHome(){await page.waitForFunction(()=>Number(getComputedSty
   cardId:SanadV252.cardId,
   active:[...document.querySelectorAll('#v252CardStrip [data-v252-card][aria-pressed="true"]')].map(e=>e.dataset.v252Card),
   deckConnected:!!document.getElementById('v252CardStrip'),
-  detailsOpen:document.getElementById('sheet')?.classList.contains('on')
+  detailsOpen:document.getElementById('sheet')?.classList.contains('on'),
+  pointerTrace:window.__qaPointerTrace?.slice(-18)
  }));
  assert.equal(await page.locator('#v252CardStrip [data-v252-card="qa-ui-visa"]').getAttribute('aria-pressed'),'true',
   'RTL swipe-left returns to previous Visa: '+JSON.stringify(swipeAfter));
