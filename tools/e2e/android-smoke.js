@@ -288,6 +288,31 @@ const waitSmsShadeGone=async(label)=>{
  assert(nativeLayout.home&&nativeLayout.scroll<=nativeLayout.width+2,'Android WebView home overflow: '+JSON.stringify(nativeLayout));
  await new Promise(r=>setTimeout(r,700)); // Android compositor capture is async to WebView JS.
  await page.screenshot({path:path.join(out,'android-home-v25.png')});
+ // Device-level screenshot check, not merely HTML viewport/scrollWidth.
+ // Pre-fix Android 35 showed the teal SANAD brand inside the status bar;
+ // the WebView content must now start BELOW the system status icons.
+ const screenshot=fs.readFileSync(path.join(out,'android-home-v25.png')).toString('base64');
+ const systemBar=await page.evaluate(async base64=>{
+   const image=new Image();
+   image.src='data:image/png;base64,'+base64;
+   await image.decode();
+   const canvas=document.createElement('canvas');
+   canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
+   const context=canvas.getContext('2d',{willReadFrequently:true});
+   context.drawImage(image,0,0);
+   const width=image.naturalWidth,band=Math.min(22,image.naturalHeight);
+   const pixels=context.getImageData(Math.floor(width*.65),0,Math.ceil(width*.35),band).data;
+   let teal=0;
+   for(let i=0;i<pixels.length;i+=4){
+     const red=pixels[i],green=pixels[i+1],blue=pixels[i+2];
+     if(green>red*1.5&&green>blue*.82&&green>35&&green<240&&red<125)teal++;
+   }
+   return {width,height:image.naturalHeight,band,brandColoredPixelsInsideStatusBar:teal};
+ },screenshot);
+ fs.writeFileSync(path.join(out,'native-system-bar-visual-check.json'),JSON.stringify(systemBar,null,2));
+ assert(systemBar.brandColoredPixelsInsideStatusBar<12,
+   'SANAD brand still overlaps Android status bar in native screen capture: '+JSON.stringify(systemBar));
+ pass('Android 35 status bar does not share painted pixels with SANAD header/logo');
  await page.evaluate(()=>go('accounts'));
  await page.waitForFunction(()=>S.tab==='accounts'&&!!document.getElementById('v252Wallet')&&document.querySelectorAll('[data-v252-bank]').length>0);
  const nativeWallet=await page.evaluate(()=>({tab:S.tab,width:document.documentElement.clientWidth,scroll:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),bank:!!document.querySelector('[data-v252-bank]'),walletVisible:(()=>{let x=document.querySelector('#v252Wallet');let r=x.getBoundingClientRect();return r.height>100&&r.width>100;})()}));
