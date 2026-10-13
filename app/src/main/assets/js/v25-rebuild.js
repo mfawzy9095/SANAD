@@ -255,7 +255,7 @@ document.addEventListener('pointerdown',e=>{
  const deck=e.target.closest('#v252CardStrip.r25-card-deck');
  if(!deck||!e.isPrimary)return;
  const card=deck.querySelector('[data-v252-card][aria-pressed="true"]');
- touchStart={x:e.clientX,y:e.clientY,id:e.pointerId,deck,card,
+ touchStart={x:e.clientX,y:e.clientY,id:e.pointerId,deck,card,accountId:W.accountId,
    previousTransform:card?.style.transform||'',previousTransition:card?.style.transition||'',moved:false};
 },true);
 document.addEventListener('pointermove',e=>{
@@ -272,11 +272,15 @@ document.addEventListener('pointermove',e=>{
 document.addEventListener('pointerup',e=>{
  if(!touchStart||touchStart.id!==e.pointerId)return;
  const start=touchStart;touchStart=null;
- if(!start.deck.isConnected)return;
+ // The host may repaint the WebView/HTML during an in-flight gesture.
+ // Use the live deck instead of dropping a swipe from a detached old element.
+ if(S.tab!=='accounts'||W.accountId!==start.accountId)return;
+ const liveDeck=document.getElementById('v252CardStrip');
+ if(!liveDeck)return;
  const dx=e.clientX-start.x,dy=e.clientY-start.y;
  if(Math.abs(dx)<35||Math.abs(dx)<Math.abs(dy)*1.2){restoreCardDrag(start);return;}
  ignoreCardClickUntil=performance.now()+400;
- const cards=[...start.deck.querySelectorAll('[data-v252-card]')];
+ const cards=[...liveDeck.querySelectorAll('[data-v252-card]')];
  const i=cards.findIndex(x=>x.dataset.v252Card===W.cardId);
  const next=Math.max(0,Math.min(cards.length-1,i+(dx>0?1:-1)));
  if(cards[next]&&next!==i)selectCardWithoutRender(cards[next].dataset.v252Card);
